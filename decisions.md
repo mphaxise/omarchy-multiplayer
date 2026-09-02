@@ -31,6 +31,6 @@ Dated log. Each entry records the decision, the alternatives considered, the rea
 
 ## 2026-09-02
 
-**Runtime confirmed: Herdr.** The spike in `spikes/herdr-on-rig.md` met the decision rule from PLAN.md Phase 2: Herdr 0.8.2 is installed on the ARM image, its socket API lists panes and streams events to an external subscriber, `agent.start` launched Claude Code, metadata survives a config reload, and worktrees work. The one untested piece, a Claude Code turn with `working` and `blocked` transitions, waits on an in-VM login and does not change the decision. The degraded tmux fallback is retired.
+**Runtime confirmed: Herdr.** The spike in `spikes/herdr-on-rig.md` met the decision rule from PLAN.md Phase 2: Herdr 0.8.2 is installed on the ARM image, its socket API lists panes and streams events to an external subscriber, `agent.start` launched Claude Code, metadata survives a config reload, and worktrees work. The Claude Code turn with `working`, `blocked`, and `done` transitions was observed after the in-VM login, so the rule is met in full. The degraded tmux fallback is retired.
 
 **Wire format settled from the rig.** The core and the watcher now follow the observed protocol: `{"id", "method", "params"}` requests, `{"id", "result": {"type": ...}}` replies, `events.subscribe` with a `subscriptions` list of dotted types, underscored event names in the stream, and `session.snapshot` as the snapshot method. The full schema for protocol 20 is stored in `spikes/`.

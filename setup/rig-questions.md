@@ -4,7 +4,7 @@ Status: open, 2026-09-01. The rig is documented in Omarchy-UX (`setup/omarchy-vm
 
 ## Answers so far
 
-Items 2 and 4 through 10 are answered in `spikes/herdr-on-rig.md` (2026-09-02). Item 1: sshd is on, the guest is `192.168.64.2` (UTM shared network, host side `192.168.64.1`), key auth works, and the Mac's ssh config carries the alias `omarchy-rig`. Item 3: Codex is present as a mise shim; OpenCode is present. Open: a Claude Code turn with status transitions (needs the in-VM login), items 11 through 19.
+Items 2 and 4 through 10 are answered in `spikes/herdr-on-rig.md` (2026-09-02). Item 1: sshd is on, the guest is `192.168.64.2` (UTM shared network, host side `192.168.64.1`), key auth works, and the Mac's ssh config carries the alias `omarchy-rig`. Item 3: Codex is present as a mise shim; OpenCode is present. The Claude Code turn with status transitions is done (2026-09-02). Open: items 11 through 19.
 
 ## Before anything else
 
