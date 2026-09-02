@@ -62,7 +62,7 @@ Each phase ends at a review point. Timeboxes are my working estimate.
 
 **Phase 5, evaluate (two days).** Run `/ux-review` and `/design-qa` against the live slice with the Omarchy-UX lenses, run the closed-loop pass (one designer, three iterations on a preview), and write the experiment report. Gate: every finding cites a capture, and the report separates measured outcomes from judgment calls.
 
-**Phase 6, outbound (one day).** Choose one: a discussion post on `omacom/omarchy` proposing the session model with the recording attached, or a tagged release of the plugin plus scripts. Track the outcome in `findings/upstream-contributions.md`. Gate: I approve the exact text and target before it is posted.
+**Phase 6, outbound (one day).** Choose one: a listing on the community plugin marketplace (`omacom/omarchy-plugin-marketplace`, plugins.omarchy.org) with the scripts and the recording linked, or a discussion post on `omacom/omarchy` proposing the session model. Track the outcome in `findings/upstream-contributions.md`. Gate: I approve the exact text and target before it is posted.
 
 ## Repository layout
 

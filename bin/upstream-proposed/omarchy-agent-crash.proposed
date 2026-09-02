@@ -95,7 +95,7 @@ session_id=$(omarchy-agent-session-core new \
   --mode personal \
   --name "crash-$pid" \
   --goal "diagnose crash of $comm (pid $pid)" \
-  -- "$prompt")
+  --prompt "$prompt")
 rc=$?
 if ((rc != 0)); then
   exit "$rc"

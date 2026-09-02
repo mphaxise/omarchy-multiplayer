@@ -1405,6 +1405,7 @@ def build_parser():
     p.add_argument("--owner")
     p.add_argument("--no-worktree", action="store_true")
     p.add_argument("--base", help="branch or ref a new worktree starts from (default: the current branch)")
+    p.add_argument("--prompt", help="first instruction, delivered through Herdr once the harness is ready; use this instead of passing prompt text as agent args (Herdr refuses argv it cannot encode for the shell, rig 2026-09-02)")
     p.add_argument("--pick", action="store_true", help="open the Omarchy agent picker instead of using --agent")
     p.add_argument("--from", dest="from_session")
     p.add_argument("--json", action="store_true")
@@ -1608,6 +1609,15 @@ def cmd_new(args, ctx):
     record["status"] = {"state": "working", "since": ev["ts"], "source": "herdr-hook", "detail": None}
     record["state_version"] = ev["seq"]
     ctx.store.save_session(record)
+
+    prompt = getattr(args, "prompt", None)
+    if prompt:
+        send_args = argparse.Namespace(id_or_name=session_id, text=prompt, from_session=None,
+                                       about_artifact=None, wait=False, until=[], timeout=None)
+        try:
+            cmd_send(send_args, ctx)
+        except (HerdrUnavailable, HerdrError, ConflictError) as e:
+            eprint(f"session {session_id} started; first prompt stays queued: {e}")
 
     if args.json:
         print(json.dumps(record, indent=2))

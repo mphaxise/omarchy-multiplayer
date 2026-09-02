@@ -43,6 +43,10 @@ blinry's 2026-07-28 survey of multi-seat Wayland rates the core protocol a full 
 
 Session-level multiplayer, the object PLAN.md describes, needs no compositor work. Herdr, Maestro, and OpenClaw prove it out in userspace: a background process, a named session, a worktree, a notification. Desktop-seat multiplayer, two input devices with two cursors sharing one Hyprland session, is a harder problem sitting upstream in the compositor and in every toolkit above it. Both Omarchy discussions ask for that harder problem and got no response. This experiment targets the one that does not require Hyprland to change.
 
+## Additions, 2026-09-02 afternoon
+
+Three items surfaced by a Claude Code session running inside the rig, verified from here through the GitHub API. `omacom/omarchy-plugin-marketplace` (215 stars, pushed 2026-09-02) and plugins.omarchy.org are live: the community plugin directory is the natural outbound channel for this experiment's plugin, ahead of a discussion post. Discussion #532 (Support Multiple Users, 2025-08-07, ten comments) belongs beside #5433: a 2026-08-18 comment ties multi-user accounts to Quattro's agentic use, which is this experiment's slice-2 identity question raised in the maintainers' forum by a user; a claim that a maintainer promised multi-user in 4.1 does not appear in that thread's comments and stays unverified. Discussion #3273 (RDP to an Omarchy machine, 2025-11-09) and the Sunshine and Moonlight path in the manual's gaming page cover remote display, which is slice-4 territory.
+
 ## Patterns worth carrying
 
 OpenClaw treats ownership as an assignable field. Creator stays immutable, owner reassigns like a GitHub issue assignee, and a teammate's draft stays hidden until published. It is the cleanest version I found of ownership assigning responsibility while access is granted separately.
