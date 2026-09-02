@@ -40,6 +40,7 @@ Stored at `~/.local/state/omarchy/sessions/<id>/session.json`, written atomicall
 | `queue` | list of instruction | instructions waiting to be delivered |
 | `state_version` | integer | sequence number of the last event in `events.jsonl` |
 | `labels` | list of string, optional | free tags |
+| `preview` | `{kind: url | app_id, value}` or `null` | the running product this session works on; see `09-closed-loop-surfaces.md` |
 | `started_with` | `{command, cwd, env_summary}` | the exact launch, for the receipt |
 
 ### Actors
@@ -102,6 +103,8 @@ Event types in slice 1:
 | `session.created` | the initial record |
 | `session.renamed` | `from`, `to` |
 | `owner.assigned` | `from`, `to` |
+| `mode.changed` | `from`, `to`, `changed_by`; see `04-permission-modes.md` |
+| `preview.set` | `kind`, `value` |
 | `runtime.bound` | the runtime binding |
 | `runtime.unbound` | reason |
 | `status.changed` | `from`, `to`, `source`, `detail` |

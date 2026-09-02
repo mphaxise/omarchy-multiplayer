@@ -133,6 +133,19 @@ Herdr: none.
 Exit: 0, 2, 3.
 Example: `omarchy agent session capture api-refactor --screenshot --label before`
 
+## Commands defined in other spec files
+
+These share the same binary convention (`bin/omarchy-agent-session-<cmd>`) and event log; their behavior lives where it is specified.
+
+| Command | Defined in | Writes |
+|---|---|---|
+| `mode <id> <personal\|shared\|restricted>` | `04-permission-modes.md` | `mode.changed`; relaunches the harness with `harness_session_ref` |
+| `artifact add <id> --kind capture\|file\|url\|note --source <path\|url\|text> [--label <text>]` | `05-receipts-and-artifacts.md` | `artifact.added` |
+| `preview <id> <url\|app-id>` | `09-closed-loop-surfaces.md` | `preview.set` |
+| `send <id> --about <artifact-id> "<text>"` | `09-closed-loop-surfaces.md` | `instruction.queued` with the artifact reference |
+| `show <id> --loop` | `09-closed-loop-surfaces.md` | nothing; renders intent, instructions, changes, and captures in order |
+| `done <id> --verdict kept\|reverted\|needs-person --note "<text>"` | `09-closed-loop-surfaces.md` | `artifact.added` (note labeled `verdict`), `status.changed` to `done`, `session.ended` |
+
 ## Reserved for slice 2
 
 `bin/omarchy-agent-session-share`, `-take`, `-suggest`: reserved names, no behavior in slice 1. `share` would grant another user access to a session; `take` would claim ownership or pull a session's terminal forward; `suggest` would surface an agent-initiated suggestion to the owner. None ship before user-to-agent and user-to-user control exist.
