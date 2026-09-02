@@ -27,28 +27,28 @@ The watcher opens Herdr's `events.subscribe` (filtered to `pane.agent_status_cha
 | `status.changed` to `blocked` | yes | normal |
 | `status.changed` to `done` | yes | low |
 | `status.changed` to `failed` | yes | critical |
-| `status.changed` to `orphaned` | yes | critical |
+| `status.changed` to `orphaned` | yes | critical; normal when `data.detail` is exactly `Herdr server not running` |
 | `child.completed` (to the parent's owner) | yes | low |
 | `status.changed` to `working` | no | n/a |
 | `status.changed` to `idle` | no | n/a |
 | `instruction.delivered` | no | n/a |
 
-`waiting` and `blocked` are the two states `01-session-model.md` says the panel counts and the notifier announces; they are routine multi-agent traffic, so they stay at `normal`. `failed` and `status.changed` to `orphaned` are anomalies and get `critical`, matching the existing crash path. `done` and a completed child are good news, not a request, so they stay `low`. Urgency maps directly to `omarchy-notification-send --urgency <level>`.
+`waiting` and `blocked` are the two states `01-session-model.md` says the panel counts and the notifier announces; they are routine multi-agent traffic, so they stay at `normal`. `failed` and `status.changed` to `orphaned` are anomalies and get `critical`, matching the existing crash path. One exception, from the live desktop (2026-09-02): when the reconciler orphans sessions because Herdr itself is unreachable (its `detail` is `Herdr server not running`, typically right after a reboot), every bound session is orphaned at once and the panel already carries a Herdr-down row for the outage, so those notices go out at `normal`; one critical toast per session would mean relaunching every agent just to clear the corner. Any other detail (`pane not found in Herdr's list`) is one agent dying behind the person's back and stays `critical`. `done` and a completed child are good news, not a request, so they stay `low`. Urgency maps directly to `omarchy-notification-send --urgency <level>`.
 
 ## Text templates
 
-Title first, name first in the title, so the notice reads at a glance. The build adds a body line, `<agent> · <goal first line or branch> · <what a click does>`, and the sessions glyph, after the rig showed the title-only toast next to Omarchy's own crash toast with its icon and second line (2026-09-02):
+Title first, name first in the title, so the notice reads at a glance. The build adds a body line, `<agent> · <goal first line or branch> · <what a click does>`, and the sessions glyph, after the rig showed the title-only toast next to Omarchy's own crash toast with its icon and second line (2026-09-02). The words were revised the same day after a review on the live desktop: Herdr reports a question and a permission prompt both as `blocked`, so `waiting` and `blocked` share one title instead of guessing which (they stay distinct kinds inside the watcher); `failed`'s detail moves into the body to keep the title short; "lost its pane" was Herdr vocabulary that read as the window the person closed on purpose.
 
-| Event | Text |
-|---|---|
-| `waiting` | `<name> needs an answer` |
-| `blocked` | `<name> needs approval` |
-| `done` | `<name> finished` |
-| `failed` | `<name> failed: <detail>` |
-| `status.changed` to `orphaned` | `<name> lost its pane` |
-| `child.completed` | `<parent_name>: <child_name> finished (<state>)` |
+| Event | Title | Body |
+|---|---|---|
+| `waiting` | `<name> needs you` | `<agent> · <goal or branch> · Click to open and answer` |
+| `blocked` | `<name> needs you` | `<agent> · <goal or branch> · Click to open and answer` |
+| `done` | `<name> finished` | `<agent> · <goal or branch> · Click to open the receipt` |
+| `failed` | `<name> failed` | `<agent> · <detail, or unknown error> · Click to open` |
+| `status.changed` to `orphaned` | `<name> stopped unexpectedly` | `<agent> · <goal or branch> · Click to revive, same conversation` when `agent.harness_session_ref` is set, else `... · Click to revive, fresh conversation` |
+| `child.completed` | `<parent_name>: <child_name> finished (<state>)` | `<agent> · <goal or branch> · Click to open` |
 
-Click action on every one of these: `omarchy-notification-send ... --exec omarchy-agent-session open <id>`, so acting on a notification always opens that session's own terminal, never a list to search through.
+Click action: `done` and `failed` leave the session in a terminal state, where `session open` exits 5 with no pane to attach, so their click runs `omarchy-launch-tui --app-id=org.omarchy.session-receipt omarchy-agent-session-receipt --pager <id>` and shows the receipt the body promised; the same target applies to any notice whose session record already reads `done`, `failed`, or `stopped` by the time the event is tailed. Every other notice runs `omarchy-agent-session-open <id>`, so acting on it opens that session's own terminal (or, for `orphaned`, revives it), never a list to search through.
 
 ## Coalescing and self-suppression
 

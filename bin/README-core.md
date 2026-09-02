@@ -14,10 +14,11 @@ cd build/core
 python3 -m unittest discover -s tests -v
 ```
 
-Final line from this build's own run:
+Final line from this build's own run (70 in `test_core.py`, 18 in
+`test_watch.py`):
 
 ```
-Ran 53 tests in 4.095s
+Ran 88 tests in 6.355s
 
 OK
 ```
@@ -47,6 +48,13 @@ it, see below):
   build's assumed wire protocol.
 - `new` prints the created session's id on stdout on success, and the full
   record with `--json`.
+- `new` without `--name` derives one (`default_session_name`): the first
+  four words of `--prompt`, else the basename of the resolved `--cwd`, else
+  the harness kind, slugified (lowercase, runs outside `[a-z0-9]` become
+  `-`, cut to 28); `s-` prefixed when it would not start with a letter, and
+  suffixed `-2`, `-3`, ... until it is unused by any session on disk, ended
+  ones included. An explicit `--name` is unchanged: exit 5 if a live
+  session already has it.
 - The state machine's valid/invalid transition table, event `seq`
   monotonicity (including across a simulated process restart, i.e. a fresh
   `SessionStore` instance reading the same directory), and that
@@ -83,9 +91,23 @@ it, see below):
 - `reconcile` marking an orphan when a bound session's pane disappears from
   Herdr's lists, leaving a still-present one alone, adopting an unmatched
   live Herdr agent as a new `system:omarchy` session, and exiting 4 when
-  Herdr is unreachable.
+  Herdr is unreachable (orphaning every bound live session first).
+- `reconcile` rewriting `<sessions dir>/index.json` atomically at the end
+  of both paths (the panel's liveness file, `03-sessions-panel.md`):
+  `{"generated_at", "herdr": "running"|"unreachable", "orphaned": [ids],
+  "adopted": [ids], "counts": {"needs_attention", "live", "orphaned"}}`,
+  counts taken after the run's own changes (`live` = neither terminal nor
+  `orphaned`). A failed write is one stderr line and changes neither the
+  exit code nor stdout (tested with a directory squatting on the path).
 - `list --json`'s exact shape (key set, `children` as a count not a list,
-  `needs_attention` true exactly for `waiting`/`blocked`).
+  `needs_attention` true exactly for `waiting`/`blocked`), including the
+  panel-facing fields: `goal` (first non-empty line, cut to 120, or
+  `null`), `mode`, `resumable` (a non-empty `agent.harness_session_ref`),
+  `created_by` (`kind`, `label`), `project` (basename of
+  `workspace.repo_root`, else of `started_with.cwd`, else `null`), and
+  `status.source`/`status.detail`. The text `list` output is unchanged.
+- `receipt --pager` piping the rendered text through `less -R`, printing
+  plainly when `less` is missing, and doing nothing under `--json`.
 - ULID format (26-char Crockford base32, no `I`/`L`/`O`/`U`) and
   lexicographic time-ordering; atomic writes (temp file + `os.replace`,
   with no leftover temp file after two successive writes).
@@ -223,6 +245,18 @@ the point it mattered. See also `spec-02`'s cross-reference table: `preview`,
   no Omarchy record) defaults to `shared`, since Personal's trust model, a
   human already watching, can't be asserted for a pane Omarchy didn't
   launch.
+- **`index.json` carries a summary, not rows.** `03-sessions-panel.md`
+  describes one row per live session in the index; this build writes
+  `generated_at` (the liveness signal the panel checks), `herdr`, this
+  run's `orphaned`/`adopted` ids, and three counts, and leaves the rows to
+  `list --json`, which the panel already polls and which is the one place
+  the row shape is defined. The stdout of `reconcile` is unchanged.
+- **Default-name uniqueness spans ended sessions**, unlike the explicit
+  `--name` check (live sessions only, per `01-session-model.md`): a
+  derived name is a convenience, so avoiding a finished session's name
+  costs nothing and keeps `receipt <name>` unambiguous. The `s-` prefix is
+  applied before the `-2`/`-3` suffix so the final name is both unique and
+  letter-initial.
 - **`ori`, bare (no wrapped harness)** is treated exactly like `pi` (refuse
   for shared/restricted, nothing needed for personal), per
   `04-permission-modes.md`'s own "treat it like pi until the rig says

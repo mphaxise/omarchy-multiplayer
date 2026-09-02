@@ -73,11 +73,26 @@ self-suppression via `hyprctl activewindow -j`, a fullscreen hold-and-flush,
 and the more-than-3-in-60s digest. `--dry-run` prints the argv instead of
 calling the binary. Two flags beyond the spec, added for testability:
 `--once` (one scan pass, exit) and `--sessions-dir` (override the env var).
+Revised 2026-09-02 after a design review on the live desktop: `waiting` and
+`blocked` both read `<name> needs you` (Herdr reports a question and a
+permission prompt both as `blocked`, so "needs approval" was a guess);
+`failed` keeps a short title and carries its detail in the body; `orphaned`
+reads `<name> stopped unexpectedly` and its body says whether the revive
+resumes the same conversation (`agent.harness_session_ref` set) or starts
+fresh; `done` and `failed` clicks open the receipt via `omarchy-launch-tui
+--app-id=org.omarchy.session-receipt omarchy-agent-session-receipt --pager
+<id>` instead of `open`, which exits 5 on an ended session; and an
+`orphaned` whose `data.detail` is exactly `Herdr server not running` (the
+reconciler's whole-server outage, typically after a reboot) goes out at
+`normal` rather than `critical`, since the panel carries a Herdr-down row
+for it (`classify_event`, `HERDR_DOWN_DETAIL`). See the templates table in
+`spec/06-notifications.md`.
 
-**`tests/test_watch.py`**: 18 unit tests, all passing (see below), covering
-event classification, coalescing, the digest (including its distinct-session
-counting and window reset), self-suppression, the fullscreen hold/flush, and
-cursor persistence across a simulated restart.
+**`tests/test_watch.py`**: 29 unit tests, all passing (see below), covering
+event classification, the 2026-09-02 copy/click-target/urgency rules
+(`TestCopyAndClickTargets`), coalescing, the digest (including its
+distinct-session counting and window reset), self-suppression, the
+fullscreen hold/flush, and cursor persistence across a simulated restart.
 
 ## Verified locally
 
@@ -87,12 +102,24 @@ cursor persistence across a simulated restart.
   found nothing); not run. `bash -n` is the only shell-syntax check applied.
 - `python3 -m py_compile` on `bin/omarchy-agent-session-watch` and
   `tests/test_watch.py`: both pass.
-- `python3 -m unittest test_watch -v`: **18/18 pass**, 0.008s. Summary:
+- `python3 -m unittest tests.test_watch -v`: **29/29 pass** (2026-09-02;
+  the full `discover -s tests` run with `test_core.py` is 82/82). Summary:
 
   ```
   test_coalescing_is_per_session ... ok
   test_event_after_10s_does_not_replace ... ok
   test_second_event_within_10s_replaces_the_first ... ok
+  test_blocked_reads_the_same_as_waiting ... ok
+  test_body_falls_back_to_branch_then_to_agent_alone ... ok
+  test_done_click_opens_receipt_while_blocked_click_opens_session ... ok
+  test_done_opens_the_receipt_it_promises ... ok
+  test_failed_keeps_the_title_short_and_puts_the_detail_in_the_body ... ok
+  test_failed_without_detail_says_unknown_error ... ok
+  test_notice_for_a_session_already_terminal_opens_the_receipt ... ok
+  test_orphaned_by_herdr_outage_is_normal_but_a_lone_orphan_is_critical ... ok
+  test_orphaned_with_a_resume_ref_offers_the_same_conversation ... ok
+  test_orphaned_without_a_resume_ref_offers_a_fresh_conversation ... ok
+  test_waiting_says_needs_you_and_opens_to_answer ... ok
   test_cursor_file_is_valid_json_on_disk ... ok
   test_restart_does_not_replay_already_seen_events ... ok
   test_digest_resets_after_a_full_quiet_window ... ok
@@ -109,7 +136,7 @@ cursor persistence across a simulated restart.
   test_fullscreen_holds_the_notice_until_fullscreen_ends ... ok
   test_unfocused_session_still_notifies_when_a_different_window_is_active ... ok
 
-  Ran 18 tests in 0.008s
+  Ran 29 tests in 0.083s
   OK
   ```
 - A manual smoke test of the real CLI entry point (not just the test
@@ -270,3 +297,15 @@ cursor persistence across a simulated restart.
     `02-command-surface.md` documents directly); each synthesized example is
     built from that file's own prose usage and marked as synthesized in the
     script's comment.
+
+15. **The receipt click target is chosen by kind first, then by the record's
+    current state** (`click_argv`, 2026-09-02). `done` and `failed` always
+    open the receipt. A notice of any other kind also opens the receipt when
+    `session.json` already reads `done`/`failed`/`stopped` at scan time (an
+    event tailed late, after a restart or a slow poll), since `open` would
+    exit 5; its title and body still describe the event, not the click. The
+    `--pager` flag on `receipt` is assumed from the parallel core change.
+    The digest's urgency is untouched: it still treats any `orphaned` in the
+    window as critical, so four or more sessions orphaned by one Herdr
+    outage produce three `normal` toasts and then one `critical` digest;
+    left as is pending a look on the rig.

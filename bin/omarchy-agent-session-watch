@@ -60,11 +60,28 @@ _STATUS_TO_KIND = {
     "blocked": ("blocked", "normal"),
     "done": ("done", "low"),
     "failed": ("failed", "critical"),
-    "orphaned": ("orphaned", "critical"),
+    # orphaned: decided in classify_event, not here, because its urgency
+    # depends on the event's data.detail (see HERDR_DOWN_DETAIL).
     # working, idle, starting, stopped: no notification (spec's table lists
     # working/idle explicitly as "no"; starting/stopped are unlisted, treated
     # the same way: nothing not explicitly named in the table notifies).
 }
+
+# The reconciler's detail string when Herdr itself is unreachable
+# (omarchy-agent-session-core, cmd_reconcile on HerdrUnavailable: typically
+# right after a reboot). Every bound session is orphaned at once and the
+# panel carries a Herdr-down row for the outage, so those notices go out at
+# normal, not critical -- otherwise clearing the corner means relaunching
+# every agent (live desktop, 2026-09-02). Any other detail ("pane not found
+# in Herdr's list") means one agent died behind the person's back and stays
+# critical. Matched exactly, as written by the core.
+HERDR_DOWN_DETAIL = "Herdr server not running"
+
+# Mirrors the core's TERMINAL_STATES: a session in one of these has no pane
+# to attach, so `open` exits 5 and a click on it would do nothing.
+TERMINAL_STATES = {"done", "failed", "stopped"}
+
+RECEIPT_APP_ID = "org.omarchy.session-receipt"
 
 
 def classify_event(event: dict) -> Optional[tuple]:
@@ -76,7 +93,11 @@ def classify_event(event: dict) -> Optional[tuple]:
     etype = event.get("type")
     data = event.get("data") or {}
     if etype == "status.changed":
-        return _STATUS_TO_KIND.get(data.get("to"))
+        to_state = data.get("to")
+        if to_state == "orphaned":
+            urgency = "normal" if data.get("detail") == HERDR_DOWN_DETAIL else "critical"
+            return ("orphaned", urgency)
+        return _STATUS_TO_KIND.get(to_state)
     if etype == "child.completed":
         return ("child_completed", "low")
     # instruction.delivered (spec's table says "no" explicitly) and every
@@ -85,20 +106,26 @@ def classify_event(event: dict) -> Optional[tuple]:
 
 
 def render_text(kind: str, record: dict, event: dict, lookup_name: Callable[[str], Optional[str]]) -> str:
-    """The one-line templates from spec/06-notifications.md's table."""
+    """The title templates from spec/06-notifications.md's table.
+
+    Revised after the live-desktop review (2026-09-02): Herdr reports a
+    question and a permission prompt both as `blocked`, so "needs approval"
+    was a guess that was wrong whenever the agent had asked a question;
+    waiting and blocked now share one title while staying distinct kinds
+    internally. failed's detail moved into the body to keep the title short.
+    "lost its pane" was Herdr vocabulary that read as the window the person
+    closed on purpose.
+    """
     name = record.get("name") or record.get("id") or "session"
     data = event.get("data") or {}
-    if kind == "waiting":
-        return f"{name} needs an answer"
-    if kind == "blocked":
-        return f"{name} needs approval"
+    if kind in ("waiting", "blocked"):
+        return f"{name} needs you"
     if kind == "done":
         return f"{name} finished"
     if kind == "failed":
-        detail = data.get("detail") or "unknown error"
-        return f"{name} failed: {detail}"
+        return f"{name} failed"
     if kind == "orphaned":
-        return f"{name} lost its pane"
+        return f"{name} stopped unexpectedly"
     if kind == "child_completed":
         child_id = data.get("child_id", "")
         # ASSUMPTION: child.completed lives on the *parent's* events.jsonl
@@ -113,11 +140,29 @@ def render_text(kind: str, record: dict, event: dict, lookup_name: Callable[[str
     return f"{name}: {kind}"
 
 
-def render_body(kind: str, record: dict) -> str:
+def has_resume_ref(record: dict) -> bool:
+    """True when `open` would resume the harness's own transcript rather
+    than start fresh. Same test the core's cmd_open applies to
+    agent.harness_session_ref (a plain truthiness check), narrowed to
+    strings so a malformed record never promises a resume."""
+    ref = (record.get("agent") or {}).get("harness_session_ref")
+    return isinstance(ref, str) and bool(ref)
+
+
+def render_body(kind: str, record: dict, event: Optional[dict] = None) -> str:
     """Second line under the headline: what the session is for and what a
     click does, so the toast reads like the crash toast ("Click to diagnose
-    with AI") instead of a bare name."""
+    with AI") instead of a bare name. The action names exactly what the
+    click_argv for this kind runs, so the words never promise a click that
+    does nothing (live desktop, 2026-09-02)."""
     agent = ((record.get("agent") or {}).get("kind") or "agent")
+    data = (event or {}).get("data") or {}
+    if kind == "failed":
+        # The failure detail replaces the goal/branch here: it is what the
+        # person needs to read, and it no longer fits in the title.
+        detail_lines = (data.get("detail") or "").strip().splitlines()
+        detail = detail_lines[0] if detail_lines else "unknown error"
+        return f"{agent} · {detail} · Click to open the receipt"
     goal = record.get("goal") or {}
     goal_text = (goal.get("text") if isinstance(goal, dict) else None) or ""
     goal_text = goal_text.strip().splitlines()[0] if goal_text.strip() else ""
@@ -128,11 +173,41 @@ def render_body(kind: str, record: dict) -> str:
     elif kind == "done":
         action = "Click to open the receipt"
     elif kind == "orphaned":
-        action = "Click to revive"
+        # Says up front whether the revive picks the conversation back up or
+        # starts over, since that is the difference the person cares about.
+        if has_resume_ref(record):
+            action = "Click to revive, same conversation"
+        else:
+            action = "Click to revive, fresh conversation"
     else:
         action = "Click to open"
     head = f"{agent} · {what}" if what else agent
     return f"{head} · {action}"
+
+
+def click_argv(kind: str, session_id: str, record: dict) -> list:
+    """What a click on the toast runs.
+
+    A session in a terminal state has no pane to attach, so
+    `omarchy-agent-session-open` exits 5 and the click does nothing (live
+    desktop, 2026-09-02): done and failed notices, and any notice for a
+    session whose record already shows a terminal state (an event read late,
+    after the session ended), open the receipt in a pager instead. Every
+    other notice opens the session -- or, for orphaned, revives it. The
+    `--pager` flag on `receipt` lands in a parallel core change.
+    """
+    state = (record.get("status") or {}).get("state")
+    if kind in ("done", "failed") or state in TERMINAL_STATES:
+        return [
+            "omarchy-launch-tui",
+            f"--app-id={RECEIPT_APP_ID}",
+            "omarchy-agent-session-receipt",
+            "--pager",
+            session_id,
+        ]
+    # The click runs the real binary; the bare `omarchy-agent-session`
+    # group script only prints usage (rig, 2026-09-02).
+    return ["omarchy-agent-session-open", session_id]
 
 
 SESSION_GLYPH = "\U000f06a9"  # nf-md-robot, the glyph the sessions widget uses
@@ -444,17 +519,15 @@ class SessionWatcher:
             return
 
         headline = render_text(kind, record, event, self._lookup_name)
-        description = render_body(kind, record)
-        # The click runs the real binary; the bare `omarchy-agent-session`
-        # group script only prints usage (rig, 2026-09-02).
-        exec_argv = ["omarchy-agent-session-open", session_id]
+        description = render_body(kind, record, event)
+        exec_argv = click_argv(kind, session_id, record)
 
         self._prune_digest(now)
         pre_count = len(self._digest_sessions)
         # Overwrites this session's own prior entry if it already had one in
         # the window, so a session that fires twice still counts as one
         # session, with its latest kind, in the digest tally below.
-        self._digest_sessions[session_id] = (now, kind)
+        self._digest_sessions[session_id] = (now, kind, urgency)
 
         if pre_count < DIGEST_THRESHOLD:
             notice = PendingNotice(session_id, kind, urgency, headline, description, exec_argv, is_digest=False)
@@ -467,7 +540,7 @@ class SessionWatcher:
         self._deliver(notice, now, fullscreen_now)
 
     def _prune_digest(self, now: float) -> None:
-        stale = [sid for sid, (ts, _kind) in self._digest_sessions.items() if (now - ts) > DIGEST_WINDOW_S]
+        stale = [sid for sid, entry in self._digest_sessions.items() if (now - entry[0]) > DIGEST_WINDOW_S]
         for sid in stale:
             del self._digest_sessions[sid]
         if len(self._digest_sessions) <= DIGEST_THRESHOLD:
@@ -478,7 +551,7 @@ class SessionWatcher:
             self._digest_notice_id = None
 
     def _digest_text(self) -> str:
-        counts = collections.Counter(kind for _ts, kind in self._digest_sessions.values())
+        counts = collections.Counter(entry[1] for entry in self._digest_sessions.values())
         total = len(self._digest_sessions)
         parts = [f"{counts[k]} {_DIGEST_LABELS[k]}" for k in _DIGEST_ORDER if counts.get(k)]
         return f"{total} sessions need you: " + ", ".join(parts)
@@ -488,12 +561,17 @@ class SessionWatcher:
         # ladder as individual notices, at the highest level present in the
         # window, so a burst containing a failure is never quieter than that
         # failure alone would have been. Flagged in README-shell.md.
-        kinds = {kind for _ts, kind in self._digest_sessions.values()}
-        if "failed" in kinds or "orphaned" in kinds:
-            return "critical"
-        if "waiting" in kinds or "blocked" in kinds:
-            return "normal"
-        return "low"
+        # The digest carries the highest urgency its members were classified
+        # with, so a burst containing a failure is never quieter than that
+        # failure alone, and a reboot's Herdr-down orphans (classified
+        # normal) do not escalate to critical by being many.
+        ladder = {"low": 0, "normal": 1, "critical": 2}
+        best = "low"
+        for entry in self._digest_sessions.values():
+            urgency = entry[2] if len(entry) > 2 else "critical"
+            if ladder.get(urgency, 0) > ladder[best]:
+                best = urgency
+        return best
 
     # -- fullscreen hold / coalescing / dispatch --
 

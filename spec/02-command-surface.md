@@ -38,14 +38,17 @@ Herdr agent aliases must match `[a-z][a-z0-9_-]{0,31}`; `new` derives one from t
 { "sessions": [
   { "id": "01J...", "name": "api-refactor",
     "agent": { "kind": "claude" },
-    "status": { "state": "waiting", "since": "2026-09-01T18:04:11Z" },
+    "status": { "state": "waiting", "since": "2026-09-01T18:04:11Z", "source": "herdr-hook", "detail": null },
     "owner": { "kind": "human", "id": "praneet@rig", "label": "praneet" },
     "workspace": { "branch": "worktree/api-refactor" },
-    "needs_attention": true, "children": 0, "state_version": 17 }
+    "needs_attention": true, "children": 0, "state_version": 17,
+    "goal": "ship the v2 auth endpoint", "mode": "shared", "resumable": true,
+    "created_by": { "kind": "human", "label": "praneet" },
+    "project": "omarchy" }
 ] }
 ```
 
-`needs_attention` is true exactly when `status.state` is `waiting` or `blocked`, the two states `01-session-model.md` names as asking for a person. `show --json` wraps one such object as `"session"`, adding `goal`, `runtime`, `lineage`, `created_at`, `created_by`, `mode`, `started_with`, plus `"recent_events"`: the last 20 `events.jsonl` lines.
+`needs_attention` is true exactly when `status.state` is `waiting` or `blocked`, the two states `01-session-model.md` names as asking for a person. The panel row (`03-sessions-panel.md`) reads the rest: `goal` is the first non-empty line of the goal text, cut to 120 characters, or `null`; `mode` is the record's; `resumable` is true when `agent.harness_session_ref` is a non-empty string, so `open` can resume the transcript; `created_by` carries the creator's `kind` and `label`; `project` is the basename of `workspace.repo_root`, else of `started_with.cwd`, else `null`; `status.source` and `status.detail` are the record's. `show --json` wraps one such object as `"session"`, adding the full `goal`, `runtime`, `lineage`, `created_at`, the full `created_by`, `mode`, `started_with`, plus `"recent_events"`: the last 20 `events.jsonl` lines.
 
 ## Commands
 
@@ -55,6 +58,7 @@ Herdr agent aliases must match `[a-z][a-z0-9_-]{0,31}`; `new` derives one from t
 `--prompt` delivers its text through `agent.prompt` once the harness is ready, after an `agent.wait`, instead of as a harness argument: Herdr refuses argv it cannot encode for the shell, which the multi-line crash prompt is (rig, 2026-09-02).
 
 `--base` names the branch a new worktree starts from (default: the current branch); `--worktree <path>` joins an existing worktree instead of creating one (both records mark `created_by_session: false`, invariant 6); `--no-worktree` runs in the working directory; `--from <session>` records lineage and flips the default mode to `shared` (`04-permission-modes.md`); `--pick` opens the agent picker; `--owner` at creation is folded into `session.created` and writes no `owner.assigned` event.
+Without `--name`, the name is derived: the first four words of `--prompt`, else the basename of `--cwd`, else the agent kind, slugified like the alias (lowercase, runs outside `[a-z0-9]` become `-`, cut to 28 characters, `s-` prefixed when it would not start with a letter), then `-2`, `-3`, ... appended until no session on disk, ended ones included, has that name. An explicit `--name` must be unused by any live session (exit 5).
 Allocates the id, resolves the worktree per `07-worktrees.md`, starts the harness. Writes `session.created`, `runtime.bound`, `goal.set` if `--goal` given; `status` opens `starting`, moves to `working` on Herdr's confirmation.
 Herdr: `worktree.create`/`worktree.open` (or `workspace.create` with no worktree), `focus:false`; then `agent.start` with the derived alias, `--kind`, the new pane, and the flags `04-permission-modes.md` maps from `--mode`, plus any `-- <agent args>`.
 Exit: 0, 2, 4, 5.
@@ -124,8 +128,8 @@ Exit: 0, 3.
 Example: `omarchy agent session log api-refactor --follow`
 
 ### `receipt`
-`receipt <id-or-name> [--json] [--write]`
-Prints `receipt.json`. `--write` recomputes it now (git log/diff-stat against `base_branch`, not Herdr) and writes `receipt.written`.
+`receipt <id-or-name> [--json] [--write] [--pager]`
+Prints `receipt.json`. `--write` recomputes it now (git log/diff-stat against `base_branch`, not Herdr) and writes `receipt.written`. `--pager` pipes the text rendering through `less -R` (the panel's Receipt action runs inside a TUI window, `03-sessions-panel.md`), printing plainly when `less` is missing; ignored with `--json`.
 Herdr: none; receipt fields come from git and the local record.
 Exit: 0, 3.
 Example: `omarchy agent session receipt api-refactor --write`
@@ -157,7 +161,8 @@ These share the same binary convention (`bin/omarchy-agent-session-<cmd>`) and e
 ## Maintenance: `reconcile`
 
 `reconcile [--json]`
-The command the panel-refresh and timer paths in `01-session-model.md` call; not a second mechanism. Writes `status.changed` to `orphaned` and `runtime.unbound` for a bound session whose pane is gone; writes `session.created` (actor `system:omarchy`) and `runtime.bound` for a live Herdr agent with no matching session.
+The command the panel-refresh and timer paths in `01-session-model.md` call; not a second mechanism. Writes `status.changed` to `orphaned` and `runtime.unbound` for a bound session whose pane is gone; writes `session.created` (actor `system:omarchy`) and `runtime.bound` for a live Herdr agent with no matching session. When Herdr is unreachable it orphans every bound live session (`runtime.unbound`, reason `herdr_unavailable`) and exits 4.
+At the end of every run, reachable or not, it rewrites `~/.local/state/omarchy/sessions/index.json` atomically (temp file, rename), the liveness file the panel's `FileView` watches (`03-sessions-panel.md`): `{"generated_at": <RFC 3339 UTC>, "herdr": "running" | "unreachable", "orphaned": [ids orphaned this run], "adopted": [ids adopted this run], "counts": {"needs_attention": n, "live": n, "orphaned": n}}`. `live` counts sessions in neither a terminal state nor `orphaned`, `needs_attention` counts `waiting` and `blocked`, `orphaned` counts `orphaned`, all after this run's changes. Rows come from `list --json`, not the index. A failed index write is one stderr line and never changes the exit code or the stdout report (`{"orphaned", "adopted"}`, plus `"herdr": "unreachable"` on the outage path).
 Herdr: `agent.list` and `pane.list` per workspace, compared against every session's `runtime`.
 Exit: 0, 4.
 Example: `omarchy agent session reconcile --json`

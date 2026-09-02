@@ -98,12 +98,14 @@ class TestEventClassification(WatchTestCase):
 
         self.assertEqual(len(self.notifier.sent), 1)
         sent = self.notifier.sent[0]
-        self.assertEqual(sent["headline"], "api-refactor needs an answer")
+        # "needs you", not "needs an answer": since the 2026-09-02 review,
+        # waiting and blocked share one title (see TestCopyAndClickTargets).
+        self.assertEqual(sent["headline"], "api-refactor needs you")
         self.assertEqual(sent["urgency"], "normal")
         self.assertEqual(sent["exec_argv"], ["omarchy-agent-session-open", "s1"])
 
     def test_failed_is_critical_with_detail(self):
-        write_session(self.tmpdir, "s1", "api-refactor")
+        write_session(self.tmpdir, "s1", "api-refactor", agent={"kind": "claude"})
         append_event(
             self.tmpdir, "s1", 1, "status.changed",
             {"from": "working", "to": "failed", "detail": "harness exited 1"},
@@ -112,7 +114,9 @@ class TestEventClassification(WatchTestCase):
         watcher.scan_once(now=self.clock())
 
         sent = self.notifier.sent[0]
-        self.assertEqual(sent["headline"], "api-refactor failed: harness exited 1")
+        # The detail moved out of the title and into the body (2026-09-02).
+        self.assertEqual(sent["headline"], "api-refactor failed")
+        self.assertEqual(sent["description"], "claude · harness exited 1 · Click to open the receipt")
         self.assertEqual(sent["urgency"], "critical")
 
     def test_orphaned_is_a_status_changed_variant(self):
@@ -126,7 +130,10 @@ class TestEventClassification(WatchTestCase):
         watcher.scan_once(now=self.clock())
 
         sent = self.notifier.sent[0]
-        self.assertEqual(sent["headline"], "api-refactor lost its pane")
+        # "stopped unexpectedly", not "lost its pane" (2026-09-02: "pane" is
+        # Herdr vocabulary that read as the window the person closed).
+        self.assertEqual(sent["headline"], "api-refactor stopped unexpectedly")
+        # No detail at all is not the Herdr-down case, so it stays critical.
         self.assertEqual(sent["urgency"], "critical")
 
     def test_working_idle_and_instruction_delivered_do_not_notify(self):
@@ -156,6 +163,151 @@ class TestEventClassification(WatchTestCase):
         self.assertEqual(sent["exec_argv"], ["omarchy-agent-session-open", "parent-1"])
 
 
+OPEN_S1 = ["omarchy-agent-session-open", "s1"]
+RECEIPT_S1 = [
+    "omarchy-launch-tui",
+    "--app-id=org.omarchy.session-receipt",
+    "omarchy-agent-session-receipt",
+    "--pager",
+    "s1",
+]
+
+
+class TestCopyAndClickTargets(WatchTestCase):
+    """The copy, click targets, and orphaned urgency rule from the live-desktop
+    design review of 2026-09-02. One notice per test, read straight off what
+    the notifier was handed: headline (title), description (body), exec_argv
+    (what a click runs), urgency."""
+
+    RECORD = {
+        "agent": {"kind": "claude", "harness_session_ref": None},
+        "goal": {"text": "Refactor the API layer\nSecond line is never shown"},
+        "workspace": {"branch": "feat/api-refactor"},
+    }
+
+    def notice_for(self, to_state, detail=None, **record_extra):
+        record = dict(self.RECORD)
+        record.update(record_extra)
+        write_session(self.tmpdir, "s1", "api-refactor", **record)
+        data = {"from": "working", "to": to_state}
+        if detail is not None:
+            data["detail"] = detail
+        append_event(self.tmpdir, "s1", 1, "status.changed", data)
+        self.make_watcher().scan_once(now=self.clock())
+        self.assertEqual(len(self.notifier.sent), 1)
+        return self.notifier.sent[0]
+
+    def test_waiting_says_needs_you_and_opens_to_answer(self):
+        sent = self.notice_for("waiting")
+        self.assertEqual(sent["headline"], "api-refactor needs you")
+        self.assertEqual(sent["description"], "claude · Refactor the API layer · Click to open and answer")
+        self.assertEqual(sent["exec_argv"], OPEN_S1)
+        self.assertEqual(sent["urgency"], "normal")
+
+    def test_blocked_reads_the_same_as_waiting(self):
+        # Herdr reports a question and a permission prompt both as `blocked`,
+        # so the title must not guess which; the two stay distinct kinds
+        # internally (classify_event still returns "blocked").
+        sent = self.notice_for("blocked")
+        self.assertEqual(sent["headline"], "api-refactor needs you")
+        self.assertEqual(sent["description"], "claude · Refactor the API layer · Click to open and answer")
+        self.assertEqual(sent["exec_argv"], OPEN_S1)
+        self.assertEqual(watch.classify_event({"type": "status.changed", "data": {"to": "blocked"}}), ("blocked", "normal"))
+        self.assertEqual(watch.classify_event({"type": "status.changed", "data": {"to": "waiting"}}), ("waiting", "normal"))
+
+    def test_done_opens_the_receipt_it_promises(self):
+        sent = self.notice_for("done")
+        self.assertEqual(sent["headline"], "api-refactor finished")
+        self.assertEqual(sent["description"], "claude · Refactor the API layer · Click to open the receipt")
+        self.assertEqual(sent["exec_argv"], RECEIPT_S1)
+        self.assertEqual(sent["urgency"], "low")
+
+    def test_failed_keeps_the_title_short_and_puts_the_detail_in_the_body(self):
+        sent = self.notice_for("failed", detail="harness exited 1")
+        self.assertEqual(sent["headline"], "api-refactor failed")
+        self.assertEqual(sent["description"], "claude · harness exited 1 · Click to open the receipt")
+        # failed is a terminal state: `open` would exit 5, so the click opens
+        # the receipt.
+        self.assertEqual(sent["exec_argv"], RECEIPT_S1)
+        self.assertEqual(sent["urgency"], "critical")
+
+    def test_failed_without_detail_says_unknown_error(self):
+        sent = self.notice_for("failed")
+        self.assertEqual(sent["headline"], "api-refactor failed")
+        self.assertEqual(sent["description"], "claude · unknown error · Click to open the receipt")
+
+    def test_orphaned_with_a_resume_ref_offers_the_same_conversation(self):
+        sent = self.notice_for(
+            "orphaned", detail="pane not found in Herdr's list",
+            agent={"kind": "claude", "harness_session_ref": "01J8ZK3Q9X7R2M4N6P8S0T2V4W"},
+        )
+        self.assertEqual(sent["headline"], "api-refactor stopped unexpectedly")
+        self.assertEqual(sent["description"], "claude · Refactor the API layer · Click to revive, same conversation")
+        self.assertEqual(sent["exec_argv"], OPEN_S1)
+
+    def test_orphaned_without_a_resume_ref_offers_a_fresh_conversation(self):
+        for label, agent in [
+            ("null ref", {"kind": "claude", "harness_session_ref": None}),
+            ("empty ref", {"kind": "claude", "harness_session_ref": ""}),
+            ("missing key", {"kind": "claude"}),
+        ]:
+            with self.subTest(label):
+                self.notifier.sent.clear()
+                shutil.rmtree(self.tmpdir / "s1", ignore_errors=True)
+                (self.tmpdir / ".watch-cursors.json").unlink(missing_ok=True)
+                sent = self.notice_for("orphaned", detail="pane not found in Herdr's list", agent=agent)
+                self.assertEqual(sent["headline"], "api-refactor stopped unexpectedly")
+                self.assertEqual(
+                    sent["description"], "claude · Refactor the API layer · Click to revive, fresh conversation"
+                )
+                self.assertEqual(sent["exec_argv"], OPEN_S1)
+
+    def test_done_click_opens_receipt_while_blocked_click_opens_session(self):
+        write_session(self.tmpdir, "s1", "api-refactor", **self.RECORD)
+        write_session(self.tmpdir, "s2", "onboarding-flow", **self.RECORD)
+        append_event(self.tmpdir, "s1", 1, "status.changed", {"from": "working", "to": "done"})
+        append_event(self.tmpdir, "s2", 1, "status.changed", {"from": "working", "to": "blocked"})
+        self.make_watcher().scan_once(now=self.clock())
+
+        by_id = {n["exec_argv"][-1]: n for n in self.notifier.sent}
+        self.assertEqual(by_id["s1"]["exec_argv"], RECEIPT_S1)
+        self.assertEqual(by_id["s2"]["exec_argv"], ["omarchy-agent-session-open", "s2"])
+
+    def test_notice_for_a_session_already_terminal_opens_the_receipt(self):
+        # An event read late, after the session ended (a restart, a slow
+        # poll): the record already says done, so `open` would exit 5. The
+        # click goes to the receipt regardless of the event's own kind.
+        sent = self.notice_for(
+            "waiting", status={"state": "done", "since": "2026-09-02T00:00:00Z", "source": "agent", "detail": None}
+        )
+        self.assertEqual(sent["headline"], "api-refactor needs you")
+        self.assertEqual(sent["exec_argv"], RECEIPT_S1)
+
+    def test_orphaned_by_herdr_outage_is_normal_but_a_lone_orphan_is_critical(self):
+        herdr_down = {"type": "status.changed", "data": {"from": "working", "to": "orphaned", "detail": "Herdr server not running"}}
+        pane_gone = {"type": "status.changed", "data": {"from": "working", "to": "orphaned", "detail": "pane not found in Herdr's list"}}
+        no_detail = {"type": "status.changed", "data": {"from": "working", "to": "orphaned"}}
+        self.assertEqual(watch.classify_event(herdr_down), ("orphaned", "normal"))
+        self.assertEqual(watch.classify_event(pane_gone), ("orphaned", "critical"))
+        self.assertEqual(watch.classify_event(no_detail), ("orphaned", "critical"))
+        # Exact match only: a near-miss detail is still someone's agent dying.
+        near_miss = {"type": "status.changed", "data": {"to": "orphaned", "detail": "herdr server not running"}}
+        self.assertEqual(watch.classify_event(near_miss), ("orphaned", "critical"))
+
+        # And end to end, through the watcher, with the reconciler's exact
+        # Herdr-down string as the core writes it.
+        sent = self.notice_for("orphaned", detail="Herdr server not running")
+        self.assertEqual(sent["urgency"], "normal")
+        self.assertEqual(sent["headline"], "api-refactor stopped unexpectedly")
+
+    def test_body_falls_back_to_branch_then_to_agent_alone(self):
+        no_goal = {"agent": {"kind": "codex"}, "workspace": {"branch": "feat/api-refactor"}}
+        self.assertEqual(watch.render_body("waiting", no_goal), "codex · feat/api-refactor · Click to open and answer")
+        bare = {"agent": {"kind": "codex"}}
+        self.assertEqual(watch.render_body("done", bare), "codex · Click to open the receipt")
+        self.assertEqual(watch.render_body("failed", bare), "codex · unknown error · Click to open the receipt")
+
+
 class TestCoalescing(WatchTestCase):
     def test_second_event_within_10s_replaces_the_first(self):
         write_session(self.tmpdir, "s1", "api-refactor")
@@ -171,7 +323,7 @@ class TestCoalescing(WatchTestCase):
 
         self.assertEqual(len(self.notifier.sent), 2)
         second = self.notifier.sent[1]
-        self.assertEqual(second["headline"], "api-refactor needs approval")
+        self.assertEqual(second["headline"], "api-refactor needs you")
         self.assertEqual(second["replaces_id"], first_id)
 
     def test_event_after_10s_does_not_replace(self):
@@ -199,11 +351,15 @@ class TestCoalescing(WatchTestCase):
         watcher.scan_once(now=self.clock())
 
         # s1's second notice replaces s1's first; s2 is untouched and never
-        # replaced by an unrelated session's activity.
-        by_headline = {n["headline"]: n for n in self.notifier.sent}
-        self.assertIn("api-refactor needs approval", by_headline)
-        self.assertIsNotNone(by_headline["api-refactor needs approval"]["replaces_id"])
-        self.assertEqual(len([n for n in self.notifier.sent if n["headline"] == "onboarding-flow needs an answer"]), 1)
+        # replaced by an unrelated session's activity. Keyed by the session
+        # id in the click argv, since waiting and blocked now share a title.
+        s1_notices = [n for n in self.notifier.sent if n["exec_argv"][-1] == "s1"]
+        s2_notices = [n for n in self.notifier.sent if n["exec_argv"][-1] == "s2"]
+        self.assertEqual([n["headline"] for n in s1_notices], ["api-refactor needs you"] * 2)
+        self.assertIsNone(s1_notices[0]["replaces_id"])
+        self.assertEqual(s1_notices[1]["replaces_id"], s1_notices[0]["id"])
+        self.assertEqual([n["headline"] for n in s2_notices], ["onboarding-flow needs you"])
+        self.assertIsNone(s2_notices[0]["replaces_id"])
 
 
 class TestDigest(WatchTestCase):
@@ -232,6 +388,30 @@ class TestDigest(WatchTestCase):
         self.assertEqual(digest["exec_argv"], ["omarchy-agent-session-list"])
         self.assertEqual(digest["headline"], "4 sessions need you: 2 waiting, 1 blocked, 1 failed")
         self.assertEqual(digest["urgency"], "critical")  # a failed session is present
+
+    def test_reboot_orphan_storm_digests_at_normal_urgency(self):
+        # Four sessions orphaned by one Herdr outage (detail "Herdr server
+        # not running") are each classified normal, and the digest they
+        # roll into carries that classification instead of escalating to
+        # critical by being many.
+        watcher = self.make_watcher()
+        for i, sid in enumerate(["s1", "s2", "s3", "s4"]):
+            write_session(self.tmpdir, sid, sid)
+            append_event(self.tmpdir, sid, 1, "status.changed",
+                         {"from": "working", "to": "orphaned", "detail": "Herdr server not running"})
+            self.clock.advance(1.0)
+            watcher.scan_once(now=self.clock())
+        digest = self.notifier.sent[3]
+        self.assertEqual(digest["exec_argv"], ["omarchy-agent-session-list"])
+        self.assertEqual(digest["urgency"], "normal")
+        # One agent that died on its own is critical, and so is the digest
+        # that contains it.
+        write_session(self.tmpdir, "s5", "s5")
+        append_event(self.tmpdir, "s5", 1, "status.changed",
+                     {"from": "working", "to": "orphaned", "detail": "pane not found in Herdr's list"})
+        self.clock.advance(1.0)
+        watcher.scan_once(now=self.clock())
+        self.assertEqual(self.notifier.sent[-1]["urgency"], "critical")
 
     def test_fifth_event_updates_the_same_digest_by_distinct_session_count(self):
         watcher = self.make_watcher()
@@ -272,7 +452,7 @@ class TestDigest(WatchTestCase):
         watcher.scan_once(now=self.clock())
 
         newest = self.notifier.sent[-1]
-        self.assertEqual(newest["headline"], "s5 needs an answer")
+        self.assertEqual(newest["headline"], "s5 needs you")
         self.assertNotEqual(newest["exec_argv"], ["omarchy-agent-session-list"])
         self.assertIsNone(newest["replaces_id"])
 
@@ -312,7 +492,7 @@ class TestSelfSuppressionAndFullscreen(WatchTestCase):
         watcher.scan_once(now=self.clock())  # no new event; this pass only notices fullscreen ended
 
         self.assertEqual(len(self.notifier.sent), 1)
-        self.assertEqual(self.notifier.sent[0]["headline"], "api-refactor needs an answer")
+        self.assertEqual(self.notifier.sent[0]["headline"], "api-refactor needs you")
 
     def test_a_second_event_held_during_fullscreen_overwrites_the_first(self):
         write_session(self.tmpdir, "s1", "api-refactor")
@@ -322,8 +502,11 @@ class TestSelfSuppressionAndFullscreen(WatchTestCase):
         watcher = self.make_watcher(active_window_fn=lambda: {"fullscreen": state["fullscreen"]})
         watcher.scan_once(now=self.clock())
 
+        # The second held event is `done` rather than `blocked`: waiting and
+        # blocked share a title and body since 2026-09-02, so a done event is
+        # what makes "the latest one won" observable at the notifier.
         self.clock.advance(1.0)
-        append_event(self.tmpdir, "s1", 2, "status.changed", {"from": "waiting", "to": "blocked"})
+        append_event(self.tmpdir, "s1", 2, "status.changed", {"from": "waiting", "to": "done"})
         watcher.scan_once(now=self.clock())
         self.assertEqual(self.notifier.sent, [], "still fullscreen, still held")
 
@@ -331,11 +514,11 @@ class TestSelfSuppressionAndFullscreen(WatchTestCase):
         state["fullscreen"] = False
         watcher.scan_once(now=self.clock())
 
-        # Only one notice is delivered on flush: the latest ("needs
-        # approval"), not both -- "one pending notice per session" holds
-        # through the hold queue too.
+        # Only one notice is delivered on flush: the latest ("finished"),
+        # not both -- "one pending notice per session" holds through the
+        # hold queue too.
         self.assertEqual(len(self.notifier.sent), 1)
-        self.assertEqual(self.notifier.sent[0]["headline"], "api-refactor needs approval")
+        self.assertEqual(self.notifier.sent[0]["headline"], "api-refactor finished")
 
 
 class TestCursorPersistenceAndRestart(WatchTestCase):
@@ -404,7 +587,10 @@ class TestDryRunPrintsArgv(WatchTestCase):
         self.assertEqual(argv[0], "omarchy-notification-send")
         self.assertIn("--urgency", argv)
         self.assertIn("--exec", argv)
-        self.assertIn("omarchy-agent-session-open", argv)
+        # A done notice's click opens the receipt, not the session
+        # (2026-09-02); the full exec argv is pinned in TestCopyAndClickTargets.
+        self.assertIn("omarchy-agent-session-receipt", argv)
+        self.assertNotIn("omarchy-agent-session-open", argv)
 
 
 if __name__ == "__main__":

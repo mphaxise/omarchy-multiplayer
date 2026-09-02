@@ -924,6 +924,12 @@ class SessionStore:
     def artifacts_dir(self, session_id):
         return self.session_dir(session_id) / "artifacts"
 
+    def index_path(self):
+        """The reconciler's liveness index, read by the panel's FileView
+        (03-sessions-panel.md); a file, so all_ids() never mistakes it for
+        a session directory."""
+        return self.root / "index.json"
+
     def session_exists(self, session_id):
         return self.session_json_path(session_id).exists()
 
@@ -1349,8 +1355,44 @@ def check_invariant6(store, workspace, new_session_created_by_session):
             )
 
 
-def default_session_name(kind):
-    return f"{kind}-{new_ulid()[-6:].lower()}"
+_NAME_SLUG_RUN_RE = re.compile(r"[^a-z0-9]+")
+NAME_SLUG_LIMIT = 28
+
+
+def slugify_name(text, limit=NAME_SLUG_LIMIT):
+    """Lowercase; every run outside [a-z0-9] becomes one '-'; strip
+    leading/trailing '-'; cut to `limit` characters and strip a trailing
+    '-' again. Returns '' when nothing survives."""
+    slug = _NAME_SLUG_RUN_RE.sub("-", (text or "").lower()).strip("-")
+    return slug[:limit].rstrip("-")
+
+
+def default_session_name(kind, cwd=None, prompt=None, existing_names=()):
+    """The name `new` uses when --name is absent: the first four words of
+    --prompt, else the basename of cwd, else the harness kind, each
+    slugified (an empty slug falls through to the next source). Prefixed
+    with `s-` when the result would not start with a letter, so the name
+    the panel shows is the alias Herdr shows (02-command-surface.md's
+    alias rule; derive_herdr_alias would add the same prefix anyway).
+    Then made unique against `existing_names` -- every session name on
+    disk, live or ended, so a receipt's name stays unambiguous -- by
+    appending -2, -3, ... until free."""
+    base = None
+    words = (prompt or "").split()
+    if words:
+        base = slugify_name(" ".join(words[:4])) or None
+    if base is None and cwd:
+        base = slugify_name(os.path.basename(os.path.normpath(cwd))) or None
+    if base is None:
+        base = slugify_name(kind) or "session"
+    if not _ALIAS_STARTS_LETTER_RE.match(base):
+        base = "s-" + base
+    taken = set(existing_names or ())
+    name, n = base, 1
+    while name in taken:
+        n += 1
+        name = f"{base}-{n}"
+    return name
 
 
 def new_session_record(session_id, name, created_by, owner, mode, agent_kind, workspace,
@@ -1463,6 +1505,8 @@ def build_parser():
     add_id_arg(p)
     p.add_argument("--json", action="store_true")
     p.add_argument("--write", action="store_true")
+    p.add_argument("--pager", action="store_true",
+                   help="pipe the text receipt through `less -R` (ignored with --json; prints plainly when less is missing)")
 
     p = sub.add_parser("capture")
     add_id_arg(p)
@@ -1501,15 +1545,56 @@ def build_parser():
 # Command handlers
 # --------------------------------------------------------------------------
 
+GOAL_LINE_LIMIT = 120
+
+
+def goal_first_line(goal, limit=GOAL_LINE_LIMIT):
+    """The panel's "What" column (03-sessions-panel.md): the first
+    non-empty line of the goal text, stripped and cut to `limit`
+    characters; None when there is no goal."""
+    text = (goal or {}).get("text") if isinstance(goal, dict) else None
+    if not isinstance(text, str):
+        return None
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
+            return line[:limit]
+    return None
+
+
+def session_project(s):
+    """Basename of workspace.repo_root, else of started_with.cwd, else
+    None -- the repo a session works in, for the panel row."""
+    ws = s.get("workspace") or {}
+    started = s.get("started_with") or {}
+    for path in (ws.get("repo_root"), started.get("cwd")):
+        if path:
+            base = os.path.basename(os.path.normpath(str(path)))
+            if base:
+                return base
+    return None
+
+
 def session_list_entry(s):
+    status = s["status"]
+    created_by = s.get("created_by") or {}
+    ref = s["agent"].get("harness_session_ref")
     return {
         "id": s["id"], "name": s["name"], "agent": {"kind": s["agent"]["kind"]},
-        "status": {"state": s["status"]["state"], "since": s["status"]["since"]},
+        "status": {"state": status["state"], "since": status["since"],
+                   "source": status.get("source"), "detail": status.get("detail")},
         "owner": s["owner"]["actor"],
         "workspace": {"branch": (s.get("workspace") or {}).get("branch")},
-        "needs_attention": s["status"]["state"] in NEEDS_ATTENTION_STATES,
+        "needs_attention": status["state"] in NEEDS_ATTENTION_STATES,
         "children": len(s["lineage"]["children"]),
         "state_version": s["state_version"],
+        # Panel-facing additions (03-sessions-panel.md's row: what, who,
+        # where, and whether `open` can resume a transcript).
+        "goal": goal_first_line(s.get("goal")),
+        "mode": s["mode"],
+        "resumable": isinstance(ref, str) and bool(ref),
+        "created_by": {"kind": created_by.get("kind"), "label": created_by.get("label")},
+        "project": session_project(s),
     }
 
 
@@ -1519,7 +1604,13 @@ def cmd_new(args, ctx):
     if mode is None:
         mode = "shared" if args.from_session else "personal"
 
-    name = args.name or default_session_name(kind)
+    # --cwd defaults to "." in the parser; resolve it first so the default
+    # name can use the real directory's basename rather than ".".
+    cwd = str(pathlib.Path(args.cwd or os.getcwd()).resolve())
+    name = args.name or default_session_name(
+        kind, cwd=cwd, prompt=getattr(args, "prompt", None),
+        existing_names={s["name"] for s in ctx.store.list_sessions()},
+    )
     if ctx.store.name_taken(name):
         raise ConflictError(f"session name '{name}' is already in use by a live session")
 
@@ -1541,7 +1632,6 @@ def cmd_new(args, ctx):
     extra_args = list(getattr(args, "extra_args", []) or [])
     argv, env, cell = assemble_launch(kind, mode, extra_args)
 
-    cwd = str(pathlib.Path(args.cwd).resolve())
     session_id = new_ulid()
     workspace = resolve_workspace(cwd, name, args.worktree, args.no_worktree, ctx.herdr, base=getattr(args, "base", None))
     herdr_root_pane = workspace.pop("_herdr_root_pane", None) or {}
@@ -1945,9 +2035,21 @@ def cmd_receipt(args, ctx):
 
     if args.json:
         print(json.dumps(receipt, indent=2))
+    elif getattr(args, "pager", False):
+        page_text(render_receipt_text(receipt))
     else:
         print(render_receipt_text(receipt))
     return EXIT_OK
+
+
+def page_text(text):
+    """Pipe `text` through `less -R` (the panel's Receipt action runs
+    inside a TUI window, 03-sessions-panel.md); print it plainly when
+    less is not installed."""
+    try:
+        subprocess.run(["less", "-R"], input=text + "\n", text=True)
+    except FileNotFoundError:
+        print(text)
 
 
 def cmd_capture(args, ctx):
@@ -2142,6 +2244,36 @@ def apply_herdr_status(store, session, herdr_status, source="herdr-manifest", de
     return session
 
 
+def build_sessions_index(store, herdr_state, orphaned, adopted):
+    """The reconciler's index (03-sessions-panel.md): `generated_at` is the
+    panel's liveness signal, the rest summarizes this run and the store
+    after it. `live` counts sessions in neither a terminal state nor
+    `orphaned`; `needs_attention` counts waiting/blocked."""
+    states = [(s.get("status") or {}).get("state") for s in store.list_sessions()]
+    return {
+        "generated_at": now_rfc3339(),
+        "herdr": herdr_state,
+        "orphaned": list(orphaned),
+        "adopted": list(adopted),
+        "counts": {
+            "needs_attention": sum(1 for st in states if st in NEEDS_ATTENTION_STATES),
+            "live": sum(1 for st in states if st not in TERMINAL_STATES and st != "orphaned"),
+            "orphaned": sum(1 for st in states if st == "orphaned"),
+        },
+    }
+
+
+def write_sessions_index(store, herdr_state, orphaned, adopted):
+    """Atomically rewrite <sessions root>/index.json. Best-effort by
+    contract: the panel only loses a liveness tick if this fails, so a
+    failure is reported on stderr and never changes reconcile's exit code
+    or stdout."""
+    try:
+        atomic_write_json(store.index_path(), build_sessions_index(store, herdr_state, orphaned, adopted))
+    except Exception as e:  # noqa: BLE001 -- anything here is non-fatal by design
+        eprint(f"reconcile: could not write {store.index_path()}: {e}")
+
+
 def cmd_reconcile(args, ctx):
     actor = system_actor()
     known = ctx.store.list_sessions()
@@ -2167,6 +2299,7 @@ def cmd_reconcile(args, ctx):
             s["state_version"] = ev["seq"]
             ctx.store.save_session(s)
             orphaned.append(s["id"])
+        write_sessions_index(ctx.store, "unreachable", orphaned, [])
         if args.json:
             print(json.dumps({"orphaned": orphaned, "adopted": [], "herdr": "unreachable"}, indent=2))
         else:
@@ -2228,6 +2361,7 @@ def cmd_reconcile(args, ctx):
         ctx.store.save_session(record)
         adopted.append(session_id)
 
+    write_sessions_index(ctx.store, "running", orphaned, adopted)
     if args.json:
         print(json.dumps({"orphaned": orphaned, "adopted": adopted}, indent=2))
     else:

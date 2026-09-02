@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 TESTS_DIR = pathlib.Path(__file__).resolve().parent
 CORE_DIR = TESTS_DIR.parent
@@ -43,7 +44,7 @@ core = load_core()
 
 
 def make_bare_session(store, name, mode="personal", agent_kind="claude", state="working",
-                       runtime=None, workspace=None, parent_id=None):
+                       runtime=None, workspace=None, parent_id=None, goal_text=None, cwd=None):
     """Builds and saves a session record directly through the store, for
     tests that don't want a real (or fake-Herdr-backed) `new` launch."""
     session_id = core.new_ulid()
@@ -54,7 +55,7 @@ def make_bare_session(store, name, mode="personal", agent_kind="claude", state="
     }
     record = core.new_session_record(
         session_id, name, creator, creator, mode, agent_kind, workspace,
-        cwd=None, command=None, parent_id=parent_id,
+        cwd=cwd, command=None, parent_id=parent_id, goal_text=goal_text,
     )
     ev = store.append_event(session_id, "session.created", creator, {"name": name})
     record["state_version"] = ev["seq"]
@@ -182,6 +183,34 @@ class TestCreateAndList(CoreTestCase):
         self.assertEqual(record["name"], "with-json")
         self.assertEqual(record["id"], record["id"])  # sanity: valid JSON with an id
 
+    def test_new_without_name_derives_one_from_prompt_then_cwd(self):
+        self.start_fake_herdr()
+        rc, out, err = self.run_cli(["new", "--agent", "claude", "--cwd", str(self.plain_dir), "--no-worktree",
+                                     "--prompt", "Append a line to README.md and commit"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.store.try_load(out.strip())["name"], "append-a-line-to")
+
+        # No prompt: the (resolved) cwd's basename, not the parser's "." default.
+        expected = core.slugify_name(self.plain_dir.name)
+        rc, out, err = self.run_cli(["new", "--agent", "claude", "--cwd", str(self.plain_dir), "--no-worktree"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.store.try_load(out.strip())["name"], expected)
+
+        # Taken names get -2, -3, ...; an ended session's name counts as
+        # taken too, so a receipt's name stays unambiguous.
+        make_bare_session(self.store, expected + "-2", state="done")
+        rc, out, err = self.run_cli(["new", "--agent", "claude", "--cwd", str(self.plain_dir), "--no-worktree"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.store.try_load(out.strip())["name"], expected + "-3")
+
+    def test_explicit_name_still_conflicts_with_a_live_session(self):
+        self.start_fake_herdr()
+        make_bare_session(self.store, "taken-name", state="working")
+        rc, out, err = self.run_cli(["new", "--agent", "claude", "--name", "taken-name",
+                                     "--cwd", str(self.plain_dir), "--no-worktree"])
+        self.assertEqual(rc, 5, err)
+        self.assertEqual(len(self.store.list_sessions()), 1)
+
     def test_list_is_empty_with_no_sessions_and_no_herdr_call_needed(self):
         # No fake Herdr server started at all -- list must still work.
         rc, out, err = self.run_cli(["list", "--json"])
@@ -210,18 +239,71 @@ class TestListJsonShape(CoreTestCase):
         self.assertEqual(list(data.keys()), ["sessions"])
         self.assertEqual(len(data["sessions"]), 1)
         entry = data["sessions"][0]
+        # spec-02's original key set, plus the panel-facing fields
+        # (goal, mode, resumable, created_by, project) and status.source/
+        # detail added for 03-sessions-panel.md's row.
         self.assertEqual(
             set(entry.keys()),
-            {"id", "name", "agent", "status", "owner", "workspace", "needs_attention", "children", "state_version"},
+            {"id", "name", "agent", "status", "owner", "workspace", "needs_attention", "children", "state_version",
+             "goal", "mode", "resumable", "created_by", "project"},
         )
         self.assertEqual(set(entry["agent"].keys()), {"kind"})
-        self.assertEqual(set(entry["status"].keys()), {"state", "since"})
+        self.assertEqual(set(entry["status"].keys()), {"state", "since", "source", "detail"})
         self.assertEqual(set(entry["owner"].keys()), {"kind", "id", "label"})
         self.assertEqual(set(entry["workspace"].keys()), {"branch"})
+        self.assertEqual(set(entry["created_by"].keys()), {"kind", "label"})
         self.assertIs(entry["needs_attention"], False)
         self.assertEqual(entry["children"], 0)
         self.assertIsInstance(entry["children"], int)
         self.assertEqual(entry["id"], session_id)
+        self.assertIsNone(entry["goal"])
+        self.assertIs(entry["resumable"], False)
+        self.assertIsNone(entry["project"])
+
+    def test_list_json_panel_fields(self):
+        # (a) goal is the first non-empty line; mode is copied; resumable
+        # flips on harness_session_ref; project falls back repo_root -> cwd.
+        goal = "\n  Append a line to README.md  \nsecond line explains why\n"
+        workspace = {"repo_root": "/home/x/Work/omarchy-multiplayer/", "worktree_path": "/home/x/.herdr/worktrees/x",
+                     "branch": "session/x", "base_branch": "main", "created_by_session": True}
+        session_id = make_bare_session(self.store, "panel-fields", mode="shared", state="working",
+                                       workspace=workspace, goal_text=goal, cwd="/home/x/Work/omarchy-multiplayer/sub")
+        rc, out, err = self.run_cli(["list", "--json"])
+        self.assertEqual(rc, 0, err)
+        entry = json.loads(out)["sessions"][0]
+        self.assertEqual(entry["goal"], "Append a line to README.md")
+        self.assertEqual(entry["mode"], "shared")
+        self.assertIs(entry["resumable"], False)
+        self.assertEqual(entry["project"], "omarchy-multiplayer")  # repo_root wins, trailing slash ignored
+        me = core.current_human_actor()
+        self.assertEqual(entry["created_by"], {"kind": "human", "label": me["label"]})
+        self.assertEqual(entry["status"]["source"], "test")
+        self.assertIsNone(entry["status"]["detail"])
+
+        record = self.store.try_load(session_id)
+        record["agent"]["harness_session_ref"] = "abc123"
+        record["workspace"]["repo_root"] = None
+        self.store.save_session(record)
+        rc, out, err = self.run_cli(["list", "--json"])
+        self.assertEqual(rc, 0, err)
+        entry = json.loads(out)["sessions"][0]
+        self.assertIs(entry["resumable"], True)
+        self.assertEqual(entry["project"], "sub")  # started_with.cwd's basename once repo_root is gone
+
+        record["agent"]["harness_session_ref"] = ""
+        record["started_with"]["cwd"] = None
+        record["goal"] = {"text": "x" * 200, "set_by": record["created_by"], "set_at": record["created_at"]}
+        self.store.save_session(record)
+        entry = json.loads(self.run_cli(["list", "--json"])[1])["sessions"][0]
+        self.assertIs(entry["resumable"], False)  # an empty ref is not resumable
+        self.assertIsNone(entry["project"])
+        self.assertEqual(len(entry["goal"]), 120)
+
+    def test_list_text_output_is_unchanged_by_the_json_additions(self):
+        session_id = make_bare_session(self.store, "text-row", state="waiting", goal_text="a goal")
+        rc, out, err = self.run_cli(["list"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(out, f"! {session_id}  {'text-row':<24} {'waiting':<10} claude\n")
 
     def test_needs_attention_true_exactly_for_waiting_and_blocked(self):
         waiting_id = make_bare_session(self.store, "wait-me", state="waiting")
@@ -519,6 +601,65 @@ class TestReceiptComputation(CoreTestCase):
             shutil.rmtree(repo, ignore_errors=True)
 
 
+class TestReceiptPager(CoreTestCase):
+    """`receipt --pager` (the panel's Receipt action runs inside a TUI
+    window): text goes through `less -R`, or straight to stdout when less
+    is not installed. subprocess.run is patched only for a `less` argv so
+    any git call underneath still runs for real."""
+
+    def test_pager_pipes_the_rendered_text_through_less(self):
+        session_id = make_bare_session(self.store, "paged")
+        calls = []
+
+        def fake_run(argv, *a, **kw):
+            calls.append((argv, kw))
+            return subprocess.CompletedProcess(argv, 0)
+
+        with mock.patch.object(core.subprocess, "run", side_effect=fake_run):
+            rc, out, err = self.run_cli(["receipt", session_id, "--pager"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(out, "")  # less owns the output; nothing is printed directly
+        self.assertEqual(len(calls), 1)
+        argv, kw = calls[0]
+        self.assertEqual(argv, ["less", "-R"])
+        self.assertIs(kw["text"], True)
+        self.assertTrue(kw["input"].startswith(f"Session    paged  {session_id}\n"), kw["input"])
+        self.assertIn("Receipt    state_version", kw["input"])
+
+    def test_pager_falls_back_to_printing_when_less_is_missing(self):
+        session_id = make_bare_session(self.store, "unpaged")
+        rc, _, err = self.run_cli(["receipt", session_id, "--write"])  # persist, so both renders below agree
+        self.assertEqual(rc, 0, err)
+        rc, plain, err = self.run_cli(["receipt", session_id])
+        self.assertEqual(rc, 0, err)
+        real_run = subprocess.run
+
+        def no_less(argv, *a, **kw):
+            if argv and argv[0] == "less":
+                raise FileNotFoundError(2, "No such file or directory", "less")
+            return real_run(argv, *a, **kw)
+
+        with mock.patch.object(core.subprocess, "run", side_effect=no_less):
+            rc, out, err = self.run_cli(["receipt", session_id, "--pager"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(out, plain)
+        self.assertTrue(out.startswith(f"Session    unpaged  {session_id}\n"))
+
+    def test_pager_is_ignored_with_json(self):
+        session_id = make_bare_session(self.store, "json-wins")
+        calls = []
+
+        def fake_run(argv, *a, **kw):
+            calls.append(argv)
+            return subprocess.CompletedProcess(argv, 0)
+
+        with mock.patch.object(core.subprocess, "run", side_effect=fake_run):
+            rc, out, err = self.run_cli(["receipt", session_id, "--json", "--pager"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(json.loads(out)["session_id"], session_id)
+        self.assertEqual(calls, [])
+
+
 # --------------------------------------------------------------------------
 # `open`: bound-and-live, orphan-with-ref resume, orphan-without-ref,
 # nothing-to-open, and Herdr-unreachable
@@ -737,6 +878,88 @@ class TestReconcile(CoreTestCase):
         rc, out, err = self.run_cli(["reconcile"])
         self.assertEqual(rc, 4, err)
 
+    def read_index(self):
+        path = self.sessions_dir / "index.json"
+        self.assertTrue(path.exists(), "reconcile did not write index.json")
+        index = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(set(index.keys()), {"generated_at", "herdr", "orphaned", "adopted", "counts"})
+        self.assertEqual(set(index["counts"].keys()), {"needs_attention", "live", "orphaned"})
+        parsed = core.parse_rfc3339(index["generated_at"])  # raises if unparseable
+        self.assertTrue(index["generated_at"].endswith("Z"))
+        self.assertLessEqual(abs((parsed - core.dt.datetime.now(core.dt.timezone.utc)).total_seconds()), 60)
+        return index
+
+    def test_reconcile_writes_index_with_herdr_running(self):
+        # (b) normal path: one pane stays, one vanishes, one session waits,
+        # one is already done; counts reflect the store after this run.
+        self.start_fake_herdr()
+        self.fake_herdr.set_result("agent.list", {"agents": [{"name": "a1", "agent": "claude", "pane_id": "p1"}]})
+        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "p1"}]})
+        alive = {"backend": "herdr", "session": "s1", "workspace_id": "w1", "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
+        gone = dict(alive, pane_id="p2", agent_id="a2")
+        alive_id = make_bare_session(self.store, "alive", runtime=alive, state="working")
+        gone_id = make_bare_session(self.store, "gone", runtime=gone, state="working")
+        make_bare_session(self.store, "waiting", state="waiting")
+        make_bare_session(self.store, "finished", state="done")
+
+        rc, out, err = self.run_cli(["reconcile", "--json"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(json.loads(out), {"orphaned": [gone_id], "adopted": []})  # stdout shape unchanged
+
+        index = self.read_index()
+        self.assertEqual(index["herdr"], "running")
+        self.assertEqual(index["orphaned"], [gone_id])
+        self.assertEqual(index["adopted"], [])
+        self.assertEqual(index["counts"], {"needs_attention": 1, "live": 2, "orphaned": 1})
+        self.assertEqual(self.store.try_load(alive_id)["status"]["state"], "working")
+
+        # The file at the root of the sessions dir is not mistaken for a session.
+        rc, out, err = self.run_cli(["list", "--json"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(len(json.loads(out)["sessions"]), 4)
+
+    def test_reconcile_index_counts_adopted_sessions_as_live(self):
+        self.start_fake_herdr()
+        self.fake_herdr.set_result("agent.list", {"agents": [{"name": "stray", "agent": "codex", "pane_id": "p9"}]})
+        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "p9"}]})
+        rc, out, err = self.run_cli(["reconcile", "--json"])
+        self.assertEqual(rc, 0, err)
+        adopted_id = json.loads(out)["adopted"][0]
+        index = self.read_index()
+        self.assertEqual(index["adopted"], [adopted_id])
+        self.assertEqual(index["counts"], {"needs_attention": 0, "live": 1, "orphaned": 0})
+
+    def test_reconcile_writes_index_when_herdr_unreachable(self):
+        # (b) outage path: still exit 4, but index.json says so and the
+        # bound session it orphaned is counted as orphaned, not live.
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
+                   "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
+        session_id = make_bare_session(self.store, "bound-no-herdr", runtime=runtime, state="working")
+        make_bare_session(self.store, "unbound-blocked", state="blocked")
+
+        rc, out, err = self.run_cli(["reconcile", "--json"])
+        self.assertEqual(rc, 4, err)
+        self.assertEqual(json.loads(out), {"orphaned": [session_id], "adopted": [], "herdr": "unreachable"})
+
+        index = self.read_index()
+        self.assertEqual(index["herdr"], "unreachable")
+        self.assertEqual(index["orphaned"], [session_id])
+        self.assertEqual(index["counts"], {"needs_attention": 1, "live": 1, "orphaned": 1})
+
+    def test_reconcile_index_write_failure_changes_neither_exit_code_nor_output(self):
+        # A directory squatting on index.json makes the atomic rename fail.
+        squatter = self.sessions_dir / "index.json"
+        squatter.mkdir()
+        (squatter / "keep").write_text("x", encoding="utf-8")
+        self.start_fake_herdr()
+        rc, out, err = self.run_cli(["reconcile", "--json"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(json.loads(out), {"orphaned": [], "adopted": []})
+        self.assertIn("could not write", err)
+        self.assertTrue(squatter.is_dir())
+        # No temp file left behind next to it either.
+        self.assertEqual([p.name for p in self.sessions_dir.iterdir()], ["index.json"])
+
 
 # --------------------------------------------------------------------------
 # Supplementary coverage: ULIDs, atomic writes, actors, aliases, invariant 6
@@ -805,6 +1028,46 @@ class TestAliasDerivation(unittest.TestCase):
                                          existing_aliases={"api-refactor"})
         self.assertNotEqual(alias, "api-refactor")
         self.assertTrue(alias.endswith("1wb"))
+
+
+class TestDefaultSessionName(unittest.TestCase):
+    def test_prompt_first_four_words(self):
+        self.assertEqual(core.default_session_name("claude", cwd="/home/x/Work/omarchy-multiplayer",
+                                                   prompt="Append a line to README.md and commit"),
+                         "append-a-line-to")
+
+    def test_cwd_basename_when_no_prompt(self):
+        self.assertEqual(core.default_session_name("claude", cwd="/home/x/Work/omarchy-multiplayer"),
+                         "omarchy-multiplayer")
+        self.assertEqual(core.default_session_name("claude", cwd="/home/x/Work/omarchy-multiplayer/"),
+                         "omarchy-multiplayer")
+
+    def test_suffix_until_free_against_every_name_on_disk(self):
+        taken = {"omarchy-multiplayer"}
+        self.assertEqual(core.default_session_name("claude", cwd="/home/x/Work/omarchy-multiplayer", existing_names=taken),
+                         "omarchy-multiplayer-2")
+        taken.add("omarchy-multiplayer-2")
+        self.assertEqual(core.default_session_name("claude", cwd="/home/x/Work/omarchy-multiplayer", existing_names=taken),
+                         "omarchy-multiplayer-3")
+
+    def test_kind_fallback(self):
+        self.assertEqual(core.default_session_name("claude"), "claude")
+        self.assertEqual(core.default_session_name("codex", cwd=None, prompt="   "), "codex")
+        # A prompt and a cwd whose slugs are empty both fall through.
+        self.assertEqual(core.default_session_name("codex", cwd="/", prompt="!!! ???"), "codex")
+        self.assertEqual(core.default_session_name("codex", cwd=".", prompt=None), "codex")
+
+    def test_prefix_when_not_starting_with_a_letter(self):
+        self.assertEqual(core.default_session_name("claude", cwd="/home/x/123-go"), "s-123-go")
+        self.assertEqual(core.default_session_name("claude", prompt="42 is the answer to everything"), "s-42-is-the-answer")
+        self.assertEqual(core.default_session_name("claude", cwd="/home/x/123-go", existing_names={"s-123-go"}), "s-123-go-2")
+
+    def test_slug_rule(self):
+        self.assertEqual(core.slugify_name("  Hello, World!  "), "hello-world")
+        self.assertEqual(core.slugify_name("a" * 27 + "-b"), "a" * 27)  # cut to 28 then trailing '-' stripped
+        self.assertEqual(core.slugify_name("Ünïcode & emoji 🚀 name"), "n-code-emoji-name")
+        self.assertEqual(core.slugify_name("---"), "")
+        self.assertLessEqual(len(core.slugify_name("x y " * 30)), 28)
 
 
 class TestInvariant6(CoreTestCase):
