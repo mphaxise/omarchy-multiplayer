@@ -1705,7 +1705,8 @@ def cmd_open(args, ctx):
         session["status"] = {"state": "working", "since": ev["ts"], "source": "omarchy", "detail": detail}
         session["state_version"] = ev["seq"]
         ctx.store.save_session(session)
-    elif runtime is not None:
+        runtime = new_runtime  # fall through: a revived session gets its terminal too (rig, 2026-09-02)
+    if runtime is not None:
         # Bound and live: confirm the binding, then attach a terminal.
         ctx.herdr.agent_get(agent_id=runtime.get("agent_id"))
         alias = derive_herdr_alias(session["name"], session["id"])
@@ -1717,7 +1718,7 @@ def cmd_open(args, ctx):
                               "herdr", "agent", "attach", alias],
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              start_new_session=True)
-    else:
+    elif state != "orphaned":
         raise ConflictError(f"session {session['id']} has no runtime and is not orphaned; nothing to open")
     return EXIT_OK
 
@@ -2075,8 +2076,33 @@ def apply_herdr_status(store, session, herdr_status, source="herdr-manifest", de
 def cmd_reconcile(args, ctx):
     actor = system_actor()
     known = ctx.store.list_sessions()
-    live_panes = ctx.herdr.pane_list() or []
-    live_agents = ctx.herdr.agent_list() or []
+    try:
+        live_panes = ctx.herdr.pane_list() or []
+        live_agents = ctx.herdr.agent_list() or []
+    except HerdrUnavailable:
+        # No server at all (typically right after a reboot): every bound,
+        # live session lost its pane. Orphan them so the panel stops
+        # showing a runtime that is gone and `open` can revive them, then
+        # report the outage with exit 4 as the command contract says.
+        orphaned = []
+        for s in known:
+            if s.get("runtime") is None or s["status"]["state"] in TERMINAL_STATES:
+                continue
+            ev = ctx.store.append_event(s["id"], "status.changed", actor,
+                                         {"from": s["status"]["state"], "to": "orphaned",
+                                          "source": "reconciler", "detail": "Herdr server not running"})
+            s["status"] = {"state": "orphaned", "since": ev["ts"], "source": "reconciler", "detail": "Herdr server not running"}
+            s["state_version"] = ev["seq"]
+            ev = ctx.store.append_event(s["id"], "runtime.unbound", actor, {"reason": "herdr_unavailable"})
+            s["runtime"] = None
+            s["state_version"] = ev["seq"]
+            ctx.store.save_session(s)
+            orphaned.append(s["id"])
+        if args.json:
+            print(json.dumps({"orphaned": orphaned, "adopted": [], "herdr": "unreachable"}, indent=2))
+        else:
+            print(f"orphaned {len(orphaned)}, adopted 0 (Herdr unreachable)")
+        raise
     live_agent_ids = {a.get("agent_id") for a in live_agents if a.get("agent_id")}
     live_pane_ids = {p.get("pane_id") for p in live_panes if p.get("pane_id")}
 
