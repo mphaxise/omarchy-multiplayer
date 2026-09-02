@@ -50,4 +50,4 @@ Push the local commits to GitHub. Enable sshd in the VM and send the guest IP. C
 
 ## Method
 
-Seven read-only research passes and eight drafting passes ran in parallel between 20:00 and 23:30 PDT on 2026-09-01, each restricted to primary sources and told to mark what it could not verify. I spot-checked the load-bearing claims through the GitHub API and direct page reads: Herdr in the Omarchy package list and keybindings, the four Omarchy and three Herdr discussions, PR #6231, Hyprland #1731, Maestro and Passpage, the Anthropic study. Every file carries its sources and observed dates.
+Seven read-only research passes and eight drafting passes ran in parallel between 19:30 and 22:00 PDT on 2026-09-01, each restricted to primary sources and told to mark what it could not verify. I spot-checked the load-bearing claims through the GitHub API and direct page reads: Herdr in the Omarchy package list and keybindings, the four Omarchy and three Herdr discussions, PR #6231, Hyprland #1731, Maestro and Passpage, the Anthropic study. Every file carries its sources and observed dates.

@@ -16,7 +16,7 @@ Research phase closed on 2026-09-01: the pattern catalog (`patterns/`), the find
 
 ## Where to start reading
 
-`PLAN.md` for the question, the five success signals, and the phases. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log.
+`PLAN.md` for the question, the five success signals, and the phases. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log. `bin/`, `systemd/`, `plugin/`, and `tests/` hold the proposed build skeleton; `python3 -m unittest discover -s tests` runs the 71 local tests, and `bin/README-core.md` lists every assumption the rig still has to confirm.
 
 ## Relationship to Omarchy-UX
 
