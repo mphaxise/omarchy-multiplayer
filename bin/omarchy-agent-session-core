@@ -1709,9 +1709,14 @@ def cmd_open(args, ctx):
         # Bound and live: confirm the binding, then attach a terminal.
         ctx.herdr.agent_get(agent_id=runtime.get("agent_id"))
         alias = derive_herdr_alias(session["name"], session["id"])
+        # Detached: the launcher execs the terminal and only returns when the
+        # window closes, which blocked `open` for the window's lifetime
+        # (rig, 2026-09-02).
         with contextlib.suppress(FileNotFoundError, OSError):
-            subprocess.run(["omarchy-launch-or-focus-tui", f"--app-id=org.omarchy.session.{session['id']}",
-                            "herdr", "agent", "attach", alias], check=False)
+            subprocess.Popen(["omarchy-launch-or-focus-tui", f"--app-id=org.omarchy.session.{session['id']}",
+                              "herdr", "agent", "attach", alias],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
     else:
         raise ConflictError(f"session {session['id']} has no runtime and is not orphaned; nothing to open")
     return EXIT_OK
