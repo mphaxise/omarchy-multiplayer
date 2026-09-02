@@ -630,15 +630,31 @@ class HerdrClient:
         return self.call("worktree.create", params)
 
     def snapshot(self, **params):
-        return self.call("snapshot", params)
+        # Verified on the rig 2026-09-02: the method is session.snapshot and
+        # the result carries {"type": "session_snapshot", "snapshot": {...}}.
+        return self.call("session.snapshot", params)
 
-    def events_subscribe(self, **params):
-        """Yields parsed JSON events from a long-lived stream. VERIFY ON
-        RIG: assumes the stream is newline-delimited JSON on the same kind
-        of socket, starting with a subscribe request."""
+    def events_subscribe(self, pane_ids=None, types=None):
+        """Yields parsed events from a long-lived stream.
+
+        Verified on the rig 2026-09-02 (Herdr 0.8.2, protocol 20): the
+        request is {"id", "method": "events.subscribe", "params":
+        {"subscriptions": [{"type": "<dotted.type>", ...}]}}. Types such as
+        "pane.agent_status_changed" and "pane.scroll_changed" require a
+        "pane_id" per subscription; workspace, tab, worktree, and the other
+        pane types take none. The first reply is {"id", "result": {"type":
+        "subscription_started"}}; every later line is {"event":
+        "<underscore_name>", "data": {...}}, for example
+        {"event": "workspace_renamed", "data": {"workspace_id": "w2", ...}}
+        and, for status, {"event": "pane_agent_status_changed", "data":
+        {"pane_id", "workspace_id", "agent_status", "agent", "title",
+        "state_labels"}}."""
+        subs = [{"type": t} for t in (types or ["pane.agent_detected", "pane.exited", "pane.closed", "pane.updated"])]
+        for pane_id in pane_ids or []:
+            subs.append({"type": "pane.agent_status_changed", "pane_id": pane_id})
         sock = self._connect()
         try:
-            req = {"id": self._id(), "method": "events.subscribe", "params": params or {}}
+            req = {"id": self._id(), "method": "events.subscribe", "params": {"subscriptions": subs}}
             sock.sendall((json.dumps(req) + "\n").encode("utf-8"))
             f = sock.makefile("r", encoding="utf-8")
             for line in f:

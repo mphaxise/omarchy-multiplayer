@@ -2,6 +2,10 @@
 
 Status: open, 2026-09-01. The rig is documented in Omarchy-UX (`setup/omarchy-vm-notes.md`); this file lists what this experiment needs the rig to answer, in the order the first hands-on session should take them. Each spec file carries its own "Verify on rig" list; this is the union, deduplicated.
 
+## Answers so far
+
+Items 2 and 4 through 10 are answered in `spikes/herdr-on-rig.md` (2026-09-02). Item 1: sshd is on, the guest is `192.168.64.2` (UTM shared network, host side `192.168.64.1`), key auth works, and the Mac's ssh config carries the alias `omarchy-rig`. Item 3: Codex is present as a mise shim; OpenCode is present. Open: a Claude Code turn with status transitions (needs the in-VM login), items 11 through 19.
+
 ## Before anything else
 
 1. Snapshot the VM as `dev-2026-09-01`. Done 2026-09-02 09:59 PDT: after the VM was quit from UTM (a power-cut stop; the guest runs btrfs, so the image is crash-consistent), `Data/dev-2026-09-01.qcow2.bak` (9,254,600,704 bytes) and `Data/dev-efi_vars-2026-09-01.fd.bak` were made with an APFS clone of the live disk and EFI vars, verified by size, head, tail, and EFI byte compare. The Mac had 14 GiB free at the time; clones share blocks until the live disk diverges. Still open: enable sshd in the guest, record the guest IP here, confirm `ssh omarchy@<ip>` from the Mac, and note the UTM network mode that made it work.

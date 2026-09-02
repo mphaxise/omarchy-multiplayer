@@ -540,8 +540,23 @@ def herdr_nudge_thread(wake_event: threading.Event, stop_event: threading.Event)
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
                 sock.settimeout(1.0)
                 sock.connect(socket_path)
+                # Verified on the rig 2026-09-02: params take a list of
+                # subscriptions; pane.updated fires on status changes too,
+                # and these four types need no pane_id, so one subscription
+                # covers every pane as a wake-up nudge.
                 subscribe_msg = json.dumps(
-                    {"method": "events.subscribe", "params": {"filter": "pane.agent_status_changed"}}
+                    {
+                        "id": "omarchy-agent-session-watch",
+                        "method": "events.subscribe",
+                        "params": {
+                            "subscriptions": [
+                                {"type": "pane.updated"},
+                                {"type": "pane.exited"},
+                                {"type": "pane.closed"},
+                                {"type": "pane.agent_detected"},
+                            ]
+                        },
+                    }
                 )
                 sock.sendall((subscribe_msg + "\n").encode("utf-8"))
                 buf = b""
