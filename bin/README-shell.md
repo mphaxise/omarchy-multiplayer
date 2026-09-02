@@ -231,14 +231,14 @@ cursor persistence across a simulated restart.
    than that failure alone would have been). Not stated anywhere.
 
 9. **A digest, once started, keeps replacing itself via `--replace-id`** as
-   more sessions join the same still-open 60-second window, rather than
+   more sessions join the same still-open 60-second window, instead of
    stacking additional digest toasts. Resets (next digest starts fresh) once
    the window decays back to 3 or fewer flagged sessions. The spec states
    the *trigger* for one digest but not what happens on a 5th, 6th, etc.
    event within the same still-open window.
 
 10. **A second notice held for the same session during fullscreen overwrites
-    the first**, rather than queuing both. Extends "one pending notice per
+    the first**, and does not queue both. Extends "one pending notice per
     session" (stated for live coalescing) into the hold queue, since nothing
     in the spec says what a second event for one session should do while
     the first is still waiting out a fullscreen window.
@@ -254,7 +254,7 @@ cursor persistence across a simulated restart.
     describes the underlying mechanism as two distinct compositor calls,
     `capture window` and `capture region`. The wrapper only forwards
     `--screenshot` (matching 02, the authoritative command-surface file) and
-    flags the mismatch rather than guessing which of window/region it should
+    flags the mismatch instead of guessing which of window/region it should
     become, that mapping is core's decision.
 
 13. **`RestartSec=2` and the `ExecStart` path on the systemd unit** are

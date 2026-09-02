@@ -101,7 +101,7 @@ schema and component contracts. All four were read in full.
 - **Bar-widget visibility test**: read as "hide when there are zero session
   rows of any kind and `showWhenEmpty` is false," matching the literal
   `sessions.length > 0` / `providers.length > 0` tests in the two reference
-  plugins, rather than a narrower "hide unless something is live" reading of
+  plugins, instead of a narrower "hide unless something is live" reading of
   the spec's "Bar widget" section (whose urgent/foreground/muted color table
   only covers live states, but never says to hide on a panel that's all
   Done/Orphaned rows).
@@ -117,7 +117,7 @@ schema and component contracts. All four were read in full.
   longest-neglected session); the bar's middle-click target sorts
   newest-`since`-first ("most recently needing attention"). Both are
   written that way, explicitly and separately, in 03-sessions-panel.md, and
-  are implemented as two separate functions in `Panel.qml` rather than
+  are implemented as two separate functions in `Panel.qml` instead of
   reused as one.
 - **"No Herdr running" empty state** (03-sessions-panel.md, "States and
   empty states") was deliberately left out. `list --json` is documented in
@@ -134,14 +134,14 @@ schema and component contracts. All four were read in full.
 - **Extra manifest fields**: `license`, `activation`, and `barWidget.description`
   were added beyond the task's explicit field list because both fetched
   reference manifests (`omarchy.agents` and Hermes) carry all three; treated
-  as part of the real contract rather than a guess.
+  as part of the real contract, and is no guess.
 
 ## Every `VERIFY ON RIG` line
 
 | File | Line | What's uncertain |
 |---|---|---|
-| `Panel.qml` | 207 | Whether `FileView.watchChanges` fires when `index.json` is replaced by rename rather than edited in place (spec-03 names this exact risk; the Timer-driven `snapshot.sh` poll is the fallback either way). |
-| `Panel.qml` | 355 | Whether `omarchy-launch-tui`'s `-e "$1" "${@:2}"` form runs a bare vendored script path directly, and whether it needs an app id at all, context-pack.md shows it reading `$APP_ID` from the environment rather than taking a `--app-id` flag the way `omarchy-launch-or-focus-tui` does. |
+| `Panel.qml` | 207 | Whether `FileView.watchChanges` fires when `index.json` is replaced by rename instead of edited in place (spec-03 names this exact risk; the Timer-driven `snapshot.sh` poll is the fallback either way). |
+| `Panel.qml` | 355 | Whether `omarchy-launch-tui`'s `-e "$1" "${@:2}"` form runs a bare vendored script path directly, and whether it needs an app id at all, context-pack.md shows it reading `$APP_ID` from the environment instead of taking a `--app-id` flag the way `omarchy-launch-or-focus-tui` does. |
 | `Panel.qml` | 406 | The bar glyph codepoint is a guess (a nerd-font private-use point); neither reference plugin renders an agent/session glyph, so this needs a real look on the rig's font. |
 | `Panel.qml` | 420 | The `needs_attention` badge is a manual Rectangle+Text overlay on `BarIconButton`; neither reference plugin shows a numeric badge, so a native badge/count property may already exist and wasn't used. |
 | `Panel.qml` | 467 | Keyboard selection does not scroll the selected row into view. Hermes's own scroll math assumes a fixed ~52px row height; rows here vary in height (the inline Send field grows a row), so that fixed-offset approach would misplace the scroll. Needs real per-row positions (e.g. a `ListView`) to do properly. |
