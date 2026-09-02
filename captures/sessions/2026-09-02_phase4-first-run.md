@@ -29,3 +29,9 @@ String request ids; `workspace.create` before `agent.start`; agent list and get 
 - The notification carries a title only; the crash toast has an icon and a second line. Add the harness's question as the body and an icon.
 - `agent_session` from Herdr stays null for Claude; the harness resume id needs `pane.report_agent_session` or Claude's session files.
 - Every Claude launch still raises the locked-keyring modal on this image.
+
+## Addendum, 12:05 to 12:14: the panel is live
+
+The `praneet.agent-sessions` plugin installed as a copy under `~/.config/omarchy/plugins/`, passed the shell's rescan without a QML error, and took its place in the bar's right section next to the usage widget (`omarchy plugin enable`, `omarchy bar put`). With two idle sessions the glyph sat muted. A shared-mode session asked to create a file went `blocked`; within eight seconds the glyph turned urgent with a badge of 1, and the panel opened over IPC showed the hero "needs-you · BLOCKED · 0M" and the Needs you section leading with that row, Send, Stop, and Receipt buttons under it, the two idle sessions under Working, and the day's stopped sessions under Done today (`signal1-…_live.jpg`, three frames). Signal 1's mechanism is live; the five-second measurement itself waits for the evaluation pass.
+
+One rig note: enabling a plugin makes the shell reload its whole scene, and during the reload the bar and the wallpaper vanish for a moment; my first screenshot caught that plus the idle screensaver, which I misread as a crash. The shell log shows no error from the plugin.
