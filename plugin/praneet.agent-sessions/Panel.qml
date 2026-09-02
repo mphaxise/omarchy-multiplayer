@@ -69,6 +69,16 @@ Panel {
   property int selectedIndex: 0
   property string armedStopId: ""
   property string sendOpenId: ""
+  // Sessions whose Stop was confirmed and whose record has not yet reported
+  // a terminal state; Session.qml renders the spinner from this.
+  property var stoppingIds: ({})
+  Timer {
+    // Poll fast right after a stop so the row moves to Done today within a
+    // couple of seconds instead of waiting for the regular tick.
+    id: stopFollowUp
+    interval: 1000; repeat: true; running: Object.keys(root.stoppingIds).length > 0
+    onTriggered: root.refresh()
+  }
 
   property double nowMs: Date.now()
   Timer {
@@ -158,6 +168,7 @@ Panel {
         // error snapshot never reaches here, so the last good list stands
         // until three in a row fail (see recordFailure).
         root.snapshot = { sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [] }
+        root.clearStoppedFromStopping(root.snapshot.sessions)
         root.recordSuccess()
       }
     }
@@ -349,7 +360,22 @@ Panel {
 
   function stopSession(id) {
     if (!id) return
+    var next = Object.assign({}, root.stoppingIds); next[String(id)] = Date.now(); root.stoppingIds = next
     Quickshell.execDetached(["omarchy-agent-session-stop", String(id)])
+  }
+
+  function clearStoppedFromStopping(sessions) {
+    var ids = Object.keys(root.stoppingIds)
+    if (ids.length === 0) return
+    var live = {}
+    for (var i = 0; i < sessions.length; i++) live[sessions[i].id] = sessions[i].status ? sessions[i].status.state : ""
+    var next = {}
+    for (var j = 0; j < ids.length; j++) {
+      var st = live[ids[j]]
+      var stale = (Date.now() - root.stoppingIds[ids[j]]) > 30000
+      if (st && st !== "stopped" && st !== "done" && st !== "failed" && !stale) next[ids[j]] = root.stoppingIds[ids[j]]
+    }
+    root.stoppingIds = next
   }
 
   function openReceipt(id) {
@@ -645,6 +671,7 @@ Panel {
                   // {title, rows, offset}), not the inner Repeater itself.
                   hasCursor: root.cursorActive && (parent.modelData.offset + index) === root.selectedIndex
                   stopArmed: root.armedStopId === modelData.id
+                  stopping: root.stoppingIds[modelData.id] !== undefined
                   sendOpen: root.sendOpenId === modelData.id
                   foreground: root.foreground
                   accent: Color.accent

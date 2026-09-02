@@ -24,6 +24,7 @@ CursorSurface {
   property bool hasCursor: false      // keyboard selection, owned by Panel.qml
   property bool stopArmed: false      // second x / click within this arm executes
   property bool sendOpen: false       // inline send field visible
+  property bool stopping: false       // Stop confirmed, record not yet stopped; owned by Panel.qml
   property color foreground: Color.foreground
   property color accent: Color.accent
   property color urgentColor: Color.urgent
@@ -32,6 +33,13 @@ CursorSurface {
   property double nowMs: Date.now()
 
   readonly property color dim: Qt.darker(foreground, 1.55)
+  readonly property var spinnerFrames: ["◐", "◓", "◑", "◒"]
+  property int spinnerIndex: 0
+  Timer {
+    running: row.stopping
+    interval: 120; repeat: true
+    onTriggered: row.spinnerIndex = (row.spinnerIndex + 1) % row.spinnerFrames.length
+  }
 
   // ---- outputs ----
   signal openRequested(string id)
@@ -157,11 +165,17 @@ CursorSurface {
         }
       }
 
+      // Praneet, rig, 2026-09-02: after confirming Stop nothing changed on
+      // screen until the next poll, which read as "did that work?". While
+      // the stop runs the state label becomes a spinner plus "stopping",
+      // and the action buttons stand down.
       Text {
         id: stateLabel
         textFormat: Text.PlainText
-        text: row.state + (row.durationText() !== "" ? " · " + row.durationText() : "")
-        color: row.dim
+        text: row.stopping
+          ? (row.spinnerFrames[row.spinnerIndex] + " stopping")
+          : (row.state + (row.durationText() !== "" ? " · " + row.durationText() : ""))
+        color: row.stopping ? row.urgentColor : row.dim
         font.family: row.fontFamily
         font.pixelSize: Style.font.caption
         anchors.verticalCenter: parent.verticalCenter
@@ -223,15 +237,17 @@ CursorSurface {
       Button {
         text: "s Send"
         bordered: true
+        enabled: !row.stopping
         foreground: row.foreground
         fontFamily: row.fontFamily
         fontSize: Style.font.caption
         onClicked: row.sendOpenRequested(row.sid)
       }
       Button {
-        text: row.stopArmed ? "x Confirm stop" : "x Stop"
+        text: row.stopping ? "stopping…" : (row.stopArmed ? "x Confirm stop" : "x Stop")
         bordered: true
-        foreground: row.stopArmed ? row.urgentColor : row.foreground
+        enabled: !row.stopping
+        foreground: (row.stopArmed || row.stopping) ? row.urgentColor : row.foreground
         fontFamily: row.fontFamily
         fontSize: Style.font.caption
         onClicked: row.stopArmed ? row.stopConfirmRequested(row.sid) : row.stopArmRequested(row.sid)
