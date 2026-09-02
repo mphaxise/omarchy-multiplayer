@@ -12,7 +12,11 @@ Slice 1 covers one user, many agents, one machine. Sessions are created, listed,
 
 ## Status
 
-Phase 0, scaffold. Next: the verified OpenClaw pattern catalog in `patterns/` and the hands-on baseline of Omarchy's current multi-agent experience in `captures/`.
+Research phase closed on 2026-09-01: the pattern catalog (`patterns/`), the findings (`findings/`), and the slice-1 spec set (`spec/`) are drafted and marked proposed. Omarchy already ships Herdr as a durable agent runtime, so the experiment builds the session model on top of it; `findings/research-brief-2026-09-01.md` records what changed and why. Next: the Herdr spike and the hands-on baseline on the rig (`setup/rig-questions.md`).
+
+## Where to start reading
+
+`PLAN.md` for the question, the five success signals, and the phases. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log.
 
 ## Relationship to Omarchy-UX
 
