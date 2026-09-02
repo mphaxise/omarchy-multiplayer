@@ -4,7 +4,7 @@ Status: open, 2026-09-01. The rig is documented in Omarchy-UX (`setup/omarchy-vm
 
 ## Before anything else
 
-1. Snapshot the VM as `dev-2026-09-01`. Enable sshd in the guest, record the guest IP here, confirm `ssh omarchy@<ip>` from the Mac, and note the UTM network mode that made it work.
+1. Snapshot the VM as `dev-2026-09-01`. Done 2026-09-02 09:59 PDT: after the VM was quit from UTM (a power-cut stop; the guest runs btrfs, so the image is crash-consistent), `Data/dev-2026-09-01.qcow2.bak` (9,254,600,704 bytes) and `Data/dev-efi_vars-2026-09-01.fd.bak` were made with an APFS clone of the live disk and EFI vars, verified by size, head, tail, and EFI byte compare. The Mac had 14 GiB free at the time; clones share blocks until the live disk diverges. Still open: enable sshd in the guest, record the guest IP here, confirm `ssh omarchy@<ip>` from the Mac, and note the UTM network mode that made it work.
 2. Is Herdr installed on the ARM image? `which herdr`, `herdr --version`, and `pacman -Qi herdr`. If absent, does the community aarch64 repo carry it? If the package is x86-64 only, this is the first decision point in `decisions.md` (x86-64 rig, or degraded tmux mode).
 3. Is the Codex CLI installed and authenticated? OpenCode? Record versions.
 
