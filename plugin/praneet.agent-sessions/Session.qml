@@ -20,19 +20,22 @@ CursorSurface {
   id: row
 
   // ---- inputs ----
+  // `hasCursor`, `foreground`, and `accent` are CursorSurface's own
+  // properties and are set from Panel.qml. They must not be redeclared
+  // here: a redeclaration shadows the base property, so CursorSurface's
+  // `color: hasCursor ? fill : ...` kept reading its own never-set copy and
+  // the keyboard cursor was never painted (found in the 2026-09-02 14:08
+  // live capture: panel open, selectedIndex 0, no highlight on any row).
   property var session: null          // one row object from list --json
-  property bool hasCursor: false      // keyboard selection, owned by Panel.qml
   property bool stopArmed: false      // second x / click within this arm executes
   property bool sendOpen: false       // inline send field visible
   property bool stopping: false       // Stop confirmed, record not yet stopped; owned by Panel.qml
-  property color foreground: Color.foreground
-  property color accent: Color.accent
   property color urgentColor: Color.urgent
   property color mutedColor: Color.muted
   property string fontFamily: Style.font.family
   property double nowMs: Date.now()
 
-  readonly property color dim: Qt.darker(foreground, 1.55)
+  readonly property color dim: Qt.darker(foreground, 1.3) // same factor as Panel.qml; 1.55 failed WCAG AA for caption text
   readonly property var spinnerFrames: ["◐", "◓", "◑", "◒"]
   property int spinnerIndex: 0
   Timer {
@@ -68,10 +71,15 @@ CursorSurface {
   readonly property int childCount: session ? Number(session.children || 0) : 0
   readonly property bool needsAttention: session ? session.needs_attention === true : false
 
+  // Panel.qml binds its formatDuration here so the hero and every row share
+  // one vocabulary; the fallback only runs if a host forgets to bind it.
+  property var formatAge: null
+
   function durationText() {
     var ms = sinceIso !== "" ? new Date(sinceIso).getTime() : NaN
     if (!isFinite(ms)) return ""
     var d = Math.max(0, nowMs - ms)
+    if (typeof formatAge === "function") return formatAge(d)
     var mins = Math.floor(d / 60000)
     if (mins < 1) return "just now"
     if (mins < 60) return mins + "m"
@@ -86,7 +94,11 @@ CursorSurface {
   readonly property color stateColor: state === "blocked" ? urgentColor
     : (state === "waiting" ? foreground : mutedColor)
 
-  current: state === "working" || state === "starting"
+  // `current` is CursorSurface's "selected item" look (foreground fill at
+  // 0.18 plus a full-alpha border). Binding it to the working state made a
+  // busy agent look like a selection, so activity is carried by the state
+  // dot and the section header only.
+  current: false
   bordered: false
 
   width: parent ? parent.width : 0
@@ -121,12 +133,14 @@ CursorSurface {
       spacing: Style.space(6)
 
       Rectangle {
+        id: stateDot
         width: 8; height: 8; radius: 4
         color: row.stateColor
         anchors.verticalCenter: parent.verticalCenter
       }
 
       Text {
+        id: kindText
         text: row.agentKind !== "" ? row.agentKind : "?"
         color: row.dim
         font.family: row.fontFamily
@@ -144,7 +158,16 @@ CursorSurface {
         font.bold: row.needsAttention
         elide: Text.ElideRight
         anchors.verticalCenter: parent.verticalCenter
-        width: parent.width - stateLabel.width - (row.lowConfidence ? 16 : 0) - Style.space(24)
+        // The name takes exactly what the dot, the kind label, the optional
+        // low-confidence dot, the state label, and the gaps between them
+        // leave. The earlier formula forgot the dot and the kind label, so
+        // the state label ran past the content edge and every row lost the
+        // end of its duration ("stopped ·", "blocked · just"; rig captures
+        // e5 and f3, 2026-09-02).
+        width: Math.max(0, parent.width
+          - stateDot.width - kindText.width - stateLabel.width
+          - (row.lowConfidence ? (6 + parent.spacing) : 0)
+          - parent.spacing * 3)
       }
 
       // Low-confidence dot: shape (outlined circle) plus a tooltip, never

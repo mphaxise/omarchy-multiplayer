@@ -37,7 +37,7 @@ Panel {
   // either fetched reference Panel.qml because neither needed a third,
   // quieter state.
   readonly property color mutedColor: Color.muted
-  readonly property color dim: Qt.darker(foreground, 1.55)
+  readonly property color dim: Qt.darker(foreground, 1.3) // 1.55 gave #6d728a, 3.60:1 on Tokyo Night; 1.3 gives #8288a5, 4.89:1 (WCAG AA for caption text)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property string logTag: "agent-sessions"
 
@@ -167,6 +167,10 @@ Panel {
         // Good snapshot: adopt it and clear the failure streak. A bad or
         // error snapshot never reaches here, so the last good list stands
         // until three in a row fail (see recordFailure).
+        // Fresh clock with every list: a record whose `since` is newer than
+        // the last nowMs read as a negative age, which the hero printed as
+        // "0M" while the row under it said "just now" (rig capture e5).
+        root.nowMs = Date.now()
         root.snapshot = { sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [] }
         root.clearStoppedFromStopping(root.snapshot.sessions)
         root.recordSuccess()
@@ -246,14 +250,18 @@ Panel {
   readonly property bool indexStale: indexGeneratedAtMs > 0
     && (nowMs - indexGeneratedAtMs) > (2 * root.refreshIntervalSec * 1000)
 
+  // One duration vocabulary for the hero, the stale marker, and every row
+  // (Session.qml calls this through `formatAge`): "just now", "3m",
+  // "1h 20m", "2d 3h". Never "0m", never negative.
   function formatDuration(ms) {
-    if (!(ms > 0)) return "0m"
+    if (!(ms > 0)) return "just now"
     var minutes = Math.floor(ms / 60000)
+    if (minutes < 1) return "just now"
     var hours = Math.floor(minutes / 60)
     var days = Math.floor(hours / 24)
     if (days > 0) return days + "d " + (hours % 24) + "h"
     if (hours > 0) return hours + "h " + (minutes % 60) + "m"
-    return Math.max(1, minutes) + "m"
+    return minutes + "m"
   }
 
   function staleAgeText() {
@@ -679,6 +687,7 @@ Panel {
                   mutedColor: root.mutedColor
                   fontFamily: root.fontFamily
                   nowMs: root.nowMs
+                  formatAge: root.formatDuration
 
                   onOpenRequested: function(id) { root.openSession(id) }
                   onSendOpenRequested: function(id) { root.armedStopId = ""; root.sendOpenId = id }
