@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -7,22 +6,24 @@ import qs.Ui
 
 // Agent Sessions bar widget for Omarchy.
 //
-// Shows every durable omarchy-agent-session record: who needs you, who is
-// working, what finished today, and what got orphaned. Structure follows
-// 03-sessions-panel.md ("this mirrors the entry, data, and row split the
-// omarchy.agents plugin uses"), collapsed to two files because the task
-// that produced this skeleton asked for Panel.qml + Session.qml only (no
-// separate Main.qml): the Process/Timer/FileView data layer that
-// omarchy.agents keeps in Main.qml lives directly in this file instead,
-// matching how the Hermes reference plugin keeps everything in one
-// Panel.qml. Session.qml is still its own file, one row each.
+// Shows every durable omarchy-agent-session record: who needs you, what got
+// orphaned, who is working, what finished today. Structure follows
+// 03-sessions-panel.md, collapsed to two files: the Process/Timer/FileView
+// data layer lives here (as the Hermes reference plugin does), Session.qml
+// is one row.
 //
-// Sources actually read for this file: omacom/omarchy quattro
-// shell/plugins/agents/{manifest.json,Panel.qml,Main.qml,Agent.qml} and
-// shell/plugins/README.md; stevequinn/omarchy-hermes-sessions
-// {Panel.qml,manifest.json,scripts/snapshot.sh}; spec/03-sessions-panel.md,
-// spec/02-command-surface.md, spec/00-overview.md (read from this project's
-// own drafts, see README-plugin.md for the path note); context-pack.md.
+// Revised 2026-09-02 after the ux-review / design-qa pass on the rig
+// (findings/evaluation-slice1-2026-09-02.md): every action runs through a
+// Process and reports its exit code into the row; the cursor is tracked by
+// session id and scrolled into view; Orphaned sits above Working and counts
+// toward the hero and the glyph; a Herdr-down row comes from the
+// reconciler's index.json; Done today collapses; a key legend sits under
+// the list; no color the panel chooses sits under 3:1.
+//
+// Sources read for this file: omacom/omarchy quattro
+// shell/plugins/agents/{Panel.qml,Main.qml}, shell/Ui/{CursorSurface,
+// KeyboardPanel,PanelKeyCatcher,PanelHero,PanelSectionHeader}.qml on the
+// rig; stevequinn/omarchy-hermes-sessions Panel.qml; spec/03, spec/02.
 Panel {
   id: root
   moduleName: "praneet.agent-sessions"
@@ -31,23 +32,21 @@ Panel {
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgentColor: bar ? bar.urgent : Color.urgent
-  // Color.muted is asserted as a real theme token by context-pack.md's bar
-  // widget contract notes ("Color.foreground/background/accent/urgent/muted"),
-  // read directly from the shell source; it does not happen to appear in
-  // either fetched reference Panel.qml because neither needed a third,
-  // quieter state.
-  readonly property color mutedColor: Color.muted
-  readonly property color dim: Qt.darker(foreground, 1.3) // 1.55 gave #6d728a, 3.60:1 on Tokyo Night; 1.3 gives #8288a5, 4.89:1 (WCAG AA for caption text)
+  readonly property color accentColor: Color.accent
+  // Caption text: 1.55 gave #6d728a, 3.60:1 on Tokyo Night; 1.3 gives
+  // #8288a5, 4.89:1 (WCAG AA for small text).
+  readonly property color dim: Qt.darker(foreground, 1.3)
+  // Dots and the rest-state glyph: 3.82:1 on Tokyo Night, above the 3:1
+  // WCAG 1.4.11 asks of a control's boundary and a state graphic.
+  // Color.muted (1.91:1 here) is no longer used for anything a person
+  // must perceive.
+  readonly property color restColor: Qt.darker(foreground, 1.5)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property string logTag: "agent-sessions"
 
   function alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
   // ------------------------------------------------------------- settings
-  //
-  // `settings` is shell-injected (context-pack.md: "shell injects bar,
-  // moduleName, settings"; confirmed by agents/Panel.qml passing
-  // `settings: root.settings` straight into its Main{}).
 
   function setting(name, fallback) {
     var value = root.settings ? root.settings[name] : undefined
@@ -57,24 +56,56 @@ Panel {
   readonly property int refreshIntervalSec: Math.max(5, Number(setting("refreshIntervalSec", 10)))
   readonly property bool showWhenEmpty: setting("showWhenEmpty", false) === true
   readonly property int maxRows: Math.max(5, Number(setting("maxRows", 20)))
+  readonly property int doneRowsCollapsed: Math.max(0, Number(setting("doneRowsCollapsed", 2)))
+  readonly property bool motionReduced: String(setting("motion", "full")) === "reduced"
 
   // ------------------------------------------------------------ selection
   //
-  // Keyboard state lives here, not in Session.qml, because Esc has to know
-  // about an armed Stop or an open Send field regardless of which row it
-  // belongs to (03-sessions-panel.md: "Esc clears an armed Stop or an open
-  // Send field first and closes the panel on the second press").
+  // The cursor is a session id, so a list that re-sorts under an open
+  // panel never moves the cursor onto a different session (design review
+  // finding 10). Keyboard state lives here, not in Session.qml, because
+  // Esc has to know about an armed Stop or an open Send field regardless
+  // of which row it belongs to.
 
   property bool cursorActive: false
-  property int selectedIndex: 0
+  property string selectedId: ""
   property string armedStopId: ""
   property string sendOpenId: ""
+  property bool doneExpanded: false
+
+  readonly property int selectedIndex: {
+    for (var i = 0; i < visibleRows.length; i++) if (visibleRows[i].id === selectedId) return i
+    return visibleRows.length > 0 ? 0 : -1
+  }
+  readonly property var selectedSession: selectedIndex >= 0 ? visibleRows[selectedIndex] : null
+
+  function setCursor(id, fromKeyboard) {
+    if (id === "" || id === undefined) return
+    if (id !== root.selectedId) root.armedStopId = ""  // a move disarms (finding 10)
+    root.selectedId = String(id)
+    root.cursorActive = true
+  }
+
+  function moveCursor(dy) {
+    if (root.visibleRows.length === 0) return
+    var idx = Math.max(0, Math.min(root.visibleRows.length - 1, root.selectedIndex + dy))
+    root.setCursor(root.visibleRows[idx].id, true)
+  }
+
+  // After a snapshot, keep the cursor on the same session; if it left the
+  // list, land on the row now at its old position.
+  function reconcileCursor(previousIndex) {
+    if (root.visibleRows.length === 0) { root.selectedId = ""; return }
+    for (var i = 0; i < root.visibleRows.length; i++) if (root.visibleRows[i].id === root.selectedId) return
+    var idx = Math.max(0, Math.min(root.visibleRows.length - 1, previousIndex))
+    root.selectedId = root.visibleRows[idx].id
+  }
+
   // Sessions whose Stop was confirmed and whose record has not yet reported
-  // a terminal state; Session.qml renders the spinner from this.
+  // a terminal state; Session.qml renders the spinner from this. Cleared by
+  // the record reaching a terminal state or by the stop command failing.
   property var stoppingIds: ({})
   Timer {
-    // Poll fast right after a stop so the row moves to Done today within a
-    // couple of seconds instead of waiting for the regular tick.
     id: stopFollowUp
     interval: 1000; repeat: true; running: Object.keys(root.stoppingIds).length > 0
     onTriggered: root.refresh()
@@ -82,9 +113,6 @@ Panel {
 
   property double nowMs: Date.now()
   Timer {
-    // Keeps every row's "since" duration and the stale marker honest while
-    // the panel sits open, same purpose as both reference plugins' 30 s
-    // clock tick.
     interval: 30000
     running: root.opened
     repeat: true
@@ -92,14 +120,12 @@ Panel {
   }
 
   onOpenedChanged: if (opened) {
-    // Cursor visible from the first frame: with one row, arrow keys have
-    // nowhere to go, and an invisible cursor read as "keys do nothing"
-    // (Praneet, rig, 2026-09-02).
+    // Cursor visible from the first frame, on the row that needs you most.
     cursorActive = true
-    selectedIndex = 0
     armedStopId = ""
     sendOpenId = ""
     nowMs = Date.now()
+    if (visibleRows.length > 0) selectedId = visibleRows[0].id
     refresh()
     if (panelFlick) panelFlick.contentY = 0
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
@@ -107,23 +133,19 @@ Panel {
 
   // ------------------------------------------------------------- data
   //
-  // Primary source: a Timer drives a Process running scripts/snapshot.sh,
-  // exactly the pattern Hermes uses for its own scripts/snapshot.sh, and the
-  // same StdioCollector + 64 KB cap + try/catch shape as Hermes's real code
-  // (not the SplitParser sketch in 03-sessions-panel.md's illustrative
-  // Process block, which is unconfirmed against any fetched source).
+  // Primary source: a Timer drives a Process running scripts/snapshot.sh
+  // (the Hermes pattern), with a 64 KB cap, try/catch, three strikes, and a
+  // 60 s backoff per 03-sessions-panel.md "Failure isolation".
 
   property var snapshot: null // { sessions: [...] } once a good parse lands
   property bool loading: false
   property int consecutiveFailures: 0
-  readonly property int maxSnapshotBytes: 65536 // 64 KB, per 03-sessions-panel.md "Failure isolation"
-  readonly property int backoffIntervalSec: 60   // after three straight failures
+  readonly property int maxSnapshotBytes: 65536
+  readonly property int backoffIntervalSec: 60
 
   readonly property var allSessions: snapshot && Array.isArray(snapshot.sessions) ? snapshot.sessions : []
   readonly property bool hasErrorRow: !!snapshot && typeof snapshot.error === "string" && snapshot.error !== ""
 
-  // Companion scripts live beside this QML file; resolve relative to it so
-  // the plugin works from any install location (same helper as Hermes).
   function scriptPath(name) {
     return Qt.resolvedUrl("scripts/" + name).toString().replace(/^file:\/\//, "")
   }
@@ -144,8 +166,6 @@ Panel {
       onStreamFinished: {
         root.loading = false
         var raw = String(text)
-        // Seatbelt against a runaway CLI, mirrored from Hermes's
-        // maxSnapshotBytes guard: never hand more than the cap to JSON.parse.
         if (raw.length > root.maxSnapshotBytes) {
           console.warn(root.logTag, "snapshot too large, discarded:", raw.length, "bytes")
           root.recordFailure()
@@ -164,15 +184,13 @@ Panel {
           root.recordFailure()
           return
         }
-        // Good snapshot: adopt it and clear the failure streak. A bad or
-        // error snapshot never reaches here, so the last good list stands
-        // until three in a row fail (see recordFailure).
         // Fresh clock with every list: a record whose `since` is newer than
-        // the last nowMs read as a negative age, which the hero printed as
-        // "0M" while the row under it said "just now" (rig capture e5).
+        // the last nowMs read as a negative age (the hero's "0M", rig e5).
+        var previousIndex = root.selectedIndex
         root.nowMs = Date.now()
         root.snapshot = { sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [] }
         root.clearStoppedFromStopping(root.snapshot.sessions)
+        root.reconcileCursor(previousIndex)
         root.recordSuccess()
       }
     }
@@ -182,18 +200,9 @@ Panel {
       onStreamFinished: if (String(text).trim() !== "") console.warn(root.logTag, String(text).trim())
     }
 
-    onExited: function(exitCode) {
-      // Belt-and-braces reset only; the stdout handler above is what
-      // classifies success/failure so a slow or absent stdout callback
-      // cannot double-count a single run as two failures.
-      root.loading = false
-    }
+    onExited: function(exitCode) { root.loading = false }
   }
 
-  // Three consecutive failures (non-zero exit, bad JSON, oversize, or an
-  // {"error": ...} payload) replace the list with a single error row and
-  // back the Timer off to 60 s; the next success restores refreshIntervalSec
-  // and clears the row. Exactly 03-sessions-panel.md's "Failure isolation".
   function recordFailure() {
     consecutiveFailures++
     if (consecutiveFailures >= 3) {
@@ -214,26 +223,22 @@ Panel {
     onTriggered: root.refresh()
   }
 
-  // Secondary source, per 03-sessions-panel.md's "Data" section: the
-  // reconciler rewrites this file once per tick even when nothing changed,
-  // so its generated_at is a liveness signal independent of whether our own
-  // snapshot.sh poll happens to be succeeding. Only used here for the stale
-  // marker; session content itself comes from the primary Process above.
+  // Secondary source: the reconciler rewrites index.json on every run
+  // (every 5 s from the watcher) with generated_at and the Herdr state, so
+  // its age is a liveness signal and its `herdr` field is the one place
+  // the panel learns the server is down.
   FileView {
     id: indexFile
     path: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/omarchy/sessions/index.json"
-    // VERIFY ON RIG: 03-sessions-panel.md names this exact risk -- whether
-    // watchChanges fires reliably when index.json is replaced by rename
-    // instead of edited in place; some inotify setups miss a rename. The
-    // Timer-driven snapshot.sh poll above is the fallback either way.
     watchChanges: true
     printErrors: false
     onFileChanged: reload()
     onLoaded: root.parseIndex(text())
-    onLoadFailed: root.indexGeneratedAtMs = 0
+    onLoadFailed: { root.indexGeneratedAtMs = 0; root.herdrState = "unknown" }
   }
 
   property real indexGeneratedAtMs: 0
+  property string herdrState: "unknown" // running | unreachable | unknown
 
   function parseIndex(content) {
     try {
@@ -241,14 +246,19 @@ Panel {
       var iso = parsed && parsed.generated_at ? String(parsed.generated_at) : ""
       var ms = iso !== "" ? new Date(iso).getTime() : NaN
       root.indexGeneratedAtMs = isFinite(ms) ? ms : 0
+      root.herdrState = parsed && parsed.herdr ? String(parsed.herdr) : "unknown"
     } catch (e) {
       console.warn(root.logTag, "bad index.json", e)
       root.indexGeneratedAtMs = 0
+      root.herdrState = "unknown"
     }
   }
 
   readonly property bool indexStale: indexGeneratedAtMs > 0
     && (nowMs - indexGeneratedAtMs) > (2 * root.refreshIntervalSec * 1000)
+  // A stale index means the reconciler stopped; its last word on Herdr is
+  // then a guess, so the Herdr-down row shows only on a fresh index.
+  readonly property bool herdrDown: herdrState === "unreachable" && !indexStale
 
   // One duration vocabulary for the hero, the stale marker, and every row
   // (Session.qml calls this through `formatAge`): "just now", "3m",
@@ -269,9 +279,6 @@ Panel {
   }
 
   // --------------------------------------------------------------- rows
-  //
-  // Section membership and sort order come straight from the "Panel layout"
-  // table in 03-sessions-panel.md.
 
   function sinceMs(session) {
     var iso = session && session.status ? String(session.status.since || "") : ""
@@ -283,8 +290,7 @@ Panel {
     return state === "blocked" ? 0 : (state === "waiting" ? 1 : 2)
   }
 
-  // 1. Needs you: waiting, blocked. Blocked before waiting, oldest since
-  // first within each group, so the longest-neglected session leads.
+  // 1. Needs you: blocked, waiting; the longest-neglected session leads.
   function needsYouSessions() {
     var list = root.allSessions.filter(function(s) {
       return s.status && (s.status.state === "blocked" || s.status.state === "waiting")
@@ -296,9 +302,15 @@ Panel {
     return list
   }
 
-  // 2. Working: starting, working, idle. Alive, asking for nothing. Sort
-  // order is not specified in the spec; most-recently-changed first is this
-  // skeleton's choice (see README-plugin.md assumptions).
+  // 2. Orphaned: above Working, because a session that lost its pane is
+  // the state this product exists to protect (finding 7).
+  function orphanedSessions() {
+    var list = root.allSessions.filter(function(s) { return s.status && s.status.state === "orphaned" })
+    list.sort(function(a, b) { return root.sinceMs(b) - root.sinceMs(a) })
+    return list
+  }
+
+  // 3. Working: starting, working, idle. Most recently changed first.
   function workingSessions() {
     var states = { starting: true, working: true, idle: true }
     var list = root.allSessions.filter(function(s) { return s.status && states[s.status.state] })
@@ -306,8 +318,7 @@ Panel {
     return list
   }
 
-  // 3. Done today: done, failed, stopped in the last 24 h. Older ones drop
-  // off the panel; the receipt is their record.
+  // 4. Done today: done, failed, stopped in the last 24 h, newest first.
   function doneTodaySessions() {
     var states = { done: true, failed: true, stopped: true }
     var cutoff = root.nowMs - 24 * 3600 * 1000
@@ -318,58 +329,174 @@ Panel {
     return list
   }
 
-  // 4. Orphaned.
-  function orphanedSessions() {
-    var list = root.allSessions.filter(function(s) { return s.status && s.status.state === "orphaned" })
-    list.sort(function(a, b) { return root.sinceMs(b) - root.sinceMs(a) })
-    return list
-  }
-
   readonly property var needsYouRows: needsYouSessions()
+  readonly property var orphanedRows: orphanedSessions()
   readonly property var workingRows: workingSessions()
   readonly property var doneRows: doneTodaySessions()
-  readonly property var orphanedRows: orphanedSessions()
+  readonly property var doneShownRows: doneExpanded ? doneRows : doneRows.slice(0, doneRowsCollapsed)
+  readonly property int doneHiddenCount: doneRows.length - doneShownRows.length
 
-  // maxRows caps the flattened total; lowest-priority sections are what
-  // gets trimmed first since they are concatenated last (see
-  // README-plugin.md assumptions -- the spec does not state this rule).
-  readonly property var visibleRows: needsYouRows.concat(workingRows).concat(doneRows).concat(orphanedRows).slice(0, root.maxRows)
+  // maxRows caps the flattened total; Done today is concatenated last, so
+  // it is what gets trimmed.
+  readonly property var visibleRows: needsYouRows.concat(orphanedRows).concat(workingRows).concat(doneShownRows).slice(0, root.maxRows)
 
   readonly property int needsAttentionCount: allSessions.filter(function(s) { return s.needs_attention === true }).length
+  readonly property int workingCount: allSessions.filter(function(s) { return s.status && (s.status.state === "working" || s.status.state === "starting") }).length
+  readonly property int idleCount: allSessions.filter(function(s) { return s.status && s.status.state === "idle" }).length
 
-  // Bar glyph color: most urgent condition wins, per the "Bar widget" table.
+  // Bar glyph: urgent when someone needs you; foreground when a session
+  // is orphaned (that needs a person too, without the badge); the rest
+  // color otherwise. Three honest looks, all at 3:1 or better.
   readonly property string barState: {
-    if (allSessions.some(function(s) { return s.status && s.status.state === "blocked" })) return "blocked"
-    if (allSessions.some(function(s) { return s.status && s.status.state === "waiting" })) return "waiting"
+    if (needsYouRows.length > 0) return "needs-you"
+    if (orphanedRows.length > 0) return "orphaned"
     return "quiet"
   }
-  readonly property color barGlyphColor: barState === "blocked" ? urgentColor
-    : (barState === "waiting" ? foreground : mutedColor)
+  readonly property color barGlyphColor: barState === "needs-you" ? urgentColor
+    : (barState === "orphaned" ? foreground : restColor)
 
-  // Hidden entirely when there are no sessions at all and showWhenEmpty is
-  // false -- matching the literal hide-when-empty test both reference
-  // plugins use ("visible: sessions.length > 0" / "providers.length > 0"),
-  // not a "live sessions only" reading of that rule (see README assumptions).
   visible: allSessions.length > 0 || showWhenEmpty || hasErrorRow
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  // --------------------------------------------------------------- actions
+  // --------------------------------------------------------------- hero
+
+  function heroTitle() {
+    if (root.hasErrorRow) return "Sessions"
+    if (root.needsYouRows.length > 0) return root.needsYouRows[0].name || root.needsYouRows[0].id
+    if (root.orphanedRows.length > 0) return root.orphanedRows.length + " orphaned"
+    if (root.allSessions.length === 0) return "No sessions"
+    return "Nothing needs you"
+  }
+
+  function heroMeta() {
+    var base
+    if (root.hasErrorRow) {
+      base = "list unavailable"
+    } else if (root.needsYouRows.length > 0) {
+      var first = root.needsYouRows[0]
+      base = "needs you · " + root.formatDuration(root.nowMs - root.sinceMs(first)) + " · Enter opens"
+      if (root.needsYouRows.length > 1) base += " · " + (root.needsYouRows.length - 1) + " more need you"
+    } else if (root.orphanedRows.length > 0) {
+      base = root.herdrDown ? "Herdr is not running · Enter revives" : "Enter revives"
+    } else if (root.allSessions.length === 0) {
+      base = "Super+Shift+Ctrl+A starts one"
+    } else {
+      var parts = []
+      if (root.workingCount > 0) parts.push(root.workingCount + " working")
+      if (root.idleCount > 0) parts.push(root.idleCount + " idle")
+      if (root.doneRows.length > 0) parts.push(root.doneRows.length + " done today")
+      base = parts.length > 0 ? parts.join(" · ") : "all quiet"
+    }
+    return root.indexStale ? (base + " · stale (" + root.staleAgeText() + ")") : base
+  }
+
+  // ------------------------------------------------------------ actions
+  //
+  // Every command runs through a Process and reports its exit code back
+  // into the row it belongs to (finding 4). Exit codes are the CLI's:
+  // 3 not found, 4 Herdr unreachable, 5 the session's state forbids it.
+
+  property var busyById: ({})     // id -> "opening…" | "reviving…" | "sending…" | "stopping…"
+  property var resultById: ({})   // id -> {text, ok, ts}
+
+  function setBusy(id, text) {
+    var next = Object.assign({}, root.busyById)
+    if (text) next[id] = text; else delete next[id]
+    root.busyById = next
+  }
+
+  function setResult(id, text, ok) {
+    var next = Object.assign({}, root.resultById)
+    if (text) next[id] = { text: text, ok: ok, ts: Date.now() }; else delete next[id]
+    root.resultById = next
+  }
+
+  Timer {
+    // Results stay on the row for five seconds, then the state returns.
+    interval: 1000; repeat: true; running: Object.keys(root.resultById).length > 0
+    onTriggered: {
+      var now = Date.now(), next = {}, changed = false
+      for (var id in root.resultById) {
+        if (now - root.resultById[id].ts < 5000) next[id] = root.resultById[id]; else changed = true
+      }
+      if (changed) root.resultById = next
+    }
+  }
+
+  function reason(code) {
+    if (code === 3) return "session not found"
+    if (code === 4) return "Herdr is not running"
+    if (code === 5) return "the session's state forbids it"
+    return "exit " + code
+  }
+
+  Component {
+    id: actionProcessComponent
+    Process {
+      property string sid: ""
+      property string kind: ""
+      running: false
+      stderr: StdioCollector {
+        waitForEnd: true
+        onStreamFinished: if (String(text).trim() !== "") console.warn(root.logTag, kind, String(text).trim())
+      }
+      onExited: function(exitCode) {
+        root.actionFinished(sid, kind, exitCode)
+        destroy()
+      }
+    }
+  }
+
+  function runAction(sid, kind, argv, busyText) {
+    var p = actionProcessComponent.createObject(root, { sid: String(sid), kind: kind, command: argv })
+    if (!p) { console.warn(root.logTag, "could not start", kind); return }
+    root.setResult(sid, "", true)
+    root.setBusy(sid, busyText)
+    p.running = true
+  }
+
+  function actionFinished(sid, kind, code) {
+    root.setBusy(sid, "")
+    if (kind === "open") {
+      if (code === 0) { root.close(); return }   // the terminal is the point; get the overlay out of its way
+      root.setResult(sid, "couldn't open · " + root.reason(code), false)
+    } else if (kind === "send") {
+      if (code === 0) root.setResult(sid, "sent", true)
+      else if (code === 5) root.setResult(sid, "not delivered · open it and answer there", false)
+      else root.setResult(sid, "not sent · " + root.reason(code), false)
+    } else if (kind === "stop") {
+      if (code === 0) return                     // the spinner runs until the record reports stopped
+      var next = Object.assign({}, root.stoppingIds); delete next[sid]; root.stoppingIds = next
+      root.setResult(sid, "stop failed · " + root.reason(code), false)
+    } else if (kind === "receipt") {
+      if (code === 0) { root.close(); return }
+      root.setResult(sid, "couldn't open the receipt · " + root.reason(code), false)
+    }
+    root.refresh()
+  }
+
+  function sessionById(id) {
+    for (var i = 0; i < root.allSessions.length; i++) if (root.allSessions[i].id === id) return root.allSessions[i]
+    return null
+  }
 
   function openSession(id) {
     if (!id) return
-    Quickshell.execDetached(["omarchy-agent-session-open", String(id)])
+    var s = root.sessionById(id)
+    var orphaned = s && s.status && s.status.state === "orphaned"
+    root.runAction(id, "open", ["omarchy-agent-session-open", String(id)], orphaned ? "reviving…" : "opening…")
   }
 
   function sendToSession(id, text) {
     if (!id || String(text || "").trim() === "") return
-    Quickshell.execDetached(["omarchy-agent-session-send", String(id), String(text)])
+    root.runAction(id, "send", ["omarchy-agent-session-send", String(id), String(text)], "sending…")
   }
 
   function stopSession(id) {
     if (!id) return
     var next = Object.assign({}, root.stoppingIds); next[String(id)] = Date.now(); root.stoppingIds = next
-    Quickshell.execDetached(["omarchy-agent-session-stop", String(id)])
+    root.runAction(id, "stop", ["omarchy-agent-session-stop", String(id)], "")
   }
 
   function clearStoppedFromStopping(sessions) {
@@ -380,38 +507,27 @@ Panel {
     var next = {}
     for (var j = 0; j < ids.length; j++) {
       var st = live[ids[j]]
-      var stale = (Date.now() - root.stoppingIds[ids[j]]) > 30000
-      if (st && st !== "stopped" && st !== "done" && st !== "failed" && !stale) next[ids[j]] = root.stoppingIds[ids[j]]
+      if (st && st !== "stopped" && st !== "done" && st !== "failed") next[ids[j]] = root.stoppingIds[ids[j]]
     }
     root.stoppingIds = next
   }
 
   function openReceipt(id) {
     if (!id) return
-    // omarchy-launch-tui, not -or-focus-tui, per this skeleton's brief.
-    // VERIFY ON RIG (also flagged in 02-command-surface.md's own "Verify on
-    // rig" list): whether omarchy-launch-tui's `-e "$1" "${@:2}"` form runs
-    // a bare vendored script directly, and whether it needs an app id at
-    // all -- context-pack.md shows it reading $APP_ID from the environment
-    // rather than a --app-id flag, unlike omarchy-launch-or-focus-tui.
-    Quickshell.execDetached(["omarchy-launch-tui", scriptPath("receipt-pager"), String(id)])
+    root.runAction(id, "receipt",
+      ["omarchy-launch-tui", "--app-id=org.omarchy.session-receipt", "omarchy-agent-session-receipt", "--pager", String(id)],
+      "opening…")
   }
 
   function newSession() {
-    // bar.run is the confirmed fire-and-forget shell path (agents/Panel.qml
-    // launchAgent uses the same call shape for its own "--pick" launch).
     if (root.bar) root.bar.run("omarchy-agent-session-new --pick")
     root.close()
   }
 
-  // Middle click: "most recently needing attention" sorts newest-since
-  // first within blocked/waiting -- the opposite order from the Needs You
-  // section, which surfaces the *oldest*-neglected session instead. Both
-  // orderings are named explicitly and separately in 03-sessions-panel.md.
+  // Middle click and the IPC function: the session that most recently
+  // started needing you (the Needs-you section leads with the oldest).
   function mostRecentAttentionSession() {
-    var list = root.allSessions.filter(function(s) {
-      return s.status && (s.status.state === "blocked" || s.status.state === "waiting")
-    })
+    var list = root.needsYouSessions()
     list.sort(function(a, b) {
       var r = root.attentionRank(a.status.state) - root.attentionRank(b.status.state)
       return r !== 0 ? r : root.sinceMs(b) - root.sinceMs(a)
@@ -422,6 +538,8 @@ Panel {
   function openMostUrgent() {
     var candidates = mostRecentAttentionSession()
     if (candidates.length > 0) root.openSession(candidates[0].id)
+    else if (root.orphanedRows.length > 0) root.openSession(root.orphanedRows[0].id)
+    else root.open()
   }
 
   IpcHandler {
@@ -431,6 +549,7 @@ Panel {
     function show(): void { root.open() }
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
+    function openMostUrgent(): void { root.openMostUrgent() }
     function refresh(): string { root.refresh(); return "ok" }
   }
 
@@ -440,10 +559,6 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    // VERIFY ON RIG: glyph codepoint guessed (nerd-font "robot"-family
-    // private-use point); neither fetched reference plugin renders a
-    // session/agent glyph distinct from their own icons, so this needs a
-    // real look on the rig's font.
     text: "󰚩"
     active: true
     activeColor: root.barGlyphColor
@@ -453,20 +568,18 @@ Panel {
       else root.toggle()
     }
 
-    // Badge: count of sessions with needs_attention true.
-    // VERIFY ON RIG: neither reference plugin shows a numeric bar badge, so
-    // this is a manual overlay rather than a confirmed BarIconButton
-    // property; a native badge/count API may already exist on the rig.
+    // Badge: how many sessions need a person. Inside the bar's edge, a
+    // digit at ten pixels or more (finding 12).
     Rectangle {
       visible: root.needsAttentionCount > 0
-      width: Math.max(14, badgeText.implicitWidth + Style.space(6))
-      height: 14
+      width: Math.max(16, badgeText.implicitWidth + Style.space(8))
+      height: 16
       radius: height / 2
       color: root.urgentColor
       anchors.right: parent.right
       anchors.top: parent.top
-      anchors.rightMargin: -2
-      anchors.topMargin: -2
+      anchors.rightMargin: -3
+      anchors.topMargin: 0
 
       Text {
         id: badgeText
@@ -474,13 +587,43 @@ Panel {
         text: root.needsAttentionCount > 99 ? "99+" : String(root.needsAttentionCount)
         color: Color.background
         font.family: root.fontFamily
-        font.pixelSize: Style.font.caption - 2 > 8 ? Style.font.caption - 2 : 8
+        font.pixelSize: Math.max(10, Style.font.caption)
         font.bold: true
       }
     }
   }
 
   // ------------------------------------------------------------ panel
+
+  function legendText() {
+    if (root.sendOpenId !== "") return "⏎ sends · esc cancels"
+    if (root.armedStopId !== "") {
+      var s = root.sessionById(root.armedStopId)
+      return "x again stops " + (s ? s.name : "it") + " · esc cancels"
+    }
+    // Fits 400 px at the default font; `r` (receipt) works on every row
+    // and the ended rows' own button says so, so it stays off the legend.
+    var parts = ["↑↓ move", "⏎ open", "s send", "x stop"]
+    if (root.doneHiddenCount > 0) parts.push("→ more")
+    else if (root.doneExpanded) parts.push("← fewer")
+    parts.push("esc")
+    return parts.join(" · ")
+  }
+
+  // Scroll the cursor row into view. Rows change height as the cursor
+  // moves (the cursor row shows its actions), so this runs after layout.
+  function ensureVisible(item) {
+    if (!item || !panelFlick) return
+    Qt.callLater(function() {
+      if (!item || !panelFlick) return
+      var top = item.mapToItem(column, 0, 0).y
+      var bottom = top + item.height
+      var viewTop = panelFlick.contentY
+      var viewBottom = viewTop + panelFlick.height
+      if (top < viewTop) panelFlick.contentY = Math.max(0, top - Style.space(8))
+      else if (bottom > viewBottom) panelFlick.contentY = Math.min(Math.max(0, panelFlick.contentHeight - panelFlick.height), bottom - panelFlick.height + Style.space(8))
+    })
+  }
 
   KeyboardPanel {
     id: panel
@@ -489,221 +632,312 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(640))
+    contentWidth: panel.fittedContentWidth(Style.space(400))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight + legend.height, Style.space(640))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
 
       onMoveRequested: function(dx, dy) {
-        if (dy === 0 || root.visibleRows.length === 0) return
-        root.cursorActive = true
-        if (dy < 0) root.selectedIndex = Math.max(0, root.selectedIndex - 1)
-        else root.selectedIndex = Math.min(root.visibleRows.length - 1, root.selectedIndex + 1)
-        // VERIFY ON RIG: this skeleton does not scroll the selected row into
-        // view. Hermes's reference math assumes a fixed ~52px row height;
-        // rows here vary (the inline Send field changes a row's height), so
-        // that fixed-offset trick would misplace the scroll. Needs real
-        // per-row y positions, e.g. via a ListView, to do properly.
+        if (root.sendOpenId !== "") return           // the field owns its keys
+        if (dx !== 0) {
+          if (dx > 0 && root.doneHiddenCount > 0) root.doneExpanded = true
+          else if (dx < 0 && root.doneExpanded) root.doneExpanded = false
+          return
+        }
+        if (dy !== 0) root.moveCursor(dy)
       }
       onActivateRequested: {
-        if (root.visibleRows.length === 0) return
-        var s = root.visibleRows[root.selectedIndex]
-        if (s) { root.openSession(s.id); root.close() }  // the terminal is the point; get the overlay out of its way
+        if (root.sendOpenId !== "") return
+        var s = root.selectedSession
+        if (!s) return
+        var ended = s.status && (s.status.state === "done" || s.status.state === "failed" || s.status.state === "stopped")
+        if (ended) root.openReceipt(s.id); else root.openSession(s.id)
       }
       onDeleteRequested: {
         // PanelKeyCatcher routes `x` here, never to onTextKey.
-        if (root.visibleRows.length === 0) return
-        var s = root.visibleRows[root.selectedIndex]
+        if (root.sendOpenId !== "") return
+        var s = root.selectedSession
         if (!s) return
+        var ended = s.status && (s.status.state === "done" || s.status.state === "failed" || s.status.state === "stopped")
+        if (ended) return
         if (root.armedStopId === s.id) { root.stopSession(s.id); root.armedStopId = "" }
-        else { root.sendOpenId = ""; root.armedStopId = s.id }
+        else root.armedStopId = s.id
       }
       onCloseRequested: {
-        // Esc clears an armed Stop or an open Send field first, and closes
-        // the panel only on the press after that (03-sessions-panel.md).
+        // Esc clears an open Send field or an armed Stop first, and closes
+        // the panel on the press after that.
         if (root.sendOpenId !== "") { root.sendOpenId = ""; return }
         if (root.armedStopId !== "") { root.armedStopId = ""; return }
         root.close()
       }
       onTextKey: function(t) {
-        if (root.visibleRows.length === 0) return
-        var s = root.visibleRows[root.selectedIndex]
+        if (root.sendOpenId !== "") return
+        var s = root.selectedSession
         if (!s) return
+        var ended = s.status && (s.status.state === "done" || s.status.state === "failed" || s.status.state === "stopped")
         if (t === "s" || t === "S") {
+          if (ended) return
           root.armedStopId = ""
           root.sendOpenId = s.id
-        } else if (t === "x" || t === "X") {
-          if (root.armedStopId === s.id) {
-            root.stopSession(s.id)
-            root.armedStopId = ""
-          } else {
-            root.sendOpenId = ""
-            root.armedStopId = s.id
-          }
         } else if (t === "r" || t === "R") {
           root.openReceipt(s.id)
         }
       }
 
-      Flickable {
-        id: panelFlick
+      Column {
+        id: outer
         anchors.fill: parent
-        contentWidth: width
-        contentHeight: column.implicitHeight
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        flickableDirection: Flickable.VerticalFlick
-        interactive: contentHeight > height
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        spacing: 0
 
-        Column {
-          id: column
-          width: panelFlick.width
-          spacing: Style.space(12)
+        Flickable {
+          id: panelFlick
+          width: parent.width
+          height: Math.max(0, outer.height - legend.height)
+          contentWidth: width
+          contentHeight: column.implicitHeight
+          clip: true
+          boundsBehavior: Flickable.StopAtBounds
+          flickableDirection: Flickable.VerticalFlick
+          interactive: contentHeight > height
 
-          // ---------- Hero ----------
-          PanelHero {
-            width: parent.width
-            title: root.needsYouRows.length > 0
-              ? (root.needsYouRows[0].name || root.needsYouRows[0].id)
-              : (root.workingRows.length + " working")
-            meta: {
-              var base = root.needsYouRows.length > 0
-                ? (String(root.needsYouRows[0].status.state) + " · " + root.formatDuration(root.nowMs - root.sinceMs(root.needsYouRows[0])))
-                : (root.allSessions.length === 0 ? "No sessions" : "Nothing needs you")
-              return root.indexStale ? (base + " · stale (" + root.staleAgeText() + ")") : base
-            }
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-
-            iconComponent: Component {
-              Rectangle {
-                width: 12; height: 12; radius: 6
-                color: root.barGlyphColor
-                anchors.centerIn: parent
-              }
-            }
+          // Own scroll indicator: two pixels, always visible when the list
+          // is longer than the panel (finding 3). The transient QQC2 bar was
+          // invisible at rest in every capture.
+          Rectangle {
+            visible: panelFlick.contentHeight > panelFlick.height
+            width: 2
+            radius: 1
+            color: root.dim
+            x: panelFlick.width - width
+            y: panelFlick.contentY + (panelFlick.height * (panelFlick.contentY / Math.max(1, panelFlick.contentHeight)))
+            height: Math.max(16, panelFlick.height * (panelFlick.height / Math.max(1, panelFlick.contentHeight)))
+            z: 2
           }
 
-          // ---------- Error row (three-strikes backoff) ----------
-          BorderSurface {
-            visible: root.hasErrorRow
-            width: parent.width
-            implicitHeight: errorText.implicitHeight + Style.spacing.xl * 2
-            color: root.alpha(root.urgentColor, 0.10)
-            borderSpec: Border.flat(root.alpha(root.urgentColor, 0.35), 1)
-            radius: Style.cornerRadius
-
-            Text {
-              id: errorText
-              textFormat: Text.PlainText
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.leftMargin: Style.space(12)
-              anchors.rightMargin: Style.space(12)
-              text: root.snapshot ? String(root.snapshot.error || "") : ""
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              wrapMode: Text.WordWrap
-            }
-          }
-
-          // ---------- No sessions ----------
           Column {
-            visible: !root.hasErrorRow && root.allSessions.length === 0
-            width: parent.width
+            id: column
+            width: panelFlick.width
             spacing: Style.space(10)
-            topPadding: Style.space(16)
 
-            Text {
+            // ---------- Hero ----------
+            PanelHero {
               width: parent.width
-              text: root.snapshot ? "No sessions yet." : "Checking for sessions…"
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              horizontalAlignment: Text.AlignHCenter
-              wrapMode: Text.WordWrap
-            }
-
-            Button {
-              anchors.horizontalCenter: parent.horizontalCenter
-              text: "New session"
-              bordered: true
+              title: root.heroTitle()
+              meta: root.heroMeta()
               foreground: root.foreground
               fontFamily: root.fontFamily
-              onClicked: root.newSession()
-            }
-          }
 
-          // ---------- Sections ----------
-          Repeater {
-            model: [
-              { title: "NEEDS YOU", rows: root.needsYouRows, offset: 0 },
-              { title: "WORKING", rows: root.workingRows, offset: root.needsYouRows.length },
-              { title: "DONE TODAY", rows: root.doneRows, offset: root.needsYouRows.length + root.workingRows.length },
-              { title: "ORPHANED", rows: root.orphanedRows, offset: root.needsYouRows.length + root.workingRows.length + root.doneRows.length }
-            ]
-
-            delegate: Column {
-              required property var modelData
-              width: column.width
-              spacing: Style.space(8)
-              visible: !root.hasErrorRow && modelData.rows.length > 0
-
-              PanelSeparator {
-                foreground: root.foreground
-              }
-
-              PanelSectionHeader {
-                width: parent.width
-                text: modelData.title
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-              }
-
-              Repeater {
-                model: modelData.rows
-
-                delegate: Session {
-                  required property var modelData
-                  required property int index
-
-                  session: modelData
-                  // Repeater is not a visual Item, so this delegate's actual
-                  // `parent` is the enclosing per-section Column above (the
-                  // one holding `required property var modelData` with
-                  // {title, rows, offset}), not the inner Repeater itself.
-                  hasCursor: root.cursorActive && (parent.modelData.offset + index) === root.selectedIndex
-                  stopArmed: root.armedStopId === modelData.id
-                  stopping: root.stoppingIds[modelData.id] !== undefined
-                  sendOpen: root.sendOpenId === modelData.id
-                  foreground: root.foreground
-                  accent: Color.accent
-                  urgentColor: root.urgentColor
-                  mutedColor: root.mutedColor
-                  fontFamily: root.fontFamily
-                  nowMs: root.nowMs
-                  formatAge: root.formatDuration
-
-                  onOpenRequested: function(id) { root.openSession(id) }
-                  onSendOpenRequested: function(id) { root.armedStopId = ""; root.sendOpenId = id }
-                  onSendSubmitRequested: function(id, text) { root.sendToSession(id, text); root.sendOpenId = "" }
-                  onSendCancelRequested: function(id) { root.sendOpenId = "" }
-                  onStopArmRequested: function(id) { root.sendOpenId = ""; root.armedStopId = id }
-                  onStopConfirmRequested: function(id) { root.stopSession(id); root.armedStopId = "" }
-                  onReceiptRequested: function(id) { root.openReceipt(id) }
+              iconComponent: Component {
+                Rectangle {
+                  width: 12; height: 12; radius: 6
+                  color: root.barState === "orphaned" ? "transparent" : root.barGlyphColor
+                  border.color: root.barGlyphColor
+                  border.width: root.barState === "orphaned" ? 2 : 0
+                  anchors.centerIn: parent
                 }
               }
             }
+
+            // ---------- Herdr is not running ----------
+            BorderSurface {
+              visible: root.herdrDown && !root.hasErrorRow
+              width: parent.width
+              implicitHeight: herdrText.implicitHeight + Style.space(20)
+              color: root.alpha(root.urgentColor, 0.10)
+              borderSpec: Border.flat(root.alpha(root.urgentColor, 0.35), 1)
+              radius: Style.cornerRadius
+
+              Text {
+                id: herdrText
+                textFormat: Text.PlainText
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Style.space(12)
+                anchors.rightMargin: Style.space(12)
+                text: "Herdr is not running. Super+Ctrl+Return starts it; a session revives with Enter once it is up."
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
+            }
+
+            // ---------- Error row (three-strikes backoff) ----------
+            BorderSurface {
+              visible: root.hasErrorRow
+              width: parent.width
+              implicitHeight: errorText.implicitHeight + Style.space(20)
+              color: root.alpha(root.urgentColor, 0.10)
+              borderSpec: Border.flat(root.alpha(root.urgentColor, 0.35), 1)
+              radius: Style.cornerRadius
+
+              Text {
+                id: errorText
+                textFormat: Text.PlainText
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Style.space(12)
+                anchors.rightMargin: Style.space(12)
+                text: root.snapshot ? String(root.snapshot.error || "") : ""
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
+            }
+
+            // ---------- No sessions ----------
+            Column {
+              visible: !root.hasErrorRow && root.allSessions.length === 0
+              width: parent.width
+              spacing: Style.space(10)
+              topPadding: Style.space(16)
+
+              Text {
+                width: parent.width
+                text: root.snapshot ? "No sessions yet." : "Checking for sessions…"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+              }
+
+              Button {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "New session"
+                bordered: true
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                onClicked: root.newSession()
+              }
+            }
+
+            // ---------- Sections ----------
+            Repeater {
+              model: [
+                { title: "NEEDS YOU", rows: root.needsYouRows, offset: 0, hidden: 0 },
+                { title: "ORPHANED", rows: root.orphanedRows, offset: root.needsYouRows.length, hidden: 0 },
+                { title: "WORKING", rows: root.workingRows, offset: root.needsYouRows.length + root.orphanedRows.length, hidden: 0 },
+                { title: "DONE TODAY", rows: root.doneShownRows, offset: root.needsYouRows.length + root.orphanedRows.length + root.workingRows.length, hidden: root.doneHiddenCount }
+              ]
+
+              delegate: Column {
+                required property var modelData
+                width: column.width
+                spacing: Style.space(6)
+                visible: !root.hasErrorRow && (modelData.rows.length > 0 || modelData.hidden > 0)
+
+                PanelSeparator {
+                  foreground: root.foreground
+                }
+
+                Item {
+                  width: parent.width
+                  height: sectionHeader.implicitHeight
+
+                  PanelSectionHeader {
+                    id: sectionHeader
+                    width: parent.width
+                    text: modelData.title + (modelData.hidden > 0 ? " · " + (modelData.rows.length + modelData.hidden) : "")
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                  }
+
+                  Text {
+                    visible: modelData.hidden > 0
+                    textFormat: Text.PlainText
+                    text: modelData.hidden + " more · →"
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    MouseArea {
+                      anchors.fill: parent
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: root.doneExpanded = true
+                    }
+                  }
+                }
+
+                Repeater {
+                  model: modelData.rows
+
+                  delegate: Session {
+                    id: sessionRow
+                    required property var modelData
+                    required property int index
+
+                    session: modelData
+                    hasCursor: root.cursorActive && modelData.id === root.selectedId
+                    emphasized: index === 0 && parent.modelData.title === "NEEDS YOU"
+                    stopArmed: root.armedStopId === modelData.id
+                    stopping: root.stoppingIds[modelData.id] !== undefined
+                    sendOpen: root.sendOpenId === modelData.id
+                    busyText: root.busyById[modelData.id] || ""
+                    actionResult: root.resultById[modelData.id] || null
+                    motionReduced: root.motionReduced
+                    foreground: root.foreground
+                    accent: root.accentColor
+                    urgentColor: root.urgentColor
+                    restColor: root.restColor
+                    fontFamily: root.fontFamily
+                    nowMs: root.nowMs
+                    formatAge: root.formatDuration
+
+                    onHasCursorChanged: if (hasCursor) root.ensureVisible(sessionRow)
+                    onHoverRequested: function(id) { root.setCursor(id, false) }
+                    onOpenRequested: function(id) { root.setCursor(id, false); root.openSession(id) }
+                    onReceiptRequested: function(id) { root.setCursor(id, false); root.openReceipt(id) }
+                    onSendOpenRequested: function(id) { root.setCursor(id, false); root.armedStopId = ""; root.sendOpenId = id }
+                    onSendSubmitRequested: function(id, text) { root.sendToSession(id, text); root.sendOpenId = "" }
+                    onSendCancelRequested: function(id) { root.sendOpenId = "" }
+                    onStopArmRequested: function(id) { root.setCursor(id, false); root.sendOpenId = ""; root.armedStopId = id }
+                    onStopConfirmRequested: function(id) { root.stopSession(id); root.armedStopId = "" }
+                  }
+                }
+              }
+            }
+
+            Item {
+              width: parent.width
+              height: Style.space(2)
+            }
+          }
+        }
+
+        // ---------- Key legend ----------
+        Item {
+          id: legend
+          width: parent.width
+          height: legendText.implicitHeight + Style.space(12)
+
+          PanelSeparator {
+            anchors.top: parent.top
+            width: parent.width
+            foreground: root.foreground
           }
 
-          Item {
-            width: parent.width
-            height: Style.space(2)
+          Text {
+            id: legendText
+            textFormat: Text.PlainText
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: Style.space(12)
+            anchors.rightMargin: Style.space(12)
+            anchors.bottomMargin: Style.space(2)
+            text: root.legendText()
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            elide: Text.ElideRight
           }
         }
       }

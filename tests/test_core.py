@@ -858,6 +858,45 @@ class TestReconcile(CoreTestCase):
         self.assertEqual(session["status"]["state"], "working")
         self.assertIsNotNone(session["runtime"])
 
+    def test_reconcile_ends_a_session_whose_harness_exited_but_pane_lives(self):
+        # Rig, 2026-09-02: the harness died, Herdr dropped it from agent.list,
+        # the pane's shell lived on, and the session read `idle` forever.
+        self.start_fake_herdr()
+        self.fake_herdr.set_result("agent.list", {"agents": []})
+        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "p1"}]})
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
+                   "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
+        session_id = make_bare_session(self.store, "harness-gone", runtime=runtime, state="idle")
+
+        rc, out, err = self.run_cli(["reconcile", "--json"])
+        self.assertEqual(rc, 0, err)
+        session = self.store.try_load(session_id)
+        self.assertEqual(session["status"]["state"], "done")
+        self.assertEqual(session["status"]["detail"], "harness exited; pane still open")
+        self.assertIsNone(session["runtime"])
+        self.assertIn(session_id, json.loads(out)["ended"])
+        types = [e["type"] for e in self.store.read_events(session_id)]
+        self.assertEqual(types[-3:], ["runtime.unbound", "session.ended", "receipt.written"])
+        self.assertTrue(self.store.receipt_path(session_id).exists())
+        receipt = json.loads(self.store.receipt_path(session_id).read_text())
+        self.assertEqual(receipt["end_state"], "done")
+
+    def test_reconcile_leaves_a_starting_session_alone_while_its_harness_boots(self):
+        # A harness that is still booting is not in agent.list yet either;
+        # that must not read as "exited".
+        self.start_fake_herdr()
+        self.fake_herdr.set_result("agent.list", {"agents": []})
+        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "p1"}]})
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
+                   "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
+        session_id = make_bare_session(self.store, "booting", runtime=runtime, state="starting")
+        rc, out, err = self.run_cli(["reconcile", "--json"])
+        self.assertEqual(rc, 0, err)
+        session = self.store.try_load(session_id)
+        self.assertEqual(session["status"]["state"], "starting")
+        self.assertIsNotNone(session["runtime"])
+        self.assertEqual(json.loads(out)["ended"], [])
+
     def test_reconcile_adopts_an_unmatched_herdr_agent(self):
         self.start_fake_herdr()
         self.fake_herdr.set_result("agent.list", {"agents": [{"name": "orphan-agent", "agent": "claude", "pane_id": "orphan-pane", "workspace_id": "w9", "tab_id": "w9:t1"}]})
@@ -904,7 +943,7 @@ class TestReconcile(CoreTestCase):
 
         rc, out, err = self.run_cli(["reconcile", "--json"])
         self.assertEqual(rc, 0, err)
-        self.assertEqual(json.loads(out), {"orphaned": [gone_id], "adopted": []})  # stdout shape unchanged
+        self.assertEqual(json.loads(out), {"orphaned": [gone_id], "adopted": [], "ended": []})  # stdout shape unchanged
 
         index = self.read_index()
         self.assertEqual(index["herdr"], "running")
@@ -954,7 +993,7 @@ class TestReconcile(CoreTestCase):
         self.start_fake_herdr()
         rc, out, err = self.run_cli(["reconcile", "--json"])
         self.assertEqual(rc, 0, err)
-        self.assertEqual(json.loads(out), {"orphaned": [], "adopted": []})
+        self.assertEqual(json.loads(out), {"orphaned": [], "adopted": [], "ended": []})
         self.assertIn("could not write", err)
         self.assertTrue(squatter.is_dir())
         # No temp file left behind next to it either.

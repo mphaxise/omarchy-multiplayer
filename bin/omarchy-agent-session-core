@@ -1884,6 +1884,32 @@ def cmd_send(args, ctx):
     return EXIT_OK
 
 
+def _end_session(session, store, actor, end_state, reason, unbind_reason):
+    """Move a live session to a terminal state without touching Herdr:
+    status.changed, runtime.unbound, session.ended, then the receipt, in
+    the same order `_stop_one` uses. Used by the reconciler when the
+    harness has already gone away on its own."""
+    session_id = session["id"]
+    state = session["status"]["state"]
+    ev = store.append_event(session_id, "status.changed", actor,
+                            {"from": state, "to": end_state, "source": "reconciler", "detail": reason})
+    session["status"] = {"state": end_state, "since": ev["ts"], "source": "reconciler", "detail": reason}
+    session["state_version"] = ev["seq"]
+    if session.get("runtime") is not None:
+        ev = store.append_event(session_id, "runtime.unbound", actor, {"reason": unbind_reason})
+        session["runtime"] = None
+        session["state_version"] = ev["seq"]
+    ev = store.append_event(session_id, "session.ended", actor, {"state": end_state, "reason": reason})
+    session["state_version"] = ev["seq"]
+    store.save_session(session)
+    receipt = compute_receipt(store, session, end_state, reason, session["status"]["since"])
+    write_receipt(store, receipt)
+    ev = store.append_event(session_id, "receipt.written", actor,
+                            {"receipt_summary": {"end_state": end_state, "state_version": receipt["state_version"]}})
+    session["state_version"] = ev["seq"]
+    store.save_session(session)
+
+
 def _stop_one(session_id, store, herdr, actor, reason):
     session = store.try_load(session_id)
     if session is None:
@@ -2308,18 +2334,31 @@ def cmd_reconcile(args, ctx):
     live_agent_ids = {a.get("agent_id") for a in live_agents if a.get("agent_id")}
     live_pane_ids = {p.get("pane_id") for p in live_panes if p.get("pane_id")}
 
-    orphaned, adopted = [], []
+    orphaned, adopted, ended = [], [], []
     for s in known:
         runtime = s.get("runtime")
         if runtime is None or s["status"]["state"] in TERMINAL_STATES:
             continue
         agent_id, pane_id = runtime.get("agent_id"), runtime.get("pane_id")
-        still_present = (agent_id and agent_id in live_agent_ids) or (pane_id and pane_id in live_pane_ids)
-        if still_present:
+        agent_alive = bool(agent_id) and agent_id in live_agent_ids
+        pane_alive = bool(pane_id) and pane_id in live_pane_ids
+        still_present = agent_alive or pane_alive
+        if agent_alive:
             live = next((a for a in live_agents if a.get("agent_id") == agent_id), None)
             if live is not None:
                 apply_herdr_status(ctx.store, s, live.get("agent_status"))
                 record_harness_session_ref(ctx.store, s, ctx.herdr)
+        elif pane_alive and s["status"]["state"] != "starting":
+            # The harness exited and left its shell pane behind (the person
+            # typed /quit, or the process died). Herdr drops the agent from
+            # its list while the pane lives on, so this used to read as
+            # `idle` forever (rig, 2026-09-02). 01-session-model.md: any
+            # live state -> done when the harness exits cleanly. `starting`
+            # is excluded because a harness that is still booting is not in
+            # Herdr's agent list yet either.
+            _end_session(s, ctx.store, actor, "done", "harness exited; pane still open", unbind_reason="harness_exited")
+            ended.append(s["id"])
+            continue
         if not still_present:
             ev = ctx.store.append_event(s["id"], "status.changed", actor,
                                          {"from": s["status"]["state"], "to": "orphaned",
@@ -2363,9 +2402,9 @@ def cmd_reconcile(args, ctx):
 
     write_sessions_index(ctx.store, "running", orphaned, adopted)
     if args.json:
-        print(json.dumps({"orphaned": orphaned, "adopted": adopted}, indent=2))
+        print(json.dumps({"orphaned": orphaned, "adopted": adopted, "ended": ended}, indent=2))
     else:
-        print(f"orphaned {len(orphaned)}, adopted {len(adopted)}")
+        print(f"orphaned {len(orphaned)}, adopted {len(adopted)}, ended {len(ended)}")
     return EXIT_OK
 
 

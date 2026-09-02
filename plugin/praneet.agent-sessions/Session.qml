@@ -1,121 +1,152 @@
 import QtQuick
-import QtQuick.Controls
 import qs.Commons
 import qs.Ui
 
-// One session row for the Agent Sessions panel: name, agent glyph, state
-// with since-duration, workspace branch, owner label, child count, and the
-// Open/Send/Stop/Receipt actions. Pulled out of Panel.qml into its own file
-// per 03-sessions-panel.md ("Session.qml is one row, instantiated per
-// session"). Structurally this is the Hermes Panel.qml session row
-// (CursorSurface + MouseArea + PanelToolTip) factored into a standalone
-// component; Hermes keeps its equivalent row inline in Panel.qml instead.
+// One session row for the Agent Sessions panel.
 //
-// Rendering and local UI affordances only -- every action a person can take
-// is a signal. Panel.qml owns the actual omarchy-agent-session-* calls and
-// the cross-row state (which row has an armed Stop or an open Send field),
-// because Esc has to be able to clear either regardless of which row it
-// belongs to.
+// Two lines at rest: the name with its state and age on the right, then
+// the goal (or project · branch) with the permission mode. The cursor row
+// grows a third line of actions, so the list stays short and the keys are
+// visible where they act (design review, 2026-09-02, findings 3 and 7).
+//
+// Rendering and local UI affordances only: every action a person can take
+// is a signal. Panel.qml owns the omarchy-agent-session-* calls, their
+// results, and the cross-row state (which row has the cursor, an armed
+// Stop, an open Send field, a running action), because Esc has to clear
+// any of those regardless of which row it belongs to.
+//
+// `hasCursor`, `foreground`, and `accent` are CursorSurface's own
+// properties and are set from Panel.qml. They must not be redeclared here:
+// a redeclaration shadows the base property, so CursorSurface's
+// `color: hasCursor ? fill : ...` kept reading its own never-set copy and
+// the keyboard cursor was never painted (rig capture, 2026-09-02 14:08).
 CursorSurface {
   id: row
 
   // ---- inputs ----
-  // `hasCursor`, `foreground`, and `accent` are CursorSurface's own
-  // properties and are set from Panel.qml. They must not be redeclared
-  // here: a redeclaration shadows the base property, so CursorSurface's
-  // `color: hasCursor ? fill : ...` kept reading its own never-set copy and
-  // the keyboard cursor was never painted (found in the 2026-09-02 14:08
-  // live capture: panel open, selectedIndex 0, no highlight on any row).
   property var session: null          // one row object from list --json
   property bool stopArmed: false      // second x / click within this arm executes
   property bool sendOpen: false       // inline send field visible
-  property bool stopping: false       // Stop confirmed, record not yet stopped; owned by Panel.qml
+  property bool stopping: false       // Stop confirmed, record not yet stopped
+  property bool emphasized: false     // the first Needs-you row: the eye must land here
+  property string busyText: ""        // an action is running for this row ("opening…")
+  property var actionResult: null     // {text, ok} from the last action, cleared by Panel.qml
+  property bool motionReduced: false  // no looping spinner
   property color urgentColor: Color.urgent
-  property color mutedColor: Color.muted
+  property color restColor: Qt.darker(foreground, 1.5)
   property string fontFamily: Style.font.family
   property double nowMs: Date.now()
+  property var formatAge: null        // Panel.formatDuration, one vocabulary for hero and rows
 
-  readonly property color dim: Qt.darker(foreground, 1.3) // same factor as Panel.qml; 1.55 failed WCAG AA for caption text
-  readonly property var spinnerFrames: ["◐", "◓", "◑", "◒"]
-  property int spinnerIndex: 0
-  Timer {
-    running: row.stopping
-    interval: 120; repeat: true
-    onTriggered: row.spinnerIndex = (row.spinnerIndex + 1) % row.spinnerFrames.length
-  }
+  readonly property color dim: Qt.darker(foreground, 1.3) // 4.89:1 on Tokyo Night; 1.55 failed WCAG AA
 
   // ---- outputs ----
   signal openRequested(string id)
+  signal receiptRequested(string id)
   signal sendOpenRequested(string id)
   signal sendSubmitRequested(string id, string text)
   signal sendCancelRequested(string id)
   signal stopArmRequested(string id)
   signal stopConfirmRequested(string id)
-  signal receiptRequested(string id)
+  signal hoverRequested(string id)
 
   readonly property string sid: session ? String(session.id || "") : ""
   readonly property string sname: session && session.name ? String(session.name) : sid
   readonly property string agentKind: session && session.agent ? String(session.agent.kind || "") : ""
   readonly property string state: session && session.status ? String(session.status.state || "") : ""
   readonly property string sinceIso: session && session.status ? String(session.status.since || "") : ""
-  // Heuristic status dot: 03-sessions-panel.md "a row whose status.source is
-  // herdr-manifest, the heuristic path, shows a small outlined dot beside
-  // the state text". list --json's example in 02-command-surface.md does
-  // not show a `source` field on status, so this treats it as optional and
-  // absent-by-default (dot hidden unless the field is present and matches).
   readonly property bool lowConfidence: session && session.status
     ? String(session.status.source || "") === "herdr-manifest" : false
   readonly property string branch: session && session.workspace ? String(session.workspace.branch || "") : ""
-  readonly property string ownerLabel: session && session.owner
-    ? String(session.owner.label || session.owner.id || "") : ""
+  readonly property string project: session && session.project ? String(session.project) : ""
+  readonly property string goal: session && session.goal ? String(session.goal) : ""
+  readonly property string mode: session && session.mode ? String(session.mode) : ""
+  readonly property bool resumable: session ? session.resumable === true : false
   readonly property int childCount: session ? Number(session.children || 0) : 0
   readonly property bool needsAttention: session ? session.needs_attention === true : false
 
-  // Panel.qml binds its formatDuration here so the hero and every row share
-  // one vocabulary; the fallback only runs if a host forgets to bind it.
-  property var formatAge: null
+  readonly property bool isLive: state === "starting" || state === "working" || state === "idle"
+    || state === "waiting" || state === "blocked"
+  readonly property bool isOrphaned: state === "orphaned"
+  readonly property bool isEnded: state === "done" || state === "failed" || state === "stopped"
 
-  function durationText() {
+  readonly property var spinnerFrames: ["◐", "◓", "◑", "◒"]
+  property int spinnerIndex: 0
+  Timer {
+    // 250 ms per frame, 4 fps: visible progress without a flicker. Off
+    // entirely when the plugin's `motion` setting is "reduced" (the shell
+    // exposes no system preference to read; 03-sessions-panel.md).
+    running: row.stopping && !row.motionReduced
+    interval: 250; repeat: true
+    onTriggered: row.spinnerIndex = (row.spinnerIndex + 1) % row.spinnerFrames.length
+  }
+
+  function ageText() {
     var ms = sinceIso !== "" ? new Date(sinceIso).getTime() : NaN
     if (!isFinite(ms)) return ""
     var d = Math.max(0, nowMs - ms)
     if (typeof formatAge === "function") return formatAge(d)
     var mins = Math.floor(d / 60000)
-    if (mins < 1) return "just now"
-    if (mins < 60) return mins + "m"
-    var hours = Math.floor(mins / 60)
-    if (hours < 24) return hours + "h " + (mins % 60) + "m"
-    var days = Math.floor(hours / 24)
-    return days + "d " + (hours % 24) + "h"
+    return mins < 1 ? "just now" : mins + "m"
   }
 
-  // Per-row state color; same three-way scheme as the bar glyph in
-  // Panel.qml, applied per session instead of rolled up across all of them.
-  readonly property color stateColor: state === "blocked" ? urgentColor
-    : (state === "waiting" ? foreground : mutedColor)
+  // The state slot says what is true right now, in this order: an action
+  // in flight, its result, a stop in progress, then the record's state.
+  function stateText() {
+    if (busyText !== "") return busyText
+    if (actionResult && actionResult.text) return String(actionResult.text)
+    if (stopping) return (motionReduced ? "◌" : spinnerFrames[spinnerIndex]) + " stopping…"
+    var age = ageText()
+    if (state === "blocked" || state === "waiting") return "needs you" + (age !== "" ? " · " + age : "")
+    if (state === "orphaned") return "orphaned · " + (resumable ? "resumes conversation" : "fresh start")
+    if (state === "starting") return "starting" + (age !== "" ? " · " + age : "")
+    return state + (age !== "" ? " · " + age : "")
+  }
 
-  // `current` is CursorSurface's "selected item" look (foreground fill at
-  // 0.18 plus a full-alpha border). Binding it to the working state made a
-  // busy agent look like a selection, so activity is carried by the state
-  // dot and the section header only.
+  readonly property color stateTextColor: {
+    if (busyText !== "") return foreground
+    if (actionResult) return actionResult.ok ? foreground : urgentColor
+    if (stopping) return urgentColor
+    if (state === "blocked" || state === "waiting") return urgentColor
+    if (state === "orphaned" || state === "failed") return foreground
+    return dim
+  }
+
+  // Dot: color and shape together, so the state holds without color.
+  // Filled urgent = needs you; ring in foreground = orphaned; ring in
+  // urgent = failed; filled rest color = alive or ended quietly.
+  readonly property color dotColor: (state === "blocked" || state === "waiting" || state === "failed")
+    ? urgentColor : (state === "orphaned" ? foreground : restColor)
+  readonly property bool dotHollow: state === "orphaned" || state === "failed"
+
+  readonly property string detailText: goal !== "" ? goal
+    : [project, branch].filter(function(t) { return t !== "" }).join(" · ")
+
+  readonly property string openLabel: isOrphaned ? "⏎ Revive" : (isEnded ? "⏎ Receipt" : (needsAttention ? "⏎ Answer" : "⏎ Open"))
+
+  function stopLabel() {
+    if (stopping) return "stopping…"
+    if (!stopArmed) return "x Stop"
+    return "x Confirm stop" + (childCount > 0 ? " (+" + childCount + " child" + (childCount === 1 ? "" : "ren") + ")" : "")
+  }
+
   current: false
   bordered: false
 
   width: parent ? parent.width : 0
-  implicitHeight: Math.max(Style.space(4), mainColumn.implicitHeight + Style.space(16))
+  implicitHeight: mainColumn.implicitHeight + Style.space(14)
 
   MouseArea {
     id: rowMouse
-    // Row actions table: "Open (default) | Enter, or click the row". The
-    // action buttons below sit in their own Row and stop propagation via
-    // their own MouseArea-less Button clicks, so a click on Send/Stop/
-    // Receipt does not also fire this row-open handler.
     anchors.fill: parent
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton
     cursorShape: Qt.PointingHandCursor
-    onClicked: row.openRequested(row.sid)
-    z: -1 // sits behind the action buttons so their own clicks win
+    // Hover moves the panel's single cursor here (CursorSurface contract:
+    // visuals derive from hasCursor, never from containsMouse).
+    onContainsMouseChanged: if (containsMouse) row.hoverRequested(row.sid)
+    onClicked: row.isEnded ? row.receiptRequested(row.sid) : row.openRequested(row.sid)
+    z: -1 // behind the action buttons so their own clicks win
   }
 
   Column {
@@ -125,26 +156,20 @@ CursorSurface {
     anchors.verticalCenter: parent.verticalCenter
     anchors.leftMargin: Style.space(12)
     anchors.rightMargin: Style.space(12)
-    spacing: Style.space(4)
+    spacing: Style.space(3)
 
-    // ---------- name + state ----------
-    Row {
+    // ---------- line 1: dot, name, state · age ----------
+    Item {
       width: parent.width
-      spacing: Style.space(6)
+      height: Math.max(nameText.implicitHeight, stateLabel.implicitHeight)
 
       Rectangle {
         id: stateDot
         width: 8; height: 8; radius: 4
-        color: row.stateColor
-        anchors.verticalCenter: parent.verticalCenter
-      }
-
-      Text {
-        id: kindText
-        text: row.agentKind !== "" ? row.agentKind : "?"
-        color: row.dim
-        font.family: row.fontFamily
-        font.pixelSize: Style.font.caption
+        color: row.dotHollow ? "transparent" : row.dotColor
+        border.color: row.dotColor
+        border.width: row.dotHollow ? 2 : 0
+        anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
       }
 
@@ -154,69 +179,94 @@ CursorSurface {
         text: row.sname
         color: row.foreground
         font.family: row.fontFamily
-        font.pixelSize: Style.font.body
-        font.bold: row.needsAttention
+        font.pixelSize: row.emphasized ? Style.font.subtitle : Style.font.body
+        font.bold: row.needsAttention || row.emphasized
         elide: Text.ElideRight
+        anchors.left: stateDot.right
+        anchors.leftMargin: Style.space(8)
+        anchors.right: lowDot.visible ? lowDot.left : stateLabel.left
+        anchors.rightMargin: Style.space(8)
         anchors.verticalCenter: parent.verticalCenter
-        // The name takes exactly what the dot, the kind label, the optional
-        // low-confidence dot, the state label, and the gaps between them
-        // leave. The earlier formula forgot the dot and the kind label, so
-        // the state label ran past the content edge and every row lost the
-        // end of its duration ("stopped ·", "blocked · just"; rig captures
-        // e5 and f3, 2026-09-02).
-        width: Math.max(0, parent.width
-          - stateDot.width - kindText.width - stateLabel.width
-          - (row.lowConfidence ? (6 + parent.spacing) : 0)
-          - parent.spacing * 3)
       }
 
-      // Low-confidence dot: shape (outlined circle) plus a tooltip, never
-      // color alone, per the spec's accessibility rule for heuristic status.
+      // Low-confidence marker: shape plus a tooltip, never color alone.
       Rectangle {
+        id: lowDot
         visible: row.lowConfidence
         width: 6; height: 6; radius: 3
         color: "transparent"
         border.color: row.dim
         border.width: 1
+        anchors.right: stateLabel.left
+        anchors.rightMargin: Style.space(6)
         anchors.verticalCenter: parent.verticalCenter
 
         MouseArea { id: dotHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton; z: 1 }
         PanelToolTip {
           visible: dotHover.containsMouse
-          text: "status inferred from on-screen text; no lifecycle hook available."
+          text: "state inferred from on-screen text; no lifecycle hook for this agent"
           fontFamily: row.fontFamily
         }
       }
 
-      // Praneet, rig, 2026-09-02: after confirming Stop nothing changed on
-      // screen until the next poll, which read as "did that work?". While
-      // the stop runs the state label becomes a spinner plus "stopping",
-      // and the action buttons stand down.
       Text {
         id: stateLabel
         textFormat: Text.PlainText
-        text: row.stopping
-          ? (row.spinnerFrames[row.spinnerIndex] + " stopping")
-          : (row.state + (row.durationText() !== "" ? " · " + row.durationText() : ""))
-        color: row.stopping ? row.urgentColor : row.dim
+        text: row.stateText()
+        color: row.stateTextColor
         font.family: row.fontFamily
-        font.pixelSize: Style.font.caption
+        font.pixelSize: row.emphasized ? Style.font.bodySmall : Style.font.caption
+        font.bold: row.emphasized
+        elide: Text.ElideLeft
+        // Never wider than about half the row, so a long result message
+        // leaves the name readable; the message elides on the left where
+        // the age sits, and the whole text is in the tooltip below.
+        width: Math.min(implicitWidth, Math.floor(parent.width * 0.55))
+        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
+
+        MouseArea { id: stateHover; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton; z: 1 }
+        PanelToolTip {
+          visible: stateHover.containsMouse && stateLabel.truncated
+          text: row.stateText()
+          fontFamily: row.fontFamily
+        }
       }
     }
 
-    // ---------- workspace / owner / children ----------
-    Text {
-      visible: !row.sendOpen
-      textFormat: Text.PlainText
+    // ---------- line 2: goal or project · branch, and the mode ----------
+    Item {
       width: parent.width
-      text: [row.branch, row.ownerLabel,
-             row.childCount > 0 ? (row.childCount + " child" + (row.childCount === 1 ? "" : "ren")) : ""]
-        .filter(function(t) { return t !== "" }).join(" · ")
-      color: row.dim
-      font.family: row.fontFamily
-      font.pixelSize: Style.font.caption
-      elide: Text.ElideRight
+      height: Math.max(detailLabel.implicitHeight, modeLabel.implicitHeight)
+      visible: !row.sendOpen
+
+      Text {
+        id: detailLabel
+        textFormat: Text.PlainText
+        text: row.detailText !== "" ? row.detailText : row.agentKind
+        color: row.dim
+        font.family: row.fontFamily
+        font.pixelSize: Style.font.caption
+        elide: Text.ElideRight
+        anchors.left: parent.left
+        anchors.leftMargin: Style.space(16)
+        anchors.right: modeLabel.left
+        anchors.rightMargin: Style.space(8)
+        anchors.verticalCenter: parent.verticalCenter
+      }
+
+      Text {
+        id: modeLabel
+        textFormat: Text.PlainText
+        // Personal runs with the harness's no-prompt flags; that is the
+        // fact a person most needs to see at a glance, so it never hides.
+        text: row.mode !== "" ? row.mode : row.agentKind
+        color: row.mode === "shared" || row.mode === "restricted" ? row.accent : row.dim
+        font.family: row.fontFamily
+        font.pixelSize: Style.font.caption
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+      }
     }
 
     // ---------- inline Send field ----------
@@ -227,14 +277,11 @@ CursorSurface {
 
       TextField {
         id: sendField
-        // VERIFY ON RIG: plain QtQuick.Controls.TextField, not an
-        // Omarchy-themed input -- neither reference plugin uses a text
-        // input, so there is no confirmed themed equivalent to reach for.
-        // It may look inconsistent against the shell's own controls until
-        // checked on the rig.
         width: parent.width - sendButton.width - Style.space(6)
-        placeholderText: "Send an instruction…"
+        placeholderText: row.isOrphaned ? "Queue an instruction, delivered on revive…" : "Send an instruction…"
         focus: row.sendOpen
+        foreground: row.foreground
+        accent: row.accent
         onAccepted: { row.sendSubmitRequested(row.sid, text); text = "" }
         Keys.onEscapePressed: row.sendCancelRequested(row.sid)
       }
@@ -248,26 +295,35 @@ CursorSurface {
       }
     }
 
-    // ---------- actions: Send / Stop / Receipt ----------
+    // ---------- line 3, cursor row only: the actions ----------
     Row {
       width: parent.width
-      spacing: Style.space(10)
-      visible: !row.sendOpen
-      // "Row height and every action control are at least Style.space(4)
-      // tall" per the spec's accessibility section, applied literally here.
-      height: Math.max(Style.space(4), implicitHeight)
+      spacing: Style.space(8)
+      visible: row.hasCursor && !row.sendOpen
+      topPadding: Style.space(4)
 
       Button {
+        text: row.openLabel
+        bordered: true
+        enabled: !row.stopping && row.busyText === ""
+        foreground: row.foreground
+        fontFamily: row.fontFamily
+        fontSize: Style.font.caption
+        onClicked: row.isEnded ? row.receiptRequested(row.sid) : row.openRequested(row.sid)
+      }
+      Button {
+        visible: row.isLive || row.isOrphaned
         text: "s Send"
         bordered: true
-        enabled: !row.stopping
+        enabled: !row.stopping && row.busyText === ""
         foreground: row.foreground
         fontFamily: row.fontFamily
         fontSize: Style.font.caption
         onClicked: row.sendOpenRequested(row.sid)
       }
       Button {
-        text: row.stopping ? "stopping…" : (row.stopArmed ? "x Confirm stop" : "x Stop")
+        visible: row.isLive || row.isOrphaned
+        text: row.stopLabel()
         bordered: true
         enabled: !row.stopping
         foreground: (row.stopArmed || row.stopping) ? row.urgentColor : row.foreground
@@ -275,19 +331,11 @@ CursorSurface {
         fontSize: Style.font.caption
         onClicked: row.stopArmed ? row.stopConfirmRequested(row.sid) : row.stopArmRequested(row.sid)
       }
-      Button {
-        text: "r Receipt"
-        bordered: true
-        foreground: row.foreground
-        fontFamily: row.fontFamily
-        fontSize: Style.font.caption
-        onClicked: row.receiptRequested(row.sid)
-      }
     }
   }
 
   PanelToolTip {
-    visible: rowMouse.containsMouse && row.branch !== ""
+    visible: rowMouse.containsMouse && !row.hasCursor && row.branch !== ""
     text: row.branch
     fontFamily: row.fontFamily
   }
