@@ -30,6 +30,7 @@ import shlex
 import socket
 import subprocess
 import sys
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -629,11 +630,33 @@ def main(argv: Optional[list] = None) -> int:
     nudge_thread = threading.Thread(target=herdr_nudge_thread, args=(wake_event, stop_event), daemon=True)
     nudge_thread.start()
 
+    # Herdr status changes only reach events.jsonl through the reconciler
+    # (01-session-model.md: the reconciler writes status.changed from
+    # Herdr's agent status). The watcher is the one long-lived process, so
+    # it runs `reconcile` on every Herdr nudge and at least every
+    # `reconcile_every` seconds; a failure is logged and never fatal.
+    reconcile_every = 5.0
+    last_reconcile = 0.0
+    reconcile_cmd = shutil.which("omarchy-agent-session-reconcile") or "omarchy-agent-session-reconcile"
+
+    def reconcile(force: bool) -> None:
+        nonlocal last_reconcile
+        now = time.monotonic()
+        if not force and now - last_reconcile < reconcile_every:
+            return
+        last_reconcile = now
+        try:
+            subprocess.run([reconcile_cmd], capture_output=True, text=True, timeout=30, check=False)
+        except (OSError, subprocess.SubprocessError) as exc:
+            print(f"omarchy-agent-session-watch: reconcile failed ({exc})", file=sys.stderr)
+
     try:
         while True:
+            nudged = wake_event.is_set()
+            wake_event.clear()
+            reconcile(force=nudged)
             watcher.scan_once()
             wake_event.wait(args.interval)
-            wake_event.clear()
     except KeyboardInterrupt:
         pass
     finally:
