@@ -96,11 +96,20 @@ class CoreTestCase(unittest.TestCase):
 
     def start_fake_herdr(self, agent_start_result=None):
         self.fake_herdr = FakeHerdrServer(self.herdr_socket)
-        self.fake_herdr.set_result("agent.start", agent_start_result or {
-            "session": "s1", "workspace_id": "w1", "tab_id": "t1", "pane_id": "p1", "agent_id": "a1",
+        # Real Herdr 0.8.2 shapes (verified on the rig 2026-09-02): a
+        # workspace.create returns its root pane; agent.start returns the
+        # agent whose `name` is the alias the session layer calls agent_id.
+        self.fake_herdr.set_result("workspace.create", {
+            "root_pane": {"pane_id": "p1", "workspace_id": "w1", "tab_id": "t1"},
+            "workspace": {"workspace_id": "w1"},
         })
-        self.fake_herdr.set_result("agent.list", [])
-        self.fake_herdr.set_result("pane.list", [])
+        self.fake_herdr.set_result("agent.start", agent_start_result or (
+            lambda params: {"agent": {"name": params.get("name", "a1"), "agent": params.get("kind"),
+                                      "pane_id": params.get("pane_id", "p1"), "workspace_id": "w1", "tab_id": "t1",
+                                      "agent_status": "idle"}}))
+        self.fake_herdr.set_result("agent.list", {"agents": []})
+        self.fake_herdr.set_result("pane.list", {"panes": []})
+        self.fake_herdr.set_result("pane.report_metadata", {"type": "ok"})
         self.fake_herdr.start()
         return self.fake_herdr
 
@@ -134,13 +143,16 @@ class TestCreateAndList(CoreTestCase):
         self.assertEqual(record["mode"], "personal")
         self.assertEqual(record["status"]["state"], "working")
         self.assertIsNotNone(record["runtime"])
-        self.assertEqual(record["runtime"]["agent_id"], "a1")
+        self.assertTrue(record["runtime"]["agent_id"])
 
-        # agent.start actually received the Personal-mode flags.
+        # agent.start actually received the Personal-mode flags, and a
+        # workspace was created for the pane first.
+        self.assertEqual(len(self.fake_herdr.calls("workspace.create")), 1)
         start_calls = self.fake_herdr.calls("agent.start")
         self.assertEqual(len(start_calls), 1)
-        self.assertIn("--permission-mode", start_calls[0]["flags"])
-        self.assertIn("auto", start_calls[0]["flags"])
+        self.assertEqual(start_calls[0]["pane_id"], "p1")
+        self.assertIn("--permission-mode", start_calls[0]["args"])
+        self.assertIn("auto", start_calls[0]["args"])
 
     def test_started_with_command_reflects_the_actual_argv_not_the_process_argv(self):
         # Regression: started_with.command must be built from the argv
@@ -515,13 +527,13 @@ class TestReceiptComputation(CoreTestCase):
 class TestOpen(CoreTestCase):
     def test_open_bound_and_live_confirms_binding(self):
         self.start_fake_herdr()
-        self.fake_herdr.set_result("agent.get", {"state": "working"})
+        self.fake_herdr.set_result("agent.get", {"agent": {"name": "a1", "agent_status": "working"}})
         runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
                    "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
         session_id = make_bare_session(self.store, "bound-live", runtime=runtime, state="working")
         rc, out, err = self.run_cli(["open", session_id])
         self.assertEqual(rc, 0, err)
-        self.assertEqual(self.fake_herdr.calls("agent.get"), [{"agent_id": "a1"}])
+        self.assertEqual(self.fake_herdr.calls("agent.get"), [{"target": "a1"}])
 
     def test_open_orphaned_with_ref_resumes(self):
         self.start_fake_herdr()
@@ -535,7 +547,7 @@ class TestOpen(CoreTestCase):
         record = self.store.try_load(session_id)
         self.assertEqual(record["status"]["state"], "working")
         self.assertIsNotNone(record["runtime"])
-        start_flags = self.fake_herdr.calls("agent.start")[-1]["flags"]
+        start_flags = self.fake_herdr.calls("agent.start")[-1]["args"]
         self.assertEqual(start_flags[:2], ["--resume", "abc123"])
 
     def test_open_orphaned_without_ref_starts_fresh(self):
@@ -670,8 +682,8 @@ class TestWorktreeCleanup(CoreTestCase):
 class TestReconcile(CoreTestCase):
     def test_reconcile_marks_missing_pane_orphaned(self):
         self.start_fake_herdr()
-        self.fake_herdr.set_result("agent.list", [])
-        self.fake_herdr.set_result("pane.list", [])
+        self.fake_herdr.set_result("agent.list", {"agents": []})
+        self.fake_herdr.set_result("pane.list", {"panes": []})
         runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
                    "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
         session_id = make_bare_session(self.store, "will-be-orphaned", runtime=runtime, state="working")
@@ -693,8 +705,8 @@ class TestReconcile(CoreTestCase):
 
     def test_reconcile_leaves_a_still_present_pane_alone(self):
         self.start_fake_herdr()
-        self.fake_herdr.set_result("agent.list", [{"agent_id": "a1", "kind": "claude", "name": "still-here"}])
-        self.fake_herdr.set_result("pane.list", [{"pane_id": "p1"}])
+        self.fake_herdr.set_result("agent.list", {"agents": [{"name": "a1", "agent": "claude", "pane_id": "p1"}]})
+        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "p1"}]})
         runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
                    "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
         session_id = make_bare_session(self.store, "still-alive", runtime=runtime, state="working")
@@ -707,8 +719,8 @@ class TestReconcile(CoreTestCase):
 
     def test_reconcile_adopts_an_unmatched_herdr_agent(self):
         self.start_fake_herdr()
-        self.fake_herdr.set_result("agent.list", [{"agent_id": "orphan-agent", "kind": "claude", "name": "outside-launcher"}])
-        self.fake_herdr.set_result("pane.list", [{"pane_id": "orphan-pane"}])
+        self.fake_herdr.set_result("agent.list", {"agents": [{"name": "orphan-agent", "agent": "claude", "pane_id": "orphan-pane", "workspace_id": "w9", "tab_id": "w9:t1"}]})
+        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "orphan-pane"}]})
 
         rc, out, err = self.run_cli(["reconcile", "--json"])
         self.assertEqual(rc, 0, err)

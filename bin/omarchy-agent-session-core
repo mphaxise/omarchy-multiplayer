@@ -564,12 +564,14 @@ class HerdrClient:
         self._next_id = 0
 
     def _id(self):
+        # Herdr 0.8.2 rejects integer ids ("invalid type: integer, expected
+        # a string"); verified on the rig 2026-09-02.
         self._next_id += 1
-        return self._next_id
+        return f"omarchy-agent-session-{os.getpid()}-{self._next_id}"
 
-    def _connect(self):
+    def _connect(self, timeout=None):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(self.timeout)
+        sock.settimeout(timeout or self.timeout)
         try:
             sock.connect(str(self.socket_path))
         except OSError as e:
@@ -577,13 +579,16 @@ class HerdrClient:
             raise HerdrUnavailable(f"cannot reach Herdr socket at {self.socket_path}: {e}") from e
         return sock
 
-    def call(self, method, params=None):
+    def call(self, method, params=None, timeout=None):
         """Generic escape hatch for a Herdr method beyond the named ones
         below (e.g. worktree.open, worktree.remove, agent.send_keys,
         agent.focus, agent.read -- named by 02-command-surface.md /
         07-worktrees.md but not part of this client's required method
-        list)."""
-        sock = self._connect()
+        list). `timeout` (seconds) overrides the socket timeout for calls
+        that legitimately block, such as a prompt or wait with a long
+        timeout_ms; without it a 5 s socket timeout cut a 180 s wait short
+        (rig, 2026-09-02)."""
+        sock = self._connect(timeout)
         try:
             req = {"id": self._id(), "method": method, "params": params or {}}
             try:
@@ -605,34 +610,84 @@ class HerdrClient:
         finally:
             sock.close()
 
+    # The methods below keep the parameter names the command layer uses and
+    # translate them into Herdr 0.8.2's actual request shapes, all verified
+    # on the rig 2026-09-02 against `herdr api schema --json` (protocol 20).
+
     def agent_list(self, **params):
-        return self.call("agent.list", params)
+        """Herdr agents carry `name` (the alias) and `agent` (the kind); the
+        session record calls those agent_id and kind, so both spellings are
+        present on every returned entry."""
+        result = self.call("agent.list", params) or {}
+        agents = []
+        for a in result.get("agents", []):
+            a = dict(a)
+            a.setdefault("agent_id", a.get("name"))
+            a.setdefault("kind", a.get("agent"))
+            agents.append(a)
+        return agents
 
     def pane_list(self, **params):
-        return self.call("pane.list", params)
+        result = self.call("pane.list", params) or {}
+        return result.get("panes", [])
 
-    def agent_get(self, **params):
-        return self.call("agent.get", params)
+    def agent_get(self, agent_id=None, target=None, **_):
+        result = self.call("agent.get", {"target": target or agent_id}) or {}
+        return result.get("agent", result)
 
-    def agent_start(self, **params):
-        return self.call("agent.start", params)
+    def agent_start(self, alias, kind, cwd=None, flags=None, env=None, focus=False, pane_id=None, session_id=None, timeout_ms=90000):
+        """Herdr needs a pane at a shell prompt first. Without a pane_id,
+        create a workspace at cwd (its root pane is a fresh shell), then
+        agent.start into that pane. Returns the runtime binding shape the
+        session record stores."""
+        workspace_id = tab_id = None
+        if pane_id is None:
+            created = self.call("workspace.create", {"cwd": cwd, "label": alias, "env": env or {}, "focus": bool(focus)}) or {}
+            root = created.get("root_pane") or {}
+            pane_id = root.get("pane_id")
+            workspace_id = root.get("workspace_id") or (created.get("workspace") or {}).get("workspace_id")
+            tab_id = root.get("tab_id")
+            if not pane_id:
+                raise HerdrError("no_pane", "workspace.create returned no root pane", created)
+        # A pane Herdr just created needs a moment to reach its shell prompt;
+        # agent.start answers "is not an available shell" until then
+        # (rig, 2026-09-02). Retry for up to ten seconds on that one error.
+        started = None
+        for attempt in range(20):
+            try:
+                started = self.call("agent.start", {"name": alias, "kind": kind, "pane_id": pane_id,
+                                                    "args": list(flags or []), "timeout_ms": timeout_ms}) or {}
+                break
+            except HerdrError as e:
+                if "not an available shell" in str(e) and attempt < 19:
+                    time.sleep(0.5)
+                    continue
+                raise
+        agent = started.get("agent") or {}
+        if session_id:
+            with contextlib.suppress(HerdrError, HerdrUnavailable):
+                self.call("pane.report_metadata", {"pane_id": pane_id, "source": "omarchy-agent-session",
+                                                   "title": alias, "tokens": {"session_id": session_id}})
+        return {"session": None, "workspace_id": workspace_id or agent.get("workspace_id"),
+                "tab_id": tab_id or agent.get("tab_id"), "pane_id": agent.get("pane_id") or pane_id,
+                "agent_id": agent.get("name") or alias}
 
-    def agent_prompt(self, **params):
+    def agent_prompt(self, alias=None, text="", wait=False, until=None, timeout_ms=None, target=None, **_):
+        params = {"target": target or alias, "text": text}
+        if wait:
+            params["wait"] = {"until": list(until or ["idle", "done", "blocked"]), "timeout_ms": timeout_ms or 90000}
+            return self.call("agent.prompt", params, timeout=(timeout_ms or 90000) / 1000 + 10)
         return self.call("agent.prompt", params)
 
-    def agent_rename(self, **params):
-        return self.call("agent.rename", params)
+    def agent_rename(self, agent_id=None, new_alias=None, target=None, name=None, **_):
+        return self.call("agent.rename", {"target": target or agent_id, "name": name or new_alias})
 
-    def pane_close(self, **params):
-        return self.call("pane.close", params)
+    def pane_close(self, pane_id, **_):
+        return self.call("pane.close", {"pane_id": pane_id})
 
-    def worktree_create(self, **params):
-        return self.call("worktree.create", params)
-
-    def snapshot(self, **params):
-        # Verified on the rig 2026-09-02: the method is session.snapshot and
-        # the result carries {"type": "session_snapshot", "snapshot": {...}}.
-        return self.call("session.snapshot", params)
+    def worktree_create(self, repo=None, path=None, branch=None, base=None, focus=False, label=None, **_):
+        return self.call("worktree.create", {"cwd": repo, "path": path, "branch": branch, "base": base,
+                                             "focus": bool(focus), "label": label or branch})
 
     def events_subscribe(self, pane_ids=None, types=None):
         """Yields parsed events from a long-lived stream.
@@ -724,22 +779,21 @@ def create_worktree(repo_root, dest, branch, base_branch, herdr):
     dest.parent.mkdir(parents=True, exist_ok=True)
     if herdr is not None:
         try:
-            herdr.worktree_create(repo=str(repo_root), path=str(dest), branch=branch,
-                                   base=base_branch, focus=False)
-            return "herdr"
+            created = herdr.worktree_create(repo=str(repo_root), path=str(dest), branch=branch,
+                                            base=base_branch, focus=False) or {}
+            # Herdr opens the new worktree as a workspace whose root pane is
+            # a fresh shell; the caller starts the harness in that pane so
+            # no second workspace is created (verified on the rig 2026-09-02).
+            return "herdr", created.get("root_pane") or {}
         except HerdrUnavailable:
             pass  # 07-worktrees.md: plain git when there is no Herdr backend
     run_git(["worktree", "add", str(dest), "-b", branch, base_branch], cwd=repo_root)
-    return "git"
+    return "git", {}
 
 
 def remove_worktree(repo_root, worktree_path, herdr):
-    if herdr is not None:
-        try:
-            herdr.call("worktree.remove", {"repo": str(repo_root), "path": str(worktree_path)})
-            return "herdr"
-        except HerdrUnavailable:
-            pass
+    # Herdr's worktree.remove takes the worktree's workspace_id, which the
+    # session record does not keep, so removal goes through git directly.
     run_git(["worktree", "remove", str(worktree_path)], cwd=repo_root, check=False)
     return "git"
 
@@ -1246,7 +1300,7 @@ def summarize_env():
     return {"shell": os.environ.get("SHELL"), "term": os.environ.get("TERM")}
 
 
-def resolve_workspace(cwd, name, worktree_ref, no_worktree, herdr):
+def resolve_workspace(cwd, name, worktree_ref, no_worktree, herdr, base=None):
     cwd = pathlib.Path(cwd).resolve()
     repo_root = git_top_level(cwd)
 
@@ -1266,13 +1320,14 @@ def resolve_workspace(cwd, name, worktree_ref, no_worktree, herdr):
             "created_by_session": False,
         }
 
-    base_branch = git_current_branch(repo_root)
+    base_branch = base or git_current_branch(repo_root)
     branch_name = f"session/{git_safe_ref(name)}"
     dest = herdr_worktrees_directory() / git_safe_ref(name)
-    create_worktree(repo_root, dest, branch_name, base_branch, herdr)
+    _backend, root_pane = create_worktree(repo_root, dest, branch_name, base_branch, herdr)
     return {
         "repo_root": str(repo_root), "worktree_path": str(dest),
         "branch": branch_name, "base_branch": base_branch, "created_by_session": True,
+        "_herdr_root_pane": root_pane,
     }
 
 
@@ -1349,6 +1404,8 @@ def build_parser():
     p.add_argument("--cwd", default=".")
     p.add_argument("--owner")
     p.add_argument("--no-worktree", action="store_true")
+    p.add_argument("--base", help="branch or ref a new worktree starts from (default: the current branch)")
+    p.add_argument("--pick", action="store_true", help="open the Omarchy agent picker instead of using --agent")
     p.add_argument("--from", dest="from_session")
     p.add_argument("--json", action="store_true")
 
@@ -1485,7 +1542,8 @@ def cmd_new(args, ctx):
 
     cwd = str(pathlib.Path(args.cwd).resolve())
     session_id = new_ulid()
-    workspace = resolve_workspace(cwd, name, args.worktree, args.no_worktree, ctx.herdr)
+    workspace = resolve_workspace(cwd, name, args.worktree, args.no_worktree, ctx.herdr, base=getattr(args, "base", None))
+    herdr_root_pane = workspace.pop("_herdr_root_pane", None) or {}
     if args.worktree:
         check_invariant6(ctx.store, workspace, workspace["created_by_session"])
 
@@ -1519,7 +1577,11 @@ def cmd_new(args, ctx):
     try:
         result = ctx.herdr.agent_start(
             alias=alias, kind=kind, cwd=workspace["worktree_path"], flags=argv, env=env, focus=False,
+            session_id=session_id, pane_id=herdr_root_pane.get("pane_id"),
         )
+        if herdr_root_pane.get("pane_id"):
+            result["workspace_id"] = result.get("workspace_id") or herdr_root_pane.get("workspace_id")
+            result["tab_id"] = result.get("tab_id") or herdr_root_pane.get("tab_id")
     except HerdrUnavailable as e:
         eprint(f"session {session_id} created but not started: {e}")
         raise
@@ -1629,7 +1691,8 @@ def cmd_open(args, ctx):
             detail = "no transcript to resume"
         alias = derive_herdr_alias(session["name"], session["id"])
         result = ctx.herdr.agent_start(alias=alias, kind=session["agent"]["kind"],
-                                        cwd=worktree_path, flags=argv, env=env, focus=False)
+                                        cwd=worktree_path, flags=argv, env=env, focus=False,
+                                        session_id=session["id"])
         result = result or {}
         new_runtime = {"backend": "herdr", "session": result.get("session"),
                        "workspace_id": result.get("workspace_id"), "tab_id": result.get("tab_id"),
@@ -1687,9 +1750,14 @@ def cmd_send(args, ctx):
         return EXIT_OK  # stays queued; delivered on the next `open`
 
     alias = derive_herdr_alias(session["name"], session["id"])
+    # A freshly started harness reports `unknown` for a few seconds and
+    # rejects prompts as "not an active named agent" (rig, 2026-09-02);
+    # wait for a classified state first, bounded, and ignore failures.
+    with contextlib.suppress(HerdrError, HerdrUnavailable):
+        ctx.herdr.call("agent.wait", {"target": alias, "until": ["idle", "blocked", "done", "working"], "timeout_ms": 15000}, timeout=20)
     try:
-        ctx.herdr.agent_prompt(alias=alias, text=delivered_text, wait=args.wait,
-                                until=args.until, timeout_ms=args.timeout)
+        prompt_result = ctx.herdr.agent_prompt(alias=alias, text=delivered_text, wait=args.wait,
+                                               until=args.until, timeout_ms=args.timeout) or {}
     except HerdrError as e:
         ev = ctx.store.append_event(session["id"], "instruction.dropped", author,
                                      {"instruction_id": instr["id"], "reason": "agent_blocked"})
@@ -1698,6 +1766,9 @@ def cmd_send(args, ctx):
         ctx.store.save_session(session)
         raise ConflictError(f"instruction dropped: {e}") from e
 
+    live_agent = (prompt_result.get("agent") or {}) if isinstance(prompt_result, dict) else {}
+    if live_agent.get("agent_status"):
+        session = apply_herdr_status(ctx.store, session, live_agent.get("agent_status"))
     ev = ctx.store.append_event(session["id"], "instruction.delivered", author,
                                  {"instruction_id": instr["id"], "delivery": "steer"})
     session["queue"] = [q for q in session["queue"] if q["id"] != instr["id"]]
@@ -1717,7 +1788,7 @@ def _stop_one(session_id, store, herdr, actor, reason):
     if state != "orphaned" and runtime is not None:
         alias = derive_herdr_alias(session["name"], session["id"])
         with contextlib.suppress(HerdrError):
-            herdr.call("agent.send_keys", {"alias": alias, "keys": "ctrl+c"})  # courtesy; verify on rig
+            herdr.call("agent.send_keys", {"target": alias, "keys": ["ctrl+c"]})  # courtesy interrupt before closing
         herdr.pane_close(pane_id=runtime.get("pane_id"))  # let HerdrUnavailable propagate
     cleanup_workspace_if_owned(session, herdr)
     ev = store.append_event(session_id, "status.changed", actor, {"from": state, "to": "stopped", "source": actor["kind"], "detail": reason})
@@ -1728,6 +1799,14 @@ def _stop_one(session_id, store, herdr, actor, reason):
         session["runtime"] = None
         session["state_version"] = ev["seq"]
     ev = store.append_event(session_id, "session.ended", actor, {"state": "stopped", "reason": reason})
+    session["state_version"] = ev["seq"]
+    store.save_session(session)
+    # 05-receipts-and-artifacts.md: the receipt is written at done, failed,
+    # and stopped. Verified missing on the rig 2026-09-02; added here.
+    receipt = compute_receipt(store, session, "stopped", reason, session["status"]["since"])
+    write_receipt(store, receipt)
+    ev = store.append_event(session_id, "receipt.written", actor,
+                            {"receipt_summary": {"end_state": "stopped", "state_version": receipt["state_version"]}})
     session["state_version"] = ev["seq"]
     store.save_session(session)
 
@@ -1793,8 +1872,8 @@ def cmd_log(args, ctx):
     if args.transcript is not None:
         try:
             result = ctx.herdr.call("agent.read", {
-                "agent_id": (session.get("runtime") or {}).get("agent_id"),
-                "source": "recent-unwrapped", "lines": args.transcript,
+                "target": (session.get("runtime") or {}).get("agent_id"),
+                "source": "recent_unwrapped", "lines": args.transcript,
             })
         except (HerdrUnavailable, HerdrError) as e:
             # log's own Exit table is 0,3 only (no 4): degrade gracefully.
@@ -1911,7 +1990,7 @@ def cmd_mode(args, ctx):
             argv = list(RESUME_FLAGS.get(session["agent"]["kind"], ["--resume"])) + [ref] + argv
         alias = derive_herdr_alias(session["name"], session["id"])
         with contextlib.suppress(HerdrError):
-            ctx.herdr.call("agent.send_keys", {"alias": alias, "keys": "ctrl+c"})
+            ctx.herdr.call("agent.send_keys", {"target": alias, "keys": ["ctrl+c"]})
         ctx.herdr.pane_close(pane_id=runtime.get("pane_id"))  # HerdrUnavailable propagates -> exit 4
         result = ctx.herdr.agent_start(alias=alias, kind=session["agent"]["kind"],
                                         cwd=(session.get("workspace") or {}).get("worktree_path"),
@@ -1961,6 +2040,33 @@ def cmd_done(args, ctx):
     return EXIT_OK
 
 
+HERDR_STATUS_MAP = {"blocked": "blocked", "working": "working", "idle": "idle", "done": "idle"}
+
+
+def apply_herdr_status(store, session, herdr_status, source="herdr-manifest", detail=None):
+    """Map a Herdr agent_status onto the session state machine
+    (01-session-model.md): done with a live pane means idle; unknown keeps
+    the previous state and records the detail. Appends status.changed only
+    when the state actually changes. Returns the (possibly updated) session."""
+    state = session["status"]["state"]
+    if state in TERMINAL_STATES or session.get("runtime") is None:
+        return session
+    if herdr_status == "unknown" or herdr_status is None:
+        if session["status"].get("detail") != "unknown":
+            session["status"]["detail"] = "unknown"
+            store.save_session(session)
+        return session
+    new_state = HERDR_STATUS_MAP.get(herdr_status)
+    if not new_state or new_state == state:
+        return session
+    ev = store.append_event(session["id"], "status.changed", agent_actor(session["id"], "herdr"),
+                            {"from": state, "to": new_state, "source": source, "detail": detail})
+    session["status"] = {"state": new_state, "since": ev["ts"], "source": source, "detail": detail}
+    session["state_version"] = ev["seq"]
+    store.save_session(session)
+    return session
+
+
 def cmd_reconcile(args, ctx):
     actor = system_actor()
     known = ctx.store.list_sessions()
@@ -1976,6 +2082,10 @@ def cmd_reconcile(args, ctx):
             continue
         agent_id, pane_id = runtime.get("agent_id"), runtime.get("pane_id")
         still_present = (agent_id and agent_id in live_agent_ids) or (pane_id and pane_id in live_pane_ids)
+        if still_present:
+            live = next((a for a in live_agents if a.get("agent_id") == agent_id), None)
+            if live is not None:
+                apply_herdr_status(ctx.store, s, live.get("agent_status"))
         if not still_present:
             ev = ctx.store.append_event(s["id"], "status.changed", actor,
                                          {"from": s["status"]["state"], "to": "orphaned",
