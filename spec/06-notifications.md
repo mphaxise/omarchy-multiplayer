@@ -37,7 +37,7 @@ The watcher opens Herdr's `events.subscribe` (filtered to `pane.agent_status_cha
 
 ## Text templates
 
-One line, name first, no separate body, so the whole notice reads at a glance:
+Title first, name first in the title, so the notice reads at a glance. The build adds a body line, `<agent> · <goal first line or branch> · <what a click does>`, and the sessions glyph, after the rig showed the title-only toast next to Omarchy's own crash toast with its icon and second line (2026-09-02):
 
 | Event | Text |
 |---|---|

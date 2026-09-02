@@ -50,7 +50,9 @@ Herdr agent aliases must match `[a-z][a-z0-9_-]{0,31}`; `new` derives one from t
 ## Commands
 
 ### `new`
-`new --agent <kind> [--mode personal|shared|restricted] [--name <text>] [--goal <text>] [--base <ref>] [--worktree <path>] [--no-worktree] [--from <session>] [--owner <actor>] [--cwd <path>] [--pick] [-- <agent args>]`
+`new --agent <kind> [--mode personal|shared|restricted] [--name <text>] [--goal <text>] [--prompt <text>] [--base <ref>] [--worktree <path>] [--no-worktree] [--from <session>] [--owner <actor>] [--cwd <path>] [--pick] [-- <agent args>]`
+
+`--prompt` delivers its text through `agent.prompt` once the harness is ready, after an `agent.wait`, instead of as a harness argument: Herdr refuses argv it cannot encode for the shell, which the multi-line crash prompt is (rig, 2026-09-02).
 
 `--base` names the branch a new worktree starts from (default: the current branch); `--worktree <path>` joins an existing worktree instead of creating one (both records mark `created_by_session: false`, invariant 6); `--no-worktree` runs in the working directory; `--from <session>` records lineage and flips the default mode to `shared` (`04-permission-modes.md`); `--pick` opens the agent picker; `--owner` at creation is folded into `session.created` and writes no `owner.assigned` event.
 Allocates the id, resolves the worktree per `07-worktrees.md`, starts the harness. Writes `session.created`, `runtime.bound`, `goal.set` if `--goal` given; `status` opens `starting`, moves to `working` on Herdr's confirmation.
@@ -164,9 +166,9 @@ Example: `omarchy agent session reconcile --json`
 
 `omarchy agent [<kind>]` now calls `session new` (mode from `omarchy-default-agent` unless given, cwd `~/Work` as today), then `open`. Changes: the app id moves from the one shared `org.omarchy.agent` to a per-session `org.omarchy.session.<id>`, so each launch is an independent, later-reopenable window instead of one shared one. Stays: the eleven agent choices, the `~/Work` default, and the rule that a bypass-permissions launch flag appears only under Personal mode.
 
-`omarchy agent prompt "<text>"` calls `session new` with `<text>` forwarded after `--` as the harness's initial argument, exactly as it is typed into the harness today, then `open`. Changes: the prompt now has a durable, named, receipted session behind it. Stays: the prompt text itself and how it reaches the harness.
+`omarchy agent prompt "<text>"` calls `session new --prompt "<text>"`, which delivers the text through `agent.prompt` once the harness is ready, then `open`. Changes: the prompt now has a durable, named, receipted session behind it. Stays: the prompt text itself and how it reaches the harness.
 
-`omarchy agent crash <pid> <comm> <exe> <signal>` calls `session new --name "crash-<pid>" --goal "diagnose crash of <comm> (pid <pid>)"` with the built crash prompt forwarded the same way, then `open`. Changes: a crash diagnosis becomes a session with a receipt instead of an anonymous terminal. Stays: the prompt text built from `default/agents/skills/diagnose-crash/SKILL.md` and the `omarchy-crash-watch` to `omarchy-notification-send --exec omarchy-agent-crash` pipeline that triggers it.
+`omarchy agent crash <pid> <comm> <exe> <signal>` calls `session new --name "crash-<pid>" --goal "diagnose crash of <comm> (pid <pid>)"` with the built crash prompt passed as `--prompt`, then `open`. Changes: a crash diagnosis becomes a session with a receipt instead of an anonymous terminal. Stays: the prompt text built from `default/agents/skills/diagnose-crash/SKILL.md` and the `omarchy-crash-watch` to `omarchy-notification-send --exec omarchy-agent-crash` pipeline that triggers it.
 
 ## Verify on rig
 
