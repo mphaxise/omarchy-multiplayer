@@ -113,6 +113,31 @@ def render_text(kind: str, record: dict, event: dict, lookup_name: Callable[[str
     return f"{name}: {kind}"
 
 
+def render_body(kind: str, record: dict) -> str:
+    """Second line under the headline: what the session is for and what a
+    click does, so the toast reads like the crash toast ("Click to diagnose
+    with AI") instead of a bare name."""
+    agent = ((record.get("agent") or {}).get("kind") or "agent")
+    goal = record.get("goal") or {}
+    goal_text = (goal.get("text") if isinstance(goal, dict) else None) or ""
+    goal_text = goal_text.strip().splitlines()[0] if goal_text.strip() else ""
+    branch = (record.get("workspace") or {}).get("branch") or ""
+    what = goal_text or branch or ""
+    if kind in ("waiting", "blocked"):
+        action = "Click to open and answer"
+    elif kind == "done":
+        action = "Click to open the receipt"
+    elif kind == "orphaned":
+        action = "Click to revive"
+    else:
+        action = "Click to open"
+    head = f"{agent} · {what}" if what else agent
+    return f"{head} · {action}"
+
+
+SESSION_GLYPH = "\U000f06a9"  # nf-md-robot, the glyph the sessions widget uses
+
+
 _DIGEST_LABELS = {
     "waiting": "waiting",
     "blocked": "blocked",
@@ -156,7 +181,9 @@ class Notifier:
         replaces_id: Optional[int] = None,
         print_id: bool = True,
     ) -> Optional[int]:
-        argv = ["omarchy-notification-send", "--urgency", urgency]
+        # Same shape as omarchy-crash-watch's call: urgency, a glyph, a
+        # headline, a body, then --exec last (rig, 2026-09-02).
+        argv = ["omarchy-notification-send", "--urgency", urgency, "--glyph", SESSION_GLYPH]
         if replaces_id is not None:
             argv += ["--replace-id", str(replaces_id)]
         if print_id:
@@ -417,7 +444,10 @@ class SessionWatcher:
             return
 
         headline = render_text(kind, record, event, self._lookup_name)
-        exec_argv = ["omarchy-agent-session", "open", session_id]
+        description = render_body(kind, record)
+        # The click runs the real binary; the bare `omarchy-agent-session`
+        # group script only prints usage (rig, 2026-09-02).
+        exec_argv = ["omarchy-agent-session-open", session_id]
 
         self._prune_digest(now)
         pre_count = len(self._digest_sessions)
@@ -427,11 +457,11 @@ class SessionWatcher:
         self._digest_sessions[session_id] = (now, kind)
 
         if pre_count < DIGEST_THRESHOLD:
-            notice = PendingNotice(session_id, kind, urgency, headline, "", exec_argv, is_digest=False)
+            notice = PendingNotice(session_id, kind, urgency, headline, description, exec_argv, is_digest=False)
         else:
             notice = PendingNotice(
                 None, kind, self._digest_urgency(), self._digest_text(), "",
-                ["omarchy-agent-session", "list"], is_digest=True,
+                ["omarchy-agent-session-list"], is_digest=True,
             )
 
         self._deliver(notice, now, fullscreen_now)

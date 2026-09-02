@@ -100,7 +100,7 @@ class TestEventClassification(WatchTestCase):
         sent = self.notifier.sent[0]
         self.assertEqual(sent["headline"], "api-refactor needs an answer")
         self.assertEqual(sent["urgency"], "normal")
-        self.assertEqual(sent["exec_argv"], ["omarchy-agent-session", "open", "s1"])
+        self.assertEqual(sent["exec_argv"], ["omarchy-agent-session-open", "s1"])
 
     def test_failed_is_critical_with_detail(self):
         write_session(self.tmpdir, "s1", "api-refactor")
@@ -153,7 +153,7 @@ class TestEventClassification(WatchTestCase):
         self.assertEqual(sent["headline"], "api-refactor: write-tests finished (done)")
         self.assertEqual(sent["urgency"], "low")
         # Click action opens the parent, whose events.jsonl carried the event.
-        self.assertEqual(sent["exec_argv"], ["omarchy-agent-session", "open", "parent-1"])
+        self.assertEqual(sent["exec_argv"], ["omarchy-agent-session-open", "parent-1"])
 
 
 class TestCoalescing(WatchTestCase):
@@ -226,10 +226,10 @@ class TestDigest(WatchTestCase):
         # fourth individual toast.
         self.assertEqual(len(self.notifier.sent), 4)
         individual = [n for n in self.notifier.sent[:3]]
-        self.assertTrue(all(not n["exec_argv"] == ["omarchy-agent-session", "list"] for n in individual))
+        self.assertTrue(all(not n["exec_argv"] == ["omarchy-agent-session-list"] for n in individual))
 
         digest = self.notifier.sent[3]
-        self.assertEqual(digest["exec_argv"], ["omarchy-agent-session", "list"])
+        self.assertEqual(digest["exec_argv"], ["omarchy-agent-session-list"])
         self.assertEqual(digest["headline"], "4 sessions need you: 2 waiting, 1 blocked, 1 failed")
         self.assertEqual(digest["urgency"], "critical")  # a failed session is present
 
@@ -261,7 +261,7 @@ class TestDigest(WatchTestCase):
             append_event(self.tmpdir, sid, 1, "status.changed", {"from": "working", "to": to_state})
             self.clock.advance(1.0)
             watcher.scan_once(now=self.clock())
-        self.assertEqual(self.notifier.sent[3]["exec_argv"], ["omarchy-agent-session", "list"])
+        self.assertEqual(self.notifier.sent[3]["exec_argv"], ["omarchy-agent-session-list"])
 
         # A full 60s window with no further notify-worthy event: the digest
         # episode should be over, and the next event should be individual
@@ -273,7 +273,7 @@ class TestDigest(WatchTestCase):
 
         newest = self.notifier.sent[-1]
         self.assertEqual(newest["headline"], "s5 needs an answer")
-        self.assertNotEqual(newest["exec_argv"], ["omarchy-agent-session", "list"])
+        self.assertNotEqual(newest["exec_argv"], ["omarchy-agent-session-list"])
         self.assertIsNone(newest["replaces_id"])
 
 
@@ -404,7 +404,7 @@ class TestDryRunPrintsArgv(WatchTestCase):
         self.assertEqual(argv[0], "omarchy-notification-send")
         self.assertIn("--urgency", argv)
         self.assertIn("--exec", argv)
-        self.assertIn("omarchy-agent-session", argv)
+        self.assertIn("omarchy-agent-session-open", argv)
 
 
 if __name__ == "__main__":
