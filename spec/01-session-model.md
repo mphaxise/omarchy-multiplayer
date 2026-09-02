@@ -32,7 +32,7 @@ Stored at `~/.local/state/omarchy/sessions/<id>/session.json`, written atomicall
 | `participants` | list of `{actor, first_input_at, last_input_at}` | every actor whose instruction reached the session; bounded to 32 entries |
 | `agent` | `{kind, harness_session_ref, version}` | harness kind (`claude`, `codex`, `opencode`, and the rest of Omarchy's list); the harness's own resume id when known; harness version string when known |
 | `mode` | `personal` / `shared` / `restricted` | permission mode; see `04-permission-modes.md` |
-| `workspace` | `{repo_root, worktree_path, branch, base_branch, created_by_session}` | where the agent may write; see `07-worktrees.md` |
+| `workspace` | `{repo_root, worktree_path, branch, base_branch, created_by_session, worktree_removed?, worktree_removed_reason?}` | where the agent may write; the two optional fields are written at cleanup; see `07-worktrees.md` |
 | `runtime` | `{backend, session, workspace_id, tab_id, pane_id, agent_id}` or `null` | binding to the live Herdr pane; `null` when no pane is bound |
 | `status` | `{state, since, source, detail}` | current state; see the state machine |
 | `lineage` | `{parent_id, children, spawn_reason}` | parent session when spawned by another session; children it spawned |
@@ -102,7 +102,7 @@ Event types in slice 1:
 |---|---|
 | `session.created` | the initial record |
 | `session.renamed` | `from`, `to` |
-| `owner.assigned` | `from`, `to` |
+| `owner.assigned` | `from`, `to`, `assigned_by` |
 | `mode.changed` | `from`, `to`, `changed_by`; see `04-permission-modes.md` |
 | `preview.set` | `kind`, `value` |
 | `runtime.bound` | the runtime binding |
@@ -171,6 +171,8 @@ The reconciler runs on panel refresh and on a timer: it lists Herdr panes, compa
 
 ## Open questions for the rig
 
+- Whether Herdr's stored per-agent resume reference (named `agent_session` in its docs) and its custom state and metadata channel exist as documented on the installed version, and what their exact field names are.
+- How Herdr's five reported states (`blocked`, `working`, `done`, `idle`, `unknown`) map onto this model's `waiting` versus `blocked`: the docs describe `blocked` as needing the user, and the split between a question and an approval may need the harness's own hooks or screen text. Until the rig answers, the panel treats both as "needs you".
 - Whether Herdr on the ARM image exposes the socket API at the documented path and whether `events.subscribe` streams reliably to a long-lived reader started from the Quickshell process.
 - Which harness flags produce `waiting` versus `blocked` distinctions in Herdr's detection for Claude Code and Codex on the rig; the mapping table in `04-permission-modes.md` carries a verify-on-rig mark per row.
 - Whether Herdr's custom metadata channel survives a Herdr server reload-config, which Omarchy triggers on theme change.

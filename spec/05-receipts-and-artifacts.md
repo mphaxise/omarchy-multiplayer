@@ -54,11 +54,11 @@ The sidecar carries:
 
 ## Capture
 
-`capture window` and `capture region` produce the `capture` kind, both shelling out to Omarchy's screenshot path: the manual documents `omarchy capture screenshot windows` (snap to a window or monitor rectangle), `region` (freeform drag), and `fullscreen` (skip the picker, grab the focused monitor), each taking a second `save` or `copy` argument. `capture window` calls `windows` and `capture region` calls `region`, both with `save`, `OMARCHY_SCREENSHOT_DIR` redirected to a scratch path; the PNG then moves into `artifacts/` under its ULID name. A session with a registered `preview` window (`09-closed-loop-surfaces.md`) makes `capture window` target that window instead of whatever has focus.
+`capture --screenshot` produces the `capture` kind, with `--window` (default), `--region`, or `--fullscreen` choosing the mode, both shelling out to Omarchy's screenshot path: the manual documents `omarchy capture screenshot windows` (snap to a window or monitor rectangle), `region` (freeform drag), and `fullscreen` (skip the picker, grab the focused monitor), each taking a second `save` or `copy` argument. `--window` calls `windows` and `--region` calls `region`, both with `save`, `OMARCHY_SCREENSHOT_DIR` redirected to a scratch path; the PNG then moves into `artifacts/` under its ULID name. A session with a registered `preview` window (`09-closed-loop-surfaces.md`) makes `--window` target that window instead of whatever has focus.
 
-Whether `windows` completes without a person clicking to confirm the highlighted rectangle, so an unattended call actually returns a file, is not settled by the manual: verify on rig. If it cannot run unattended, `capture window` falls back to `fullscreen`, which the manual confirms skips the picker, and the sidecar's `source` records `monitor` so a full-screen grab is never mistaken for a tight crop.
+Whether `windows` completes without a person clicking to confirm the highlighted rectangle, so an unattended call actually returns a file, is not settled by the manual: verify on rig. If it cannot run unattended, `--window` falls back to `fullscreen`, which the manual confirms skips the picker, and the sidecar's `source` records `monitor` so a full-screen grab is never mistaken for a tight crop.
 
-A url artifact (`session artifact add --kind url --source <url>`) stores the URL as the artifact body and fetches the page title as the default `label` when none is given; a failed fetch leaves the label as the bare URL. A note (`session artifact add --kind note`) stores the given text verbatim. Neither touches the compositor or needs a rig check.
+A url artifact (`session artifact add <id> --kind url --source <url>`) stores the URL as the artifact body and fetches the page title as the default `label` when none is given; a failed fetch leaves the label as the bare URL. A note (`session artifact add <id> --kind note`) stores the given text verbatim. Neither touches the compositor or needs a rig check.
 
 `state` is `proposed` when the capture is taken against the session's own worktree or preview, before `branch` merges into `base_branch`. It is `live` when taken against something running `base_branch` itself: a baseline shot before any change, or a confirmation shot after the merge. The label is set at capture time and never edited afterward.
 
@@ -118,7 +118,7 @@ This is success signal 3, answered directly: a completed session shows workspace
 
 ## Verify on rig
 
-- Whether `omarchy capture screenshot windows` completes without an interactive click, for an unattended `capture window` call.
+- Whether `omarchy capture screenshot windows` completes without an interactive click, for an unattended `capture --screenshot --window` call.
 - The exact resume-id string format each harness returns, for `harness_session_ref` and the receipt's Agent line.
 - Whether `git rev-list <branch> --not --remotes` is the right unpushed test on the rig's git version, and how a repo with no remote at all should be flagged.
 

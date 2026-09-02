@@ -38,7 +38,7 @@ settings UI, sourced from `manifest.json`'s `barWidget.schema`.
   braces/parens/brackets with a small script (one false positive on a regex
   literal copied verbatim from Hermes's `scriptPath()`, confirmed as a
   checker limitation, not a real imbalance, once that literal was masked
-  out). Neither file was compiled or run — there is no Quickshell/QML engine
+  out). Neither file was compiled or run, there is no Quickshell/QML engine
   in this environment.
 
 ## Reference files actually read for this draft
@@ -80,7 +80,7 @@ schema and component contracts. All four were read in full.
 - **File split**: 03-sessions-panel.md describes a three-file Panel/Main/
   Session split mirroring `omarchy.agents`. This task's own file list asks
   for only `Panel.qml` and `Session.qml`, and describes Panel.qml as owning
-  the Process/Timer/parsing directly — matching Hermes's simpler one-file
+  the Process/Timer/parsing directly, matching Hermes's simpler one-file
   pattern instead. Built as instructed: no `Main.qml`; the data layer
   (Process, Timer, and the index.json FileView) lives in `Panel.qml`.
 - **Two data sources, not one**: the task's Panel.qml field list only
@@ -89,7 +89,7 @@ schema and component contracts. All four were read in full.
   spec's secondary `FileView` source provides. Kept both: `snapshot.sh` for
   session content, the `index.json` `FileView` solely for staleness.
 - **Command-surface naming conflicts among the sources themselves**: three
-  different forms appear across the inputs for "list the sessions as JSON" —
+  different forms appear across the inputs for "list the sessions as JSON" , 
   `omarchy-agent-session-list` (spec-02's stated binary convention),
   `omarchy agent session list` / bare `omarchy-agent-session list` (spec-02's
   and spec-03's own worked examples), and `omarchy-agent-session-core list`
@@ -141,9 +141,9 @@ schema and component contracts. All four were read in full.
 | File | Line | What's uncertain |
 |---|---|---|
 | `Panel.qml` | 207 | Whether `FileView.watchChanges` fires when `index.json` is replaced by rename rather than edited in place (spec-03 names this exact risk; the Timer-driven `snapshot.sh` poll is the fallback either way). |
-| `Panel.qml` | 355 | Whether `omarchy-launch-tui`'s `-e "$1" "${@:2}"` form runs a bare vendored script path directly, and whether it needs an app id at all — context-pack.md shows it reading `$APP_ID` from the environment rather than taking a `--app-id` flag the way `omarchy-launch-or-focus-tui` does. |
+| `Panel.qml` | 355 | Whether `omarchy-launch-tui`'s `-e "$1" "${@:2}"` form runs a bare vendored script path directly, and whether it needs an app id at all, context-pack.md shows it reading `$APP_ID` from the environment rather than taking a `--app-id` flag the way `omarchy-launch-or-focus-tui` does. |
 | `Panel.qml` | 406 | The bar glyph codepoint is a guess (a nerd-font private-use point); neither reference plugin renders an agent/session glyph, so this needs a real look on the rig's font. |
 | `Panel.qml` | 420 | The `needs_attention` badge is a manual Rectangle+Text overlay on `BarIconButton`; neither reference plugin shows a numeric badge, so a native badge/count property may already exist and wasn't used. |
 | `Panel.qml` | 467 | Keyboard selection does not scroll the selected row into view. Hermes's own scroll math assumes a fixed ~52px row height; rows here vary in height (the inline Send field grows a row), so that fixed-offset approach would misplace the scroll. Needs real per-row positions (e.g. a `ListView`) to do properly. |
 | `Session.qml` | 193 | The inline Send field is a plain `QtQuick.Controls.TextField`. Neither reference plugin uses a text input, so there is no confirmed Omarchy-themed equivalent; it may look inconsistent against the shell's own controls until checked on the rig. |
-| `scripts/snapshot.sh` | 15 | The real binary name for "list the sessions as JSON" is unconfirmed — three different forms appear across the spec files and this task's own instructions (see "Assumptions" above); the script tries `omarchy-agent-session-core` then `omarchy-agent-session-list`. |
+| `scripts/snapshot.sh` | 15 | The real binary name for "list the sessions as JSON" is unconfirmed, three different forms appear across the spec files and this task's own instructions (see "Assumptions" above); the script tries `omarchy-agent-session-core` then `omarchy-agent-session-list`. |

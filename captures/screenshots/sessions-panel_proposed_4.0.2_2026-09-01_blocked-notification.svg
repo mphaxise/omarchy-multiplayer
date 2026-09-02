@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <style>
+    text { font-family: 'DejaVu Sans Mono','Menlo','Consolas','Liberation Mono',monospace; }
+    .fg { fill:#e6e6e6; }
+    .muted { fill:#8a8a8a; }
+    .dim { fill:#5a5a5a; }
+    .accent { fill:#5b9dd9; }
+    .line { stroke:#4a4a4a; stroke-width:1.2; fill:none; }
+    .line-soft { stroke:#303030; stroke-width:1; fill:none; }
+    .accent-line { stroke:#5b9dd9; stroke-width:1.4; fill:none; }
+    .dash { stroke-dasharray:6,4; }
+  </style>
+
+  <rect x="0" y="0" width="1280" height="800" fill="#111111"/>
+
+  <!-- ============ TOP BAR ============ -->
+  <rect x="0" y="0" width="1280" height="32" fill="#1b1b1c"/>
+  <line x1="0" y1="32" x2="1280" y2="32" class="line"/>
+
+  <rect x="14" y="7" width="22" height="18" rx="3" fill="#1c2733" class="accent-line"/>
+  <text x="25" y="20" text-anchor="middle" font-size="11" font-weight="700" class="accent">1</text>
+  <rect x="40" y="7" width="22" height="18" rx="3" class="line"/>
+  <text x="51" y="20" text-anchor="middle" font-size="11" class="muted">2</text>
+  <rect x="66" y="7" width="22" height="18" rx="3" class="line"/>
+  <text x="77" y="20" text-anchor="middle" font-size="11" class="muted">3</text>
+  <rect x="92" y="7" width="22" height="18" rx="3" class="line"/>
+  <text x="103" y="20" text-anchor="middle" font-size="11" class="muted">4</text>
+  <rect x="118" y="7" width="22" height="18" rx="3" class="line"/>
+  <text x="129" y="20" text-anchor="middle" font-size="11" class="muted">5</text>
+
+  <text x="640" y="20" text-anchor="middle" font-size="12" class="fg">12:52</text>
+
+  <rect x="1100" y="10" width="2" height="5" fill="#8a8a8a"/>
+  <rect x="1104" y="7" width="2" height="8" fill="#8a8a8a"/>
+  <rect x="1108" y="4" width="2" height="11" fill="#8a8a8a"/>
+  <circle cx="1136" cy="16" r="6" class="line"/>
+  <rect x="1158" y="10" width="12" height="12" rx="2" class="line"/>
+
+  <!-- sessions widget: glyph + badge = 1 (api-refactor blocked), urgent color. Panel is closed. -->
+  <rect x="1214" y="7" width="18" height="18" rx="3" fill="none" stroke="#9a9a9a" stroke-width="1.3"/>
+  <line x1="1218" y1="13" x2="1229" y2="13" stroke="#9a9a9a" stroke-width="1.2"/>
+  <line x1="1218" y1="17" x2="1225" y2="17" stroke="#9a9a9a" stroke-width="1.2"/>
+  <circle cx="1232" cy="8" r="7" fill="#c2352f" stroke="#1b1b1c" stroke-width="2"/>
+  <text x="1232" y="11.5" text-anchor="middle" font-size="9" font-weight="700" fill="#ffffff">1</text>
+
+  <!-- ============ TITLE ============ -->
+  <rect x="16" y="58" width="90" height="20" rx="10" fill="none" class="accent-line"/>
+  <text x="61" y="72" text-anchor="middle" font-size="10" font-weight="700" letter-spacing="1" class="accent">PROPOSED</text>
+  <text x="118" y="73" font-size="15" font-weight="600" class="fg">Sessions panel -- blocked notification</text>
+  <text x="16" y="94" font-size="11" class="muted">Panel is closed; the widget already reads urgent -- this is what the five-second test times.</text>
+
+  <!-- ============ NOTIFICATION TOAST (top-right) ============ -->
+  <polygon points="1216,44 1230,44 1223,36" fill="#1d1d1d" stroke="#666666" stroke-width="1.2"/>
+  <rect x="860" y="44" width="384" height="76" rx="6" fill="#1d1d1d" stroke="#666666" stroke-width="1.2"/>
+
+  <rect x="878" y="62" width="16" height="16" rx="2" fill="none" stroke="#9a9a9a" stroke-width="1.2"/>
+  <line x1="881" y1="68" x2="890" y2="68" stroke="#9a9a9a" stroke-width="1.1"/>
+  <line x1="881" y1="72" x2="887" y2="72" stroke="#9a9a9a" stroke-width="1.1"/>
+
+  <text x="904" y="74" font-size="14" font-weight="700" class="fg">api-refactor needs approval</text>
+  <text x="904" y="94" font-size="11" class="muted">session waiting on your approval</text>
+  <text x="1228" y="110" text-anchor="end" font-size="10" font-weight="600" class="accent">open -&gt;</text>
+
+  <!-- ============ CALLOUT: notification rules ============ -->
+  <rect x="140" y="170" width="520" height="190" rx="6" fill="#161616" stroke="#4a4a4a" stroke-width="1.2" stroke-dasharray="6,4"/>
+
+  <text x="160" y="196" font-size="14" font-weight="600" class="fg">Notification rules -- from spec-06</text>
+
+  <text x="160" y="220" font-size="11" class="muted">Notifies: waiting, blocked, done, failed, orphaned, child-done</text>
+  <text x="160" y="242" font-size="11" class="muted">Urgency: wait/blocked=normal, done/child=low, fail/orphan=critical</text>
+  <text x="160" y="264" font-size="11" class="muted">Coalescing: new event &lt;10s replaces the toast (no stacking)</text>
+  <text x="160" y="286" font-size="11" class="muted">Self-suppress: muted if that session's terminal is focused</text>
+  <text x="160" y="308" font-size="11" class="muted">Digest: 4th event within 60s -&gt; one summary toast instead</text>
+
+  <!-- ============ WIREFRAME KEY (meta legend, all screens) ============ -->
+  <rect x="24" y="706" width="300" height="72" rx="4" fill="#161616" stroke="#4a4a4a" stroke-width="1"/>
+  <text x="34" y="722" font-size="10" font-weight="700" letter-spacing="1" class="dim">WIREFRAME KEY</text>
+  <line x1="34" y1="732" x2="54" y2="732" class="line"/>
+  <text x="60" y="736" font-size="9" class="dim">solid = real UI element</text>
+  <line x1="34" y1="748" x2="54" y2="748" class="line dash"/>
+  <text x="60" y="752" font-size="9" class="dim">dashed = annotation / callout</text>
+  <rect x="34" y="760" width="12" height="8" fill="#c2352f"/>
+  <text x="60" y="768" font-size="9" class="dim">red = urgent color</text>
+
+  <!-- ============ FOOTER ============ -->
+  <text x="24" y="792" font-size="10" class="dim">proposed, 2026-09-01, drawn against the spec, not the rig</text>
+  <text x="1256" y="792" text-anchor="end" font-size="10" class="dim">sessions-panel / blocked-notification / v4.0.2</text>
+</svg>

@@ -28,9 +28,9 @@ no `except*`, no `Self`), so it runs unchanged on 3.10 or 3.11+; nothing in
 it depends on a 3.11-only stdlib feature.
 
 Most tests call `core.main([...])` in-process (env vars set per test,
-stdout/stderr captured via `contextlib.redirect_std*`) rather than spawning
-a subprocess, so `tests/fake_herdr.py`'s threaded Unix-socket server —
-running as a thread in the same test process — can be inspected directly
+stdout/stderr captured via `contextlib.redirect_std*`) instead of spawning
+a subprocess, so `tests/fake_herdr.py`'s threaded Unix-socket server , 
+running as a thread in the same test process, can be inspected directly
 afterward (`server.calls("agent.prompt")` etc.) without going through a
 file or pipe. One test (`TestCliIsExecutable`) spawns the file as a real
 subprocess, to prove the shebang and executable bit work end to end and not
@@ -39,7 +39,7 @@ just the import path.
 ## What's verified locally vs. VERIFY ON RIG
 
 **Verified locally** (by the test suite, or by manual smoke-testing beyond
-it — see below):
+it, see below):
 
 - The full session lifecycle for `new`, `list`, `show`, `send`, `rename`,
   `assign`, `goal`, `preview`, `mode`, `capture`, `artifact-add`, `receipt`,
@@ -55,7 +55,7 @@ it — see below):
   bypass flag under `shared`, for a harness with no safe expression of a
   mode at all (`hermes` + `restricted`), and for Codex's
   `--ask-for-approval never` without `--sandbox read-only` "looks safe
-  alone" combination — including the case where the mode's own cell already
+  alone" combination, including the case where the mode's own cell already
   contributes one `--ask-for-approval` and a smuggled extra argument adds a
   second one later in argv (a real bug this build's own smoke-testing
   caught: the first implementation only inspected the first occurrence).
@@ -91,7 +91,7 @@ it — see below):
   with no leftover temp file after two successive writes).
 - The plain-git worktree fallback (`create_worktree`/`remove_worktree` with
   `herdr=None`): confirmed to actually create a `git worktree`, check out
-  the session branch, and remove the worktree while keeping the branch —
+  the session branch, and remove the worktree while keeping the branch , 
   smoke-tested manually, not by an automated test in `tests/`.
 - `open`'s four branches, each an automated test: bound-and-live (confirms
   `agent.get` is called), orphaned with a `harness_session_ref` (confirms
@@ -111,7 +111,7 @@ it — see below):
 **VERIFY ON RIG** (carried from the spec files, or newly identified by this
 build):
 
-- Everything under "Herdr's wire-protocol assumptions" below — none of it
+- Everything under "Herdr's wire-protocol assumptions" below, none of it
   has ever talked to a real Herdr socket.
 - Every "Verify on rig" item already listed in `spec-01`, `spec-02`,
   `spec-04`, `spec-05`, and `spec-07` that this build didn't have to
@@ -119,7 +119,7 @@ build):
   screenshot binary's real name and unattended behavior, the exact
   resume-id string format per harness, `git rev-list --not --remotes`
   cost on a large multi-remote repo, unicode/emoji in `git_safe_ref`,
-  etc.) — unchanged, not re-litigated here.
+  etc.), unchanged, not re-litigated here.
 - Whether `omarchy-launch-or-focus-tui` and `herdr agent attach` (called by
   `open` for a bound-and-live session) behave as `02-command-surface.md`
   assumes; wrapped in `contextlib.suppress(FileNotFoundError, OSError)`
@@ -134,9 +134,9 @@ build):
   against a compositor.
 - Whether `agent.read` (used by `log --transcript`) is really the right
   method name and whether it really returns `agent_not_idle` the way
-  `02-command-surface.md` describes; `log`'s own exit-code table (0, 3 —
+  `02-command-surface.md` describes; `log`'s own exit-code table (0, 3 , 
   no 4) is honored literally here, so any Herdr trouble during
-  `--transcript` degrades to a printed line and exit 0 rather than a hard
+  `--transcript` degrades to a printed line and exit 0 instead of a hard
   failure.
 
 ## Herdr wire-protocol assumptions
@@ -154,10 +154,10 @@ task:
 3. **Request shape**: `{"id": <int>, "method": "<name>", "params": {...}}`.
 4. **Reply shape**: `{"id": <int>, "result": <any>}` on success, or
    `{"id": <int>, "error": {"code": ..., "message": ..., "data": ...}}` on
-   failure — one reply line per request line, in the same order.
+   failure, one reply line per request line, in the same order.
 5. **Method names**: `agent.list`, `pane.list`, `agent.get`, `agent.start`,
    `agent.prompt`, `agent.rename`, `pane.close`, `worktree.create`,
-   `events.subscribe`, `snapshot` — the ten this build's `HerdrClient` names
+   `events.subscribe`, `snapshot`, the ten this build's `HerdrClient` names
    as methods, per the task's own list. `worktree.open`, `worktree.remove`,
    `agent.send_keys`, `agent.focus`, and `agent.read` are named by
    `02-command-surface.md`/`07-worktrees.md` but were not in that required
@@ -166,7 +166,7 @@ task:
 6. **`agent.start` params**: assumed to accept `alias`, `kind`, `cwd`,
    `flags` (list of argv strings), `env` (dict), and `focus`; assumed to
    return a result containing `session`, `workspace_id`, `tab_id`,
-   `pane_id`, and `agent_id` — mapped directly onto `session.json`'s
+   `pane_id`, and `agent_id`, mapped directly onto `session.json`'s
    `runtime` shape.
 7. **`worktree.create` params**: assumed to accept `repo`, `path`,
    `branch`, `base`, and `focus`.
@@ -177,7 +177,7 @@ task:
     `agent_id` respectively as the sole identifying field.
 11. **`agent.list`/`pane.list` results**: assumed to be plain JSON arrays of
     objects, each carrying at least `agent_id` (or `pane_id`) plus `kind`
-    and `name` when known — `reconcile` matches these against a session's
+    and `name` when known, `reconcile` matches these against a session's
     stored `runtime.agent_id`/`runtime.pane_id`.
 12. **Errors vs. unreachability**: a connect failure (missing socket, refused
     connection, timeout) is treated as `HerdrUnavailable` (exit 4 territory,
@@ -187,7 +187,7 @@ task:
 13. **`events_subscribe`**: assumed to be the same request/reply framing for
     its initial subscribe, then an unsolicited stream of further JSON lines
     on the same connection. Nothing in this build actually drives a
-    long-lived subscriber loop — see "No persistent event subscriber" below.
+    long-lived subscriber loop, see "No persistent event subscriber" below.
 
 ## Other assumptions the spec didn't settle
 
@@ -213,15 +213,15 @@ the point it mattered. See also `spec-02`'s cross-reference table: `preview`,
   `agent.start` reply as standing in for "Herdr confirms the agent
   appeared" and move straight from `starting` to `working`. A session whose
   `agent.start` never returns (Herdr unreachable) is left in `starting`
-  with `runtime: null` rather than being pushed into `failed` — no event
+  with `runtime: null` and is never pushed into `failed`, no event
   fabricates a report neither Herdr nor a human actually made.
 - **`capture --screenshot` maps to `capture window`**, not `capture region`
   (the shell layer's `README-shell.md` explicitly left this mapping as
   "core's decision"), falling back to `fullscreen` if the compositor call
   fails or produces no file.
 - **An adopted session's mode** (`reconcile` finding a live Herdr agent with
-  no Omarchy record) defaults to `shared`, since Personal's trust model — a
-  human already watching — can't be asserted for a pane Omarchy didn't
+  no Omarchy record) defaults to `shared`, since Personal's trust model, a
+  human already watching, can't be asserted for a pane Omarchy didn't
   launch.
 - **`ori`, bare (no wrapped harness)** is treated exactly like `pi` (refuse
   for shared/restricted, nothing needed for personal), per
@@ -232,8 +232,8 @@ the point it mattered. See also `spec-02`'s cross-reference table: `preview`,
 - **`verify_on_rig` granularity**: the task asked for this flag "on the
   rows the spec marks." `04-permission-modes.md` marks specific *cells*
   (e.g. only Codex's Personal cell, not its Shared/Restricted cells), so
-  this build sets `verify_on_rig` per (harness, mode) cell rather than per
-  harness row — the finer-grained reading, and the one the deny-list logic
+  this build sets `verify_on_rig` per (harness, mode) cell instead of per
+  harness row, the finer-grained reading, and the one the deny-list logic
   actually needs. The literal `(verify on rig)` markers plus every harness
   named in `04-permission-modes.md`'s own bottom "Verify on rig" list are
   both folded in (see the `HARNESS_TABLE` entries for `codex`, `crush`,
@@ -262,8 +262,8 @@ the point it mattered. See also `spec-02`'s cross-reference table: `preview`,
 - **`env_summary`'s shape** (`started_with.env_summary`) is undefined by
   `01-session-model.md`; kept to two harmless keys (`shell`, `term`) rather
   than a full environment dump, on purpose.
-- **Herdr's configured `worktrees.directory`** is never queried — there is
-  no method for it in the required `HerdrClient` list — so
+- **Herdr's configured `worktrees.directory`** is never queried, there is
+  no method for it in the required `HerdrClient` list, so
   `herdr_worktrees_directory()` always uses the documented default
   (`~/.herdr/worktrees`, overridable here only via a test-only
   `HERDR_WORKTREES_DIR` env var this build invented, not part of the spec).

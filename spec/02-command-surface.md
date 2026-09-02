@@ -50,7 +50,9 @@ Herdr agent aliases must match `[a-z][a-z0-9_-]{0,31}`; `new` derives one from t
 ## Commands
 
 ### `new`
-`new --agent <kind> [--mode personal|shared|restricted] [--name <text>] [--goal <text>] [--worktree <ref>] [--cwd <path>] [--owner <actor>] [-- <agent args>]`
+`new --agent <kind> [--mode personal|shared|restricted] [--name <text>] [--goal <text>] [--base <ref>] [--worktree <path>] [--no-worktree] [--from <session>] [--owner <actor>] [--cwd <path>] [--pick] [-- <agent args>]`
+
+`--base` names the branch a new worktree starts from (default: the current branch); `--worktree <path>` joins an existing worktree instead of creating one (both records mark `created_by_session: false`, invariant 6); `--no-worktree` runs in the working directory; `--from <session>` records lineage and flips the default mode to `shared` (`04-permission-modes.md`); `--pick` opens the agent picker; `--owner` at creation is folded into `session.created` and writes no `owner.assigned` event.
 Allocates the id, resolves the worktree per `07-worktrees.md`, starts the harness. Writes `session.created`, `runtime.bound`, `goal.set` if `--goal` given; `status` opens `starting`, moves to `working` on Herdr's confirmation.
 Herdr: `worktree.create`/`worktree.open` (or `workspace.create` with no worktree), `focus:false`; then `agent.start` with the derived alias, `--kind`, the new pane, and the flags `04-permission-modes.md` maps from `--mode`, plus any `-- <agent args>`.
 Exit: 0, 2, 4, 5.

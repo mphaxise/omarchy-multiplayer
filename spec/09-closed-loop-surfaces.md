@@ -34,7 +34,7 @@ Approval gates follow the session's mode, defined in full in `04-permission-mode
 
 ## 6. Design artifacts (slice 1; live sync is slice 3)
 
-A Figma link, a Paper link, or a `DESIGN.md` attaches the same way any artifact does: `session artifact add --kind url --source <link>` or `--kind file --source DESIGN.md`. Slice 1 stores the link and reads nothing back from it. Figma's MCP server already exposes a write-to-canvas path, in beta, and Paper's MCP server exposes read and write tools against an open design file directly, including `write_html` and `update_styles`. Both are slice-3 candidates: a session that reads the live design state at the start of a loop and writes an approved change back at the end closes a second canvas beside the running product. Slice 1 takes no step toward either integration; it only reserves the artifact kind that would carry the link.
+A Figma link, a Paper link, or a `DESIGN.md` attaches the same way any artifact does: `session artifact add <id> --kind url --source <link>` or `--kind file --source DESIGN.md`. Slice 1 stores the link and reads nothing back from it. Figma's MCP server already exposes a write-to-canvas path, in beta, and Paper's MCP server exposes read and write tools against an open design file directly, including `write_html` and `update_styles`. Both are slice-3 candidates: a session that reads the live design state at the start of a loop and writes an approved change back at the end closes a second canvas beside the running product. Slice 1 takes no step toward either integration; it only reserves the artifact kind that would carry the link.
 
 ## 7. What the panel adds (slice 1)
 

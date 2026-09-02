@@ -104,7 +104,7 @@ H1, that a durable named session with a panel view measurably improves on stock 
 
 - No performance or rendering verdict on Omarchy or the plugin: software rendering, a VM, and an unofficial aarch64 port all confound timing and visual results.
 - No verdict on shared or restricted mode: slice 1 is one user; nothing here puts two people on one gateway.
-- No verdict beyond 3 concurrent sessions, spawn depth 3, or 5 children per session, the limits this slice enforces.
+- No verdict beyond the three sessions the scenario runs, or beyond spawn depth 3 and 5 children per session, the limits the session model enforces.
 - No statistically powered usability result: one expert reviewer and one designer, not a sample.
 - No claim that Omarchy's maintainers would accept this pattern upstream; that is a separate question from whether the mechanism works.
 

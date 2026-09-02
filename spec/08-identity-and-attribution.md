@@ -26,7 +26,7 @@ Slice 1 has exactly three actors in practice on a given machine:
 
 ## `owner`
 
-`owner` defaults to `created_by` at creation. It changes only through the `assign` command (`session assign <id> --to <actor>`), run by a human or an agent against a session it can see, which writes an `owner.assigned` event carrying `from`, `to`, and the actor who ran the command. `owner.assigned_by` on the record is that actor, not the new owner.
+`owner` defaults to `created_by` at creation. It changes only through the `assign` command (`session assign <id> <actor>`), run by a human or an agent against a session it can see, which writes an `owner.assigned` event carrying `from`, `to`, and the actor who ran the command. `owner.assigned_by` on the record is that actor, not the new owner.
 
 Reassigning the owner changes two things: which actor the panel displays as responsible, and which actor a notification about that session routes to by default. It changes nothing else. It grants the new owner no access beyond what their OS account already has, and removes none from the old owner. Slice 1 has no access list to change; the point holds regardless, because slice 2 adds an access list that assignment still does not touch.
 
@@ -43,6 +43,12 @@ Every instruction carries `author` (an actor) and, when sent from another sessio
 Every event in `events.jsonl` has an `actor` field, with no exception; `system:omarchy` is itself an actor for exactly this reason, so a reconciler action or a launcher default is attributable instead of anonymous. Nothing in this design infers a human from an agent's action: an agent's commit is authored by the agent's git identity, an agent's instruction to another session is authored by `agent:<session-id>`, and no code path substitutes the human who happens to own that session for the agent that actually acted.
 
 Nissenbaum's account of "many hands" names the failure this prevents: distributed systems diffuse responsibility until no one is answerable for an outcome, by collapsing who-did-it into who-is-nominally-in-charge. Naming the acting actor on every event keeps the two questions separate. OpenClaw states the same rule for its own ownership and participant records: attribution and participation never grant session access, and ownership, sidebar visibility, and presence are usability features with no security guarantee. This design adopts that rule for the same reason: an owner label answers who is responsible, and a separate grant answers who is allowed.
+
+## Two details slice 1 settles plainly
+
+Commit identity. Slice 1 lets each harness commit with whatever git identity it finds in the worktree, which on Omarchy is the OS user's global config, and the receipt's `commits[].author` reports what git recorded. The receipt, the events, and the session record are what attribute the work to the agent; the git author line is the human's until slice 2 defines an agent trailer, which is where OpenClaw's verified co-author trailers become relevant.
+
+Actor id parsing. The first `:` splits `kind` from `id`; everything after it is the id verbatim. Usernames and hostnames on Omarchy follow POSIX rules and contain neither `:` nor `@`, so no escaping is defined in slice 1; a launcher that meets one refuses to create the actor and says why.
 
 ## Reserved shape for slice 2
 

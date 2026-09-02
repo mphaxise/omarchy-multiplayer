@@ -17,7 +17,7 @@ Restart=always
 WantedBy=graphical-session.target
 ```
 
-The watcher opens Herdr's `events.subscribe` (filtered to `pane.agent_status_changed`) as a low-latency nudge, and tails every session's `events.jsonl` under `~/.local/state/omarchy/sessions/*/`, since only that local log carries the Omarchy-only event types (`child.completed`, `session.orphaned`) that Herdr never sees. The local log is authoritative for what to notify; the Herdr subscription only wakes the tail loop sooner than a plain poll would.
+The watcher opens Herdr's `events.subscribe` (filtered to `pane.agent_status_changed`) as a low-latency nudge, and tails every session's `events.jsonl` under `~/.local/state/omarchy/sessions/*/`, since only that local log carries the Omarchy-only event types (`child.completed`, `status.changed` to `orphaned`) that Herdr never sees. The local log is authoritative for what to notify; the Herdr subscription only wakes the tail loop sooner than a plain poll would.
 
 ## What notifies
 
@@ -27,13 +27,13 @@ The watcher opens Herdr's `events.subscribe` (filtered to `pane.agent_status_cha
 | `status.changed` to `blocked` | yes | normal |
 | `status.changed` to `done` | yes | low |
 | `status.changed` to `failed` | yes | critical |
-| `session.orphaned` | yes | critical |
+| `status.changed` to `orphaned` | yes | critical |
 | `child.completed` (to the parent's owner) | yes | low |
 | `status.changed` to `working` | no | n/a |
 | `status.changed` to `idle` | no | n/a |
 | `instruction.delivered` | no | n/a |
 
-`waiting` and `blocked` are the two states `01-session-model.md` says the panel counts and the notifier announces; they are routine multi-agent traffic, so they stay at `normal`. `failed` and `session.orphaned` are anomalies and get `critical`, matching the existing crash path. `done` and a completed child are good news, not a request, so they stay `low`. Urgency maps directly to `omarchy-notification-send --urgency <level>`.
+`waiting` and `blocked` are the two states `01-session-model.md` says the panel counts and the notifier announces; they are routine multi-agent traffic, so they stay at `normal`. `failed` and `status.changed` to `orphaned` are anomalies and get `critical`, matching the existing crash path. `done` and a completed child are good news, not a request, so they stay `low`. Urgency maps directly to `omarchy-notification-send --urgency <level>`.
 
 ## Text templates
 
@@ -45,7 +45,7 @@ One line, name first, no separate body, so the whole notice reads at a glance:
 | `blocked` | `<name> needs approval` |
 | `done` | `<name> finished` |
 | `failed` | `<name> failed: <detail>` |
-| `session.orphaned` | `<name> lost its pane` |
+| `status.changed` to `orphaned` | `<name> lost its pane` |
 | `child.completed` | `<parent_name>: <child_name> finished (<state>)` |
 
 Click action on every one of these: `omarchy-notification-send ... --exec omarchy-agent-session open <id>`, so acting on a notification always opens that session's own terminal, never a list to search through.
@@ -86,4 +86,4 @@ Horvitz 1999, cost of interruption: notifying only on `waiting`/`blocked`/`done`
 
 ## Sources
 
-`01-session-model.md` for the event types (`status.changed`, `child.completed`, `session.orphaned`, `instruction.delivered`) and `state_version`. `02-command-surface.md` for the `needs_attention` field and `session open`. Omarchy `omarchy-crash-watch.service`, `omarchy-notification-send`, and its `--exec`/`--urgency` flags on branch quattro. Herdr Socket API page at herdr.dev/docs (observed 2026-09-01) for `events.subscribe` and `pane.agent_status_changed`. CSCW findings per the verified bibliographic list in the context pack: Horvitz 1999 (cost of interruption); Iqbal & Horvitz 2007 (resumption cues); Mark et al. 2005 (interruption digests); McFarlane & Latorella 2002 (interruption delivery modes); Gutwin & Greenberg 2002 (workspace awareness elements: who, what, where, when, next).
+`01-session-model.md` for the event types (`status.changed`, `child.completed`, `status.changed` to `orphaned`, `instruction.delivered`) and `state_version`. `02-command-surface.md` for the `needs_attention` field and `session open`. Omarchy `omarchy-crash-watch.service`, `omarchy-notification-send`, and its `--exec`/`--urgency` flags on branch quattro. Herdr Socket API page at herdr.dev/docs (observed 2026-09-01) for `events.subscribe` and `pane.agent_status_changed`. CSCW findings per the verified bibliographic list in the context pack: Horvitz 1999 (cost of interruption); Iqbal & Horvitz 2007 (resumption cues); Mark et al. 2005 (interruption digests); McFarlane & Latorella 2002 (interruption delivery modes); Gutwin & Greenberg 2002 (workspace awareness elements: who, what, where, when, next).

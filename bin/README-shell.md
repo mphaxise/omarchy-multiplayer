@@ -48,7 +48,7 @@ against quattro` header line.
 - `omarchy-agent-crash.proposed`: **does** need new logic, because
   `session new --name "crash-<pid>" --goal "..."` needs flags `omarchy-agent`
   has no way to pass through. It calls `omarchy-agent-session-core` directly
-  rather than delegating, which means it also repeats omarchy-agent's own
+  instead of delegating, which means it also repeats omarchy-agent's own
   default-agent resolution, not-installed check, and `~/Work` cd rule (copied
   verbatim, commented as copied).
 
@@ -65,7 +65,7 @@ standard library only (`argparse`, `json`, `socket`, `subprocess`,
 `events.jsonl` under `OMARCHY_SESSIONS_DIR`, with a cursor per session
 persisted in `OMARCHY_SESSIONS_DIR/.watch-cursors.json`; optionally starts a
 background thread that connects to `HERDR_SOCKET` purely to wake the tail
-loop sooner (never to decide what to notify — `events.jsonl` stays
+loop sooner (never to decide what to notify, `events.jsonl` stays
 authoritative, per the spec). Implements the notify-worthy event table, the
 text templates, `--urgency`/`--exec` via `omarchy-notification-send`,
 10-second per-session coalescing via `--replace-id`/`--print-id`,
@@ -122,20 +122,20 @@ cursor persistence across a simulated restart.
   really does accept `low`/`normal`/`critical`; `-r`/`--replace-id <id>` and
   `-p`/`--print-id` really do exist. This resolves two of
   `06-notifications.md`'s own "verify on rig" bullets at the source-code
-  level — the flags exist — while the runtime/D-Bus behavior on the rig
+  level, the flags exist, while the runtime/D-Bus behavior on the rig
   (does a replace actually update the visible toast) is unchanged, still
   VERIFY ON RIG.
 
 ## VERIFY ON RIG (carried from the spec, or newly identified)
 
-- Whether `session new` prints the created session's id to stdout — see
+- Whether `session new` prints the created session's id to stdout, see
   Assumptions; this is load-bearing for both `.proposed` launchers and isn't
   settled by anything I read.
 - The exact `hyprctl activewindow -j` field for app id (`initialClass` vs.
   `class` vs. something else) and for fullscreen (int vs. bool, which
-  values) — spec's own open item, coded as a best-guess in
+  values), spec's own open item, coded as a best-guess in
   `is_session_focused`/`is_fullscreen`, wrapped in try/except so a wrong
-  guess degrades to "never suppress" rather than crashing or over-suppressing.
+  guess degrades to "never suppress" instead of crashing or over-suppressing.
 - `HERDR_SOCKET`'s transport and protocol entirely: whether it's a Unix
   domain socket, whether `events.subscribe`/`pane.agent_status_changed` are
   the right method/filter names, whether the stream really is
@@ -148,13 +148,13 @@ cursor persistence across a simulated restart.
   `ConditionEnvironment=WAYLAND_DISPLAY`) should gate the systemd unit, since
   self-suppression and the fullscreen hold both need `hyprctl` to mean
   anything.
-- `RestartSec=2` on the systemd unit vs. crash-watch's real `RestartSec=5` —
+- `RestartSec=2` on the systemd unit vs. crash-watch's real `RestartSec=5` , 
   see Assumptions.
 - Every "verify on rig" item already listed in `spec/02-command-surface.md`,
   `spec/04-permission-modes.md`, `spec/05-receipts-and-artifacts.md`,
   `spec/06-notifications.md`, and `spec/07-worktrees.md` that this build
   didn't have to resolve to write these files (worktree/Herdr resume
-  mechanics, per-harness exit sequences, etc.) — unchanged, not re-listed
+  mechanics, per-harness exit sequences, etc.), unchanged, not re-listed
   here.
 
 ## Assumptions the spec didn't settle
@@ -164,15 +164,15 @@ cursor persistence across a simulated restart.
    `.proposed` launchers need the new session's id to chain into `open`, so
    they assume `new` prints the id to stdout on success (exit 0) and treat
    an empty result as an error. This is the single biggest assumption in
-   this build — everything about "create, then open" depends on it — and is
+   this build, everything about "create, then open" depends on it, and is
    worth confirming with whoever owns `omarchy-agent-session-core` before
    either `.proposed` file is taken further.
 
 2. **`--inline` is untouched, deliberately.** Neither
    `02-command-surface.md`'s wrapper section nor any other file read for
    this task mentions `--inline`, and a session's `open` always attaches a
-   *new terminal window* — there's no session-model equivalent of "run in the
-   current shell, no window." Rather than invent one, `omarchy-agent.proposed`
+   *new terminal window*, there's no session-model equivalent of "run in the
+   current shell, no window." Instead of inventing one, `omarchy-agent.proposed`
    keeps `--inline` exactly as it works today (direct exec of the harness,
    bypassing the session system entirely), and only rewires the
    keybinding/menu (non-inline) path. This is why the whole per-agent
@@ -182,7 +182,7 @@ cursor persistence across a simulated restart.
    `omarchy agent crash`.** For `omarchy agent`, `04-permission-modes.md`
    states this explicitly ("Left unset, the default is personal for a
    keybinding launch, matching omarchy-agent today"), so that part is
-   confirmed, not assumed — but `02-command-surface.md`'s own wrapper-section
+   confirmed, not assumed, but `02-command-surface.md`'s own wrapper-section
    sentence, "(mode from omarchy-default-agent unless given...)", reads
    ambiguously (see #4), so the mode was set explicitly from
    `04-permission-modes.md`'s clearer rule instead of trusting that
@@ -196,7 +196,7 @@ cursor persistence across a simulated restart.
    function that names an *agent kind* (claude, codex, ...), not a
    personal/shared/restricted *mode*. Read here as being about agent-kind
    selection (already existing behavior, unchanged), not permission mode.
-   Flagged rather than silently resolved either way.
+   Flagged instead of silently resolved either way.
 
 5. **No new `<kind>` positional on `omarchy agent`.** The same sentence's
    heading, "omarchy agent [<kind>]", could be read as adding a new CLI
@@ -218,8 +218,8 @@ cursor persistence across a simulated restart.
 
 7. **Digest counts distinct sessions, not raw events.** "4 sessions need
    you: 2 waiting, 1 blocked, 1 failed" reads as a session count, and the
-   watcher tracks one entry per session (most recent kind wins) rather than
-   a flat log of every notify-worthy event in the window — so a single
+   watcher tracks one entry per session (most recent kind wins) instead of
+   a flat log of every notify-worthy event in the window, so a single
    session flapping between states several times in one minute is still
    "1 session," not several. The spec's own worked example doesn't
    distinguish these two readings because no session repeats in it;
@@ -255,7 +255,7 @@ cursor persistence across a simulated restart.
     `capture window` and `capture region`. The wrapper only forwards
     `--screenshot` (matching 02, the authoritative command-surface file) and
     flags the mismatch rather than guessing which of window/region it should
-    become — that mapping is core's decision.
+    become, that mapping is core's decision.
 
 13. **`RestartSec=2` and the `ExecStart` path on the systemd unit** are
     followed from the task's literal instruction and from
