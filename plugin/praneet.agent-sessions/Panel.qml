@@ -82,7 +82,10 @@ Panel {
   }
 
   onOpenedChanged: if (opened) {
-    cursorActive = false
+    // Cursor visible from the first frame: with one row, arrow keys have
+    // nowhere to go, and an invisible cursor read as "keys do nothing"
+    // (Praneet, rig, 2026-09-02).
+    cursorActive = true
     selectedIndex = 0
     armedStopId = ""
     sendOpenId = ""
@@ -473,7 +476,15 @@ Panel {
       onActivateRequested: {
         if (root.visibleRows.length === 0) return
         var s = root.visibleRows[root.selectedIndex]
-        if (s) root.openSession(s.id)
+        if (s) { root.openSession(s.id); root.close() }  // the terminal is the point; get the overlay out of its way
+      }
+      onDeleteRequested: {
+        // PanelKeyCatcher routes `x` here, never to onTextKey.
+        if (root.visibleRows.length === 0) return
+        var s = root.visibleRows[root.selectedIndex]
+        if (!s) return
+        if (root.armedStopId === s.id) { root.stopSession(s.id); root.armedStopId = "" }
+        else { root.sendOpenId = ""; root.armedStopId = s.id }
       }
       onCloseRequested: {
         // Esc clears an armed Stop or an open Send field first, and closes
