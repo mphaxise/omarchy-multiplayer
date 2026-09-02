@@ -1775,6 +1775,7 @@ def cmd_send(args, ctx):
     live_agent = (prompt_result.get("agent") or {}) if isinstance(prompt_result, dict) else {}
     if live_agent.get("agent_status"):
         session = apply_herdr_status(ctx.store, session, live_agent.get("agent_status"))
+    record_harness_session_ref(ctx.store, session, ctx.herdr)
     ev = ctx.store.append_event(session["id"], "instruction.delivered", author,
                                  {"instruction_id": instr["id"], "delivery": "steer"})
     session["queue"] = [q for q in session["queue"] if q["id"] != instr["id"]]
@@ -2049,6 +2050,64 @@ def cmd_done(args, ctx):
 HERDR_STATUS_MAP = {"blocked": "blocked", "working": "working", "idle": "idle", "done": "idle"}
 
 
+def claude_project_dir(cwd):
+    """Claude Code keeps one transcript per conversation under
+    ~/.claude/projects/<cwd with every "/" and "." turned into "-">/<sessionId>.jsonl
+    (observed on the rig 2026-09-02: /home/omarchy/.herdr/worktrees/x became
+    -home-omarchy--herdr-worktrees-x)."""
+    slug = re.sub(r"[/.]", "-", str(pathlib.Path(cwd).resolve()))
+    return pathlib.Path(os.environ.get("CLAUDE_CONFIG_DIR", str(pathlib.Path.home() / ".claude"))) / "projects" / slug
+
+
+def discover_harness_session_ref(kind, cwd, since_epoch):
+    """Find the harness's own resume id for a session started at or after
+    since_epoch in cwd. Only Claude Code is wired in slice 1: the newest
+    transcript file in its project directory whose mtime is at or after the
+    start. Returns None when nothing qualifies yet (Claude writes the file
+    on the first turn, not at launch)."""
+    if kind != "claude" or not cwd:
+        return None
+    d = claude_project_dir(cwd)
+    try:
+        candidates = [f for f in d.glob("*.jsonl") if f.stat().st_mtime >= since_epoch - 2]
+    except OSError:
+        return None
+    if not candidates:
+        return None
+    newest = max(candidates, key=lambda f: f.stat().st_mtime)
+    return newest.stem
+
+
+def record_harness_session_ref(store, session, herdr=None):
+    """Fill agent.harness_session_ref when it is missing and discoverable,
+    and tell Herdr through pane.report_agent_session so its sidebar and a
+    later attach agree with the record. Returns True when something was
+    recorded."""
+    if session["agent"].get("harness_session_ref"):
+        return False
+    runtime = session.get("runtime")
+    if runtime is None:
+        return False
+    cwd = (session.get("workspace") or {}).get("worktree_path")
+    try:
+        since = dt.datetime.fromisoformat(session["created_at"].replace("Z", "+00:00")).timestamp()
+    except (KeyError, ValueError):
+        since = 0
+    ref = discover_harness_session_ref(session["agent"]["kind"], cwd, since)
+    if not ref:
+        return False
+    session["agent"]["harness_session_ref"] = ref
+    store.save_session(session)
+    if herdr is not None and runtime.get("pane_id"):
+        with contextlib.suppress(HerdrError, HerdrUnavailable):
+            herdr.call("pane.report_agent_session", {
+                "pane_id": runtime["pane_id"], "source": "omarchy-agent-session",
+                "agent": session["agent"]["kind"], "agent_session_id": ref,
+                "agent_session_path": str(claude_project_dir(cwd) / f"{ref}.jsonl") if cwd else None,
+            })
+    return True
+
+
 def apply_herdr_status(store, session, herdr_status, source="herdr-manifest", detail=None):
     """Map a Herdr agent_status onto the session state machine
     (01-session-model.md): done with a live pane means idle; unknown keeps
@@ -2117,6 +2176,7 @@ def cmd_reconcile(args, ctx):
             live = next((a for a in live_agents if a.get("agent_id") == agent_id), None)
             if live is not None:
                 apply_herdr_status(ctx.store, s, live.get("agent_status"))
+                record_harness_session_ref(ctx.store, s, ctx.herdr)
         if not still_present:
             ev = ctx.store.append_event(s["id"], "status.changed", actor,
                                          {"from": s["status"]["state"], "to": "orphaned",
