@@ -52,6 +52,8 @@ Directory, no symlinks anywhere in it, per `omarchy plugin validate`:
 | `refreshIntervalSec` | integer | 10 | 5-120 |
 | `showWhenEmpty` | boolean | false | - |
 | `maxRows` | integer | 20 | 5-50 |
+| `doneRowsCollapsed` | integer | 2 | 0-20 |
+| `motion` | string | `full` | `full` or `reduced`; `reduced` replaces the stop spinner with a static glyph |
 
 `refreshIntervalSec` governs the reconciliation poll, not the panel's responsiveness; see Data below for why 10 s is safe.
 
@@ -90,7 +92,7 @@ FileView {
 
 Modeled on the agents plugin, which reads its per-agent usage JSON the same way.
 
-This spec adds one duty to the reconciler defined in `01-session-model.md`: after it appends any event to any session's `events.jsonl`, it rewrites `~/.local/state/omarchy/sessions/index.json` atomically, temp file then rename, and it also rewrites the file once per its own tick even when nothing changed. The index carries a `generated_at` field and one row per live session: `id`, `name`, `agent.kind`, `status`, `workspace.branch`, `owner`, `lineage.children.length`. `generated_at` is a liveness signal a reader checks against the wall clock; see the stale marker below. The `watchChanges` path delivers a state change inside five seconds; the Timer poll is the fallback for a missed watch.
+The reconciler (every 5 s from the watcher, and on every Herdr nudge) rewrites `~/.local/state/omarchy/sessions/index.json` atomically at the end of every run, on both its paths: `{"generated_at", "herdr": "running" | "unreachable", "orphaned": [...], "adopted": [...], "counts": {"needs_attention", "live", "orphaned"}}`. The panel uses `generated_at` as its liveness signal (stale after twice `refreshIntervalSec`) and `herdr` for the Herdr-down row; session rows come from `list --json`, never from the index. Built and verified on the rig 2026-09-02.
 
 Event push, an `events.subscribe`-style stream from Herdr or a state-version cursor like OpenClaw's, would remove polling entirely and would satisfy PLAN.md success signal 4 in full. It is a later refinement. Slice 1 ships Timer plus Process plus FileView only; that is stated plainly here.
 
@@ -100,9 +102,11 @@ A single agent glyph plus a badge counting sessions in `waiting` or `blocked`. C
 
 | Condition | Color |
 |---|---|
-| any session `blocked` | `Color.urgent` |
-| none blocked, any `waiting` | `Color.foreground` |
-| all live sessions `working`, `starting`, or `idle` | `Color.muted` |
+| any session `blocked` or `waiting` | `Color.urgent`, with the badge |
+| none of those, any `orphaned` | `Color.foreground`, no badge: a person is needed, nobody is asking |
+| otherwise | `Qt.darker(Color.foreground, 1.5)`, 3.82:1 on Tokyo Night |
+
+`Color.muted` (1.91:1 on Tokyo Night) is decoration only and the panel never uses it for a state. Revised 2026-09-02 after the review pass; the earlier three-way `blocked` / `waiting` / `muted` scheme could not fire its middle state because Herdr reports both as `blocked`, and its rest state failed 3:1.
 
 Hidden entirely when there are no live sessions and `showWhenEmpty` is false, matching the hide-when-empty behavior of both the agents plugin and the Hermes plugin.
 
@@ -112,35 +116,40 @@ Clicks: left toggles the panel through the popup's own `PanelController`. Right 
 
 `Panel.qml` opens a `KeyboardPanel` anchored to the bar button. Inside: a `PanelHero` naming the top "needs you" session, or the working count when there is none, then four sections separated by `PanelSeparator`, each under a `PanelSectionHeader`:
 
-1. **Needs you**: `waiting`, `blocked`. Blocked before waiting, oldest `since` first within each group, so the longest-neglected session leads.
-2. **Working**: `starting`, `working`, `idle`. Alive, asking for nothing.
-3. **Done today**: `done`, `failed`, `stopped` in the last 24 h. Older ones drop off the panel; the receipt is their record.
-4. **Orphaned**: `orphaned`.
+1. **Needs you**: `waiting`, `blocked`. Blocked before waiting, oldest `since` first within each group, so the longest-neglected session leads. The first row is set larger than every other row (the measurement hook below).
+2. **Orphaned**: `orphaned`, newest first. Above Working because a session that lost its pane is the state this product exists to protect; the hero and the glyph count it.
+3. **Working**: `starting`, `working`, `idle`. Alive, asking for nothing.
+4. **Done today**: `done`, `failed`, `stopped` in the last 24 h, newest first, collapsed to `doneRowsCollapsed` rows with the count in the header ("DONE TODAY · 19") and "17 more · →"; the right arrow expands, the left arrow collapses. Older sessions drop off the panel; the receipt is their record.
 
-Each row: name, agent glyph, state with since-duration ("blocked · 6m"), workspace branch, owner label, child count. Row actions, using `Button`:
+Each row is two lines at rest: a state dot, the name, and the state with its age on the right ("needs you · 7m" in urgent, "orphaned · resumes conversation" or "orphaned · fresh start" from the resume ref, "idle · 3m", "stopped · 1h 24m"); then the goal's first line, or project · branch when there is no goal, with the permission mode on the right (`shared` and `restricted` in accent, `personal` dim). The cursor row grows a third line of actions. Dots carry shape as well as color: filled urgent for needs-you, a foreground ring for orphaned, an urgent ring for failed, a filled rest-color dot otherwise; a small outlined dot beside the state text marks a heuristic status.
 
-| Action | Key / trigger | Command |
+Row actions, using `Button`, shown on the cursor row only:
+
+| Row state | Buttons | Keys |
 |---|---|---|
-| Open (default) | Enter, or click the row | `omarchy-agent-session open <id>` via `Quickshell.execDetached` |
-| Send | `s` opens an inline field; submit sends | `omarchy-agent-session send <id> "<text>"` |
-| Stop | `x` or click; arms a confirm label, a second press executes | `omarchy-agent-session stop <id>` |
-| Receipt | `r` or click | `scripts/view-receipt.sh <id>` inside `omarchy-launch-tui` |
+| live (`starting`, `working`, `idle`, `waiting`, `blocked`) | ⏎ Open (⏎ Answer when it needs you), s Send, x Stop | Enter, `s`, `x` |
+| `orphaned` | ⏎ Revive, s Send (queued, delivered on revive), x Stop | Enter, `s`, `x` |
+| ended (`done`, `failed`, `stopped`) | ⏎ Receipt | Enter, `r` |
 
-Keyboard: up/down move the selection, Enter opens, `s`/`x`/`r` act on the selected row, Esc clears an armed Stop or an open Send field first and closes the panel on the second press. Spacing, type, and color all come from `Style.space()`, `Style.font.*`, and `Color.*`.
+Every action runs through a `Process` (never `execDetached`) and reports its exit code into the row's state slot for five seconds: `open` closes the panel on exit 0 and otherwise says "couldn't open · Herdr is not running" (4) or "· the session's state forbids it" (5); `send` says "sent" or "not delivered · open it and answer there" (5); a failed `stop` clears the spinner and says why; the receipt opens `omarchy-agent-session-receipt --pager <id>` in `omarchy-launch-tui`. Stop is two presses: the first arms the label ("x Confirm stop (+1 child)" when children would stop too), the second executes; moving the cursor disarms it; while the stop runs the row shows a spinner and "stopping…" until the record reports a terminal state.
+
+Keyboard: up/down move the cursor, which is a session id, so a list that re-sorts keeps it on the same session and the cursor row scrolls into view; Enter opens (or revives, or opens the receipt); `s`/`x`/`r` act on the cursor row; right/left expand and collapse Done today; Esc clears an open Send field or an armed Stop first and closes the panel on the press after that. While a Send field is open the other keys are the field's. A key legend under the list names the keys ("↑↓ move · ⏎ open · s send · x stop · → more · esc") and changes while Stop is armed ("x again stops <name> · esc cancels") or a field is open ("⏎ sends · esc cancels"). Hovering a row moves the cursor to it, so keyboard and mouse share one highlight. Spacing, type, and color all come from `Style.space()`, `Style.font.*`, and `Color.*`.
+
+Bindings on the rig (provisional, free on this image): `Super+Ctrl+G` toggles the panel, `Super+Ctrl+Shift+G` opens the agent that needs you (`omarchy-shell praneet.agent-sessions openMostUrgent`); the same IPC target also answers `open`, `close`, `toggle`, and `refresh`.
 
 Gutwin and Greenberg's workspace awareness elements, mapped to fields already on the row:
 
 | Element | Field |
 |---|---|
-| Who | owner label, agent glyph and kind |
+| Who | permission mode (what the agent may do alone); the owner label returns with slice 2, when there is more than one person |
 | What | goal first line, current state |
-| Where | workspace branch, worktree path (tooltip) |
+| Where | project · branch when there is no goal; the branch as a tooltip |
 | When | since-duration |
-| Next | needs-you flag, or "waiting for child" when blocked on a spawned session |
+| Next | needs-you state and the ⏎ Answer / ⏎ Revive label; "waiting for child" is slice 2 |
 
 ## States and empty states
 
-No Herdr running: one row, "Herdr is not running," with the existing `Super+Ctrl+Return` hint as text; the panel does not try to start it. No sessions: an empty-state message plus a New button running the same command as the bar's right click, matching the Hermes plugin's New Session button. Reconciler stale: when `now - index.generated_at` exceeds twice `refreshIntervalSec`, the `PanelHero` carries a small muted "stale" marker with the age, shown as text and shape, not color alone. Heuristic status: a row whose `status.source` is `herdr-manifest`, the heuristic path, shows a small outlined dot beside the state text; its tooltip reads "status inferred from on-screen text; no lifecycle hook available."
+No Herdr running: the reconciler's `index.json` says `herdr: unreachable`, and the panel shows one row under the hero, "Herdr is not running. Super+Ctrl+Return starts it; a session revives with Enter once it is up."; the hero reads "N orphaned · Herdr is not running · Enter revives"; the panel does not try to start it. The row shows only while the index is fresh, since a stale index means the reconciler stopped and its last word on Herdr is a guess. No sessions: an empty-state message plus a New button running the same command as the bar's right click, matching the Hermes plugin's New Session button. Reconciler stale: when `now - index.generated_at` exceeds twice `refreshIntervalSec`, the `PanelHero` carries a small muted "stale" marker with the age, shown as text and shape, not color alone. Heuristic status: a row whose `status.source` is `herdr-manifest`, the heuristic path, shows a small outlined dot beside the state text; its tooltip reads "status inferred from on-screen text; no lifecycle hook available."
 
 ## Accessibility
 

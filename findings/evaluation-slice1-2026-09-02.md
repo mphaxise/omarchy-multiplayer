@@ -82,6 +82,33 @@ The last question is whether I approve that call.
 
 Twenty minutes: confirm on the restarted shell that arrows move the highlight, Enter opens and closes, `x` twice stops with the spinner, and Esc clears in two stages; then the five-second trials from `spec/10-evaluation-plan.md` with three sessions and one blocked, three runs, stopwatch from the toast to the correct row; then one more closed-loop iteration from whatever those trials show.
 
+## Addendum, 14:35 to 15:15: decisions and the build they produced
+
+Decisions, at the keyboard: P1 blocks a public push; Option B, craft-first; stop-ship until the glyph and the dots pass 3:1, because WCAG AA is the floor for anything carrying the Omarchy-UX method. The feeling question stays open; the build below treats control (nothing acts, stops, or revives without the consequence on screen first) as the tie-breaker, which is what the three answers already implied.
+
+Commits bad8373 and cbac0e9 carry Option B. Status of the fourteen findings against that build, each verified with a capture on the rig unless marked:
+
+| # | Finding | Now |
+|---|---|---|
+| 1 | Cursor never painted | Fixed (382c785), visible in every capture since. |
+| 2 | Caption text 3.60:1; dots and glyph 1.91:1 | Fixed. `dim` at 4.89:1; dots and the rest-state glyph at `Qt.darker(foreground, 1.5)`, 3.82:1; orphaned and failed carry a ring, so shape holds without color; `Color.muted` is unused. The stop-ship condition is met. |
+| 3 | Cursor below the fold, no scrollbar | Fixed. Cursor by session id, scrolled into view after layout; a two-pixel indicator whenever the list exceeds the panel; Done today collapses to two rows, so six sessions fit (`sessions-panel-orphaned-disclosed_…_live.jpg`). Keyboard verification is the next session's. |
+| 4 | Actions fire blind | Fixed in code. Open, Send, Stop, and Receipt run through a `Process`; exit 3/4/5 print into the row ("not delivered · open it and answer there"); Open closes the panel on success only; Send and Stop appear only on live and orphaned rows, ⏎ Receipt only on ended rows. The inline results are unexercised by a person. |
+| 5 | Name alone | Fixed. `list --json` carries goal, mode, resumable, project; rows show the goal line and the mode tag (`sessions-panel-needs-you-goal-mode_…_live.jpg`); default names come from the prompt's first words ("create-a-file-named") or the directory. |
+| 6 | Waiting and blocked collapsed | Copy fixed, state open. Every surface says "needs you"; the split waits on the hook payload (known issue). |
+| 7 | Orphaned last, undisclosed; no Herdr-down row | Fixed. Orphaned sits above Working, leads the hero ("2 orphaned · Herdr is not running · Enter revives"), turns the glyph foreground, and says "resumes conversation" or "fresh start"; the Herdr-down row reads from the reconciler's index.json (`sessions-panel-herdr-down_…_live.jpg`). |
+| 8 | Toast persistence and copy | Copy fixed; done and failed toasts open the receipt pager; a Herdr-down orphan storm is normal urgency while a single dead agent stays critical (`signal4-orphaned-notification-revive-copy_…_live.jpg`). Expiry stays the shell's; the badge carries persistence. |
+| 9 | Hero mislabels | Fixed. "Nothing needs you · 1 working · 2 idle · 3 done today"; the first Needs-you row is the largest type on the panel. |
+| 10 | Armed Stop outlives the cursor | Fixed. A move disarms; the label carries the child count; selection by id. |
+| 11 | Clipped state label | Fixed (382c785). |
+| 12 | Motion, badge, targets, focus | Spinner at 4 fps, off with `motion: reduced` (no shell preference exists to read); badge inside the bar at 16 px with a 10 px digit; a key legend under the list. Tab order stays absent; every action has a key. |
+| 13 | Keyring modal | Rig; known issue. |
+| 14 | Hot reload | Rig; known issue, plus the restart script's two-second readiness window on this VM. |
+
+Two facts the build run added. Signal 4 has a subscription-path witness now: a shared-mode session blocked at 21:59:01Z and its toast was recorded at 21:59:01.58Z, through the Herdr nudge; the five-second sweep stays as the fallback. And the reconciler had a gap: when a harness exits and leaves its shell pane behind, Herdr drops the agent and keeps the pane, and the session read `idle` forever; it now ends as `done` with a receipt (cbac0e9).
+
+Still owed to a person at the keyboard: arrows, Enter, `s`, `x`, Esc, and the inline results on the restarted shell; the five-second trials; and the push of the findings and the build once read.
+
 ## Sources
 
 `captures/screenshots/` files named above; `captures/sessions/2026-09-02_phase4-first-run.md`; `plugin/praneet.agent-sessions/{Panel.qml,Session.qml}` at 3d5a06d and 382c785; `bin/omarchy-agent-session-core` and `bin/omarchy-agent-session-watch` at 382c785; `spec/02-command-surface.md`, `spec/03-sessions-panel.md`, `spec/06-notifications.md`, `spec/10-evaluation-plan.md`; on the rig, `/usr/share/omarchy/shell/{Commons/Style.qml,Ui/CursorSurface.qml,Ui/PanelSectionHeader.qml,Ui/PanelHero.qml,shell.qml}`, `/usr/share/omarchy/bin/omarchy-notification-send`, `/usr/share/omarchy/bin/omarchy-restart-shell`, the Quickshell log at `/run/user/1000/quickshell/by-id/*/log.log`; the design skill pack's `skills/ux-review/SKILL.md` and `skills/design-qa/SKILL.md`. The two raw review outputs are in the working notes, not in this repository.

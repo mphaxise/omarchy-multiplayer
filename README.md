@@ -12,11 +12,21 @@ Slice 1 covers one user, many agents, one machine. Sessions are created, listed,
 
 ## Status
 
-Research phase closed on 2026-09-01: the pattern catalog (`patterns/`), the findings (`findings/`), and the slice-1 spec set (`spec/`) are drafted and marked proposed. Omarchy already ships Herdr as a durable agent runtime, so the experiment builds the session model on top of it; `findings/research-brief-2026-09-01.md` records what changed and why. Next: the Herdr spike and the hands-on baseline on the rig (`setup/rig-questions.md`).
+Slice 1 is live on the ARM rig as of 2026-09-02: sessions survive window close and reboot, receipts are written, blocked and orphaned states arrive as notifications, and the bar widget and panel run as a user plugin. `findings/evaluation-slice1-2026-09-02.md` holds the `/ux-review` and `/design-qa` passes against that build, the fixes they forced, and the acceptance audit. Omarchy already ships Herdr as a durable agent runtime, so the session model sits on top of it; `findings/research-brief-2026-09-01.md` records what that changed. Next: the five-second identification trials at the keyboard, then the plugin marketplace listing.
+
+## Known issues
+
+Slice 1 ships with these, each with its repro in `findings/evaluation-slice1-2026-09-02.md`:
+
+- A question and a permission prompt both reach the panel as one state, because Herdr reports both as `blocked`; every surface says "needs you" until the hook payload can tell them apart.
+- A `send` to an agent at a permission prompt is delivered through Herdr's `agent.prompt`; whether the harness accepts text there is untested. The row reports the exit code either way.
+- The five-second identification trials for signal 1 have not run; nothing here claims that signal passes.
+- On the ARM image every Claude launch raises a locked-keyring password prompt; it is the image's fault and it lands in every launch path.
+- After a plugin file changes, the shell's hot reload leaves the live widget on old code; `omarchy-restart-shell` makes the change real, and on this VM under load its two-second readiness check can report failure while the shell is still coming up.
 
 ## Where to start reading
 
-`PLAN.md` for the question, the five success signals, and the phases. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log. `bin/`, `systemd/`, `plugin/`, and `tests/` hold the proposed build skeleton; `python3 -m unittest discover -s tests` runs the 71 local tests, and `bin/README-core.md` lists every assumption the rig still has to confirm.
+`PLAN.md` for the question, the five success signals, and the phases. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log. `bin/`, `systemd/`, `plugin/`, and `tests/` hold the build; `python3 -m unittest discover -s tests` runs the 102 local tests, and `bin/README-core.md` lists the assumptions and what the rig confirmed.
 
 ## Relationship to Omarchy-UX
 
