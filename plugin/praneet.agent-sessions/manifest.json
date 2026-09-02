@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "praneet.agent-sessions",
+  "name": "Agent Sessions",
+  "version": "0.1.0",
+  "author": "Praneet Koppula",
+  "license": "MIT",
+  "description": "Durable, named omarchy-agent-session records in the Omarchy bar: who needs you, who is working, what finished today, and what got orphaned.",
+  "kinds": ["bar-widget"],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Agent Sessions",
+    "description": "One bar icon and one panel: sessions that need you, sessions working, sessions done today, and orphaned sessions.",
+    "category": "AI",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 10,
+      "showWhenEmpty": false,
+      "maxRows": 20
+    },
+    "schema": [
+      { "key": "refreshIntervalSec", "type": "integer", "label": "Refresh interval (seconds)", "min": 5, "max": 120, "step": 5, "defaultValue": 10 },
+      { "key": "showWhenEmpty", "type": "boolean", "label": "Show when empty", "defaultValue": false },
+      { "key": "maxRows", "type": "integer", "label": "Maximum rows", "min": 5, "max": 50, "step": 1, "defaultValue": 20 }
+    ]
+  }
+}

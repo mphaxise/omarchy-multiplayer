@@ -1,0 +1,2068 @@
+#!/usr/bin/env python3
+"""omarchy-agent-session-core
+
+Slice-1 session store and command implementation for omarchy-multiplayer.
+Proposed, 2026-09-01; not run against a real Omarchy/Herdr install. Every
+`bin/omarchy-agent-session-<cmd>` shell wrapper execs into this file as
+`omarchy-agent-session-core <cmd> "$@"`; this is the one place the session
+record, event log, receipt, permission-mode table, and Herdr client live.
+
+Standard library only (Python 3.11+ compatible; also runs on 3.10, which is
+what this skeleton was tested against -- see README-core.md).
+
+Spec files this implements: 01-session-model.md, 02-command-surface.md,
+04-permission-modes.md, 05-receipts-and-artifacts.md, 07-worktrees.md.
+Four commands (`preview`, `done`, `artifact-add`, `mode`) are only
+cross-referenced by 02-command-surface.md into 04/09; 09-closed-loop-surfaces.md
+itself was not part of this build's reading set, so those commands are
+implemented from the cross-reference table alone. See README-core.md for the
+exact list of assumptions this required.
+"""
+
+import argparse
+import contextlib
+import datetime as dt
+import getpass
+import json
+import os
+import pathlib
+import re
+import shlex
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+
+# --------------------------------------------------------------------------
+# Exit codes (spec-02's "Shared exit codes" table; every subcommand below
+# uses this same vocabulary, per that file's framing).
+# --------------------------------------------------------------------------
+
+EXIT_OK = 0
+EXIT_USAGE = 2
+EXIT_NOT_FOUND = 3
+EXIT_HERDR_UNREACHABLE = 4
+EXIT_CONFLICT = 5
+
+
+class SessionError(Exception):
+    exit_code = 1
+
+
+class UsageError(SessionError):
+    exit_code = EXIT_USAGE
+
+
+class NotFoundError(SessionError):
+    exit_code = EXIT_NOT_FOUND
+
+
+class ConflictError(SessionError):
+    """Name taken, depth/children limit, or an invariant refused the op."""
+
+    exit_code = EXIT_CONFLICT
+
+
+# --------------------------------------------------------------------------
+# Session model constants (01-session-model.md)
+# --------------------------------------------------------------------------
+
+STATES = (
+    "starting", "working", "waiting", "blocked", "idle",
+    "done", "failed", "stopped", "orphaned",
+)
+TERMINAL_STATES = {"done", "failed", "stopped"}
+NEEDS_ATTENTION_STATES = {"waiting", "blocked"}
+
+EVENT_TYPES = (
+    "session.created", "session.renamed", "owner.assigned", "mode.changed",
+    "preview.set", "runtime.bound", "runtime.unbound", "status.changed",
+    "goal.set", "instruction.queued", "instruction.delivered",
+    "instruction.dropped", "child.spawned", "child.completed",
+    "approval.requested", "approval.resolved", "artifact.added",
+    "receipt.written", "session.ended",
+)
+
+# The state machine table from 01-session-model.md. ANY is the "any live
+# state" wildcard used by three rows (-> done, -> failed, -> stopped).
+ANY = "*any-live*"
+VALID_TRANSITIONS = {
+    ("starting", "working"),
+    ("working", "waiting"),
+    ("working", "blocked"),
+    ("waiting", "working"),
+    ("blocked", "working"),
+    ("working", "idle"),
+    ("idle", "working"),
+    (ANY, "done"),
+    (ANY, "failed"),
+    (ANY, "stopped"),
+    (ANY, "orphaned"),
+    ("orphaned", "working"),
+}
+
+
+def is_valid_transition(from_state, to_state):
+    if (from_state, to_state) in VALID_TRANSITIONS:
+        return True
+    if (ANY, to_state) in VALID_TRANSITIONS and from_state not in TERMINAL_STATES:
+        return True
+    return False
+
+
+# Depth/children limits (01-session-model.md: "Both are configuration, both
+# are enforced at session new"). Read as env-overridable, defaulting to the
+# spec's own numbers, since the spec calls them "configuration" rather than
+# fixed constants.
+MAX_LINEAGE_DEPTH = int(os.environ.get("OMARCHY_SESSION_MAX_DEPTH", "3"))
+MAX_CHILDREN = int(os.environ.get("OMARCHY_SESSION_MAX_CHILDREN", "5"))
+MAX_PARTICIPANTS = 32
+
+
+# --------------------------------------------------------------------------
+# Paths (env overrides per the task contract)
+# --------------------------------------------------------------------------
+
+def sessions_root():
+    env = os.environ.get("OMARCHY_SESSIONS_DIR")
+    if env:
+        return pathlib.Path(env)
+    return pathlib.Path.home() / ".local" / "state" / "omarchy" / "sessions"
+
+
+def herdr_socket_path():
+    env = os.environ.get("HERDR_SOCKET")
+    if env:
+        return pathlib.Path(env)
+    return pathlib.Path.home() / ".config" / "herdr" / "herdr.sock"
+
+
+# Where new worktrees land (07-worktrees.md: Herdr's own worktrees.directory,
+# default ~/.herdr/worktrees). This skeleton has no Herdr method to fetch the
+# *configured* value (not in the required HerdrClient method list), so it
+# always uses the documented default; querying the real value is
+# VERIFY ON RIG per spec-07's own open question.
+def herdr_worktrees_directory():
+    env = os.environ.get("HERDR_WORKTREES_DIR")
+    if env:
+        return pathlib.Path(env)
+    return pathlib.Path.home() / ".herdr" / "worktrees"
+
+
+def eprint(*a, **kw):
+    print(*a, file=sys.stderr, **kw)
+
+
+# --------------------------------------------------------------------------
+# Time
+# --------------------------------------------------------------------------
+
+def now_rfc3339():
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_rfc3339(s):
+    # Accept the "Z" suffix this module always writes, plus a bare offset
+    # form, in case a hand-written fixture uses one.
+    s = s.strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    return dt.datetime.fromisoformat(s)
+
+
+# --------------------------------------------------------------------------
+# ULID: Crockford base32 of a 48-bit millisecond timestamp + 80 bits of
+# os.urandom. No dependency, per the task's "ULIDs from time and os.urandom"
+# instruction.
+# --------------------------------------------------------------------------
+
+_CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+
+def _encode_crockford(value, num_chars):
+    chars = []
+    for i in range(num_chars):
+        shift = (num_chars - 1 - i) * 5
+        chars.append(_CROCKFORD[(value >> shift) & 0x1F])
+    return "".join(chars)
+
+
+def new_ulid(now_ms=None, rand_bytes=None):
+    if now_ms is None:
+        now_ms = int(time.time() * 1000)
+    if rand_bytes is None:
+        rand_bytes = os.urandom(10)
+    ts = now_ms & ((1 << 48) - 1)
+    rand_int = int.from_bytes(rand_bytes, "big")
+    return _encode_crockford(ts, 10) + _encode_crockford(rand_int, 16)
+
+
+_ULID_RE = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
+
+
+def looks_like_ulid(s):
+    return bool(_ULID_RE.match(s or ""))
+
+
+# --------------------------------------------------------------------------
+# Atomic writes (temp file + os.replace, per the session model and receipt
+# lifecycle both requiring it)
+# --------------------------------------------------------------------------
+
+def atomic_write_text(path, text):
+    path = pathlib.Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix="." + path.name + ".", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_name, str(path))
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
+
+
+def atomic_write_json(path, obj):
+    atomic_write_text(path, json.dumps(obj, indent=2, sort_keys=False) + "\n")
+
+
+# --------------------------------------------------------------------------
+# Actors (01-session-model.md). The wire/string form used on the CLI and in
+# the marker line and receipt rendering is "<kind>:<id>" (e.g.
+# "human:praneet@rig"), per spec-02's `assign` example and spec-05's receipt
+# rendering; the JSON object form used everywhere else is {kind, id, label},
+# per spec-02's own `list --json` example ("id": "praneet@rig" with no
+# prefix). Both are implemented; parse_actor_string / actor_to_string
+# convert between them.
+# --------------------------------------------------------------------------
+
+ACTOR_KINDS = ("human", "agent", "system")
+
+
+def current_human_actor():
+    user = os.environ.get("USER") or os.environ.get("LOGNAME")
+    if not user:
+        with contextlib.suppress(Exception):
+            user = getpass.getuser()
+    user = user or "unknown"
+    host = socket.gethostname().split(".")[0] or "localhost"
+    return {"kind": "human", "id": f"{user}@{host}", "label": user}
+
+
+def system_actor():
+    return {"kind": "system", "id": "omarchy", "label": "omarchy"}
+
+
+def agent_actor(session_id, label=None):
+    return {"kind": "agent", "id": session_id, "label": label or session_id}
+
+
+def actor_to_string(actor):
+    return f"{actor['kind']}:{actor['id']}"
+
+
+def parse_actor_string(s):
+    if not s or ":" not in s:
+        raise UsageError(f"invalid actor '{s}': expected <kind>:<id>, e.g. human:praneet@rig")
+    kind, ident = s.split(":", 1)
+    if kind not in ACTOR_KINDS:
+        raise UsageError(f"invalid actor kind '{kind}': expected one of {', '.join(ACTOR_KINDS)}")
+    if not ident:
+        raise UsageError(f"invalid actor '{s}': missing id after '{kind}:'")
+    label = ident.split("@", 1)[0] if kind == "human" else ident
+    return {"kind": kind, "id": ident, "label": label}
+
+
+# --------------------------------------------------------------------------
+# Inter-agent marker line (02-command-surface.md, verbatim format)
+# --------------------------------------------------------------------------
+
+def format_marked_instruction(origin_id, origin_name, text):
+    safe_name = (origin_name or "").replace("\n", " ").replace("]", "")
+    return f"[omarchy-session-message from={origin_id} name={safe_name}]\n\n{text}"
+
+
+# --------------------------------------------------------------------------
+# Instructions (01-session-model.md)
+# --------------------------------------------------------------------------
+
+def new_instruction(text, author, delivery="steer", origin_session=None, about_artifact=None):
+    instr = {
+        "id": new_ulid(),
+        "text": text,
+        "author": author,
+        "queued_at": now_rfc3339(),
+        "delivery": delivery,
+        "origin_session": origin_session,
+    }
+    # `about_artifact` is an extension beyond 01-session-model.md's own
+    # Instruction shape: `send --about <artifact-id>` is only specified in
+    # 09-closed-loop-surfaces.md (not part of this build's reading set), so
+    # this field is this build's best guess at how the reference survives
+    # onto the instruction; see README-core.md.
+    if about_artifact:
+        instr["about_artifact"] = about_artifact
+    return instr
+
+
+# --------------------------------------------------------------------------
+# Permission modes (04-permission-modes.md): the harness flag table as data.
+#
+# Each cell:
+#   kind: "flags" | "env" | "default" | "refuse" | "extra_file" | "extra_rule" | "none" | "inherits" | "unknown"
+#   flags: list[str] appended to argv (possibly empty)
+#   env: dict[str, str] of env vars to set (or None)
+#   extra: free-form dict for a mechanism beyond argv/env (crush's disabled
+#          tools list, agy's /permissions rule, grok's settings file)
+#   note: human text carried from the spec's prose
+#   verify_on_rig: True exactly on the cells the spec marks "(verify on
+#          rig)"/"verify on rig", plus the ones the file's own bottom
+#          "Verify on rig" list names explicitly (crush restricted, grok
+#          restricted, agy restricted, hermes/pi shared+restricted -- see
+#          README-core.md for the mapping from prose to this flag).
+# --------------------------------------------------------------------------
+
+def _cell(kind, flags=None, env=None, extra=None, note="", verify_on_rig=False):
+    return {
+        "kind": kind, "flags": flags or [], "env": env or {},
+        "extra": extra or {}, "note": note, "verify_on_rig": verify_on_rig,
+    }
+
+
+HARNESS_TABLE = {
+    "claude": {
+        "personal": _cell("flags", ["--permission-mode", "auto"]),
+        "shared": _cell("flags", ["--permission-mode", "default"]),
+        "restricted": _cell("flags", ["--restricted", "--tools", "Read,Grep,Glob"]),
+    },
+    "codex": {
+        "personal": _cell("flags", ["--approve-for-me"], verify_on_rig=True,
+                           note="absent from the current CLI reference; documented "
+                                "no-prompt paths are --ask-for-approval never and "
+                                "--dangerously-bypass-approvals-and-sandbox (--yolo)."),
+        "shared": _cell("flags", ["--sandbox", "workspace-write", "--ask-for-approval", "untrusted"]),
+        "restricted": _cell("flags", ["--sandbox", "read-only", "--ask-for-approval", "never"]),
+    },
+    "opencode": {
+        "personal": _cell("flags", ["--auto"]),
+        "shared": _cell("env", env={"OPENCODE_PERMISSION": '{"permission":"ask"}'}),
+        "restricted": _cell("env", env={
+            "OPENCODE_PERMISSION": '{"permission":{"*":"deny","read":"allow","glob":"allow","grep":"allow"}}'
+        }),
+    },
+    "copilot": {
+        "personal": _cell("flags", ["--allow-all"]),
+        "shared": _cell("default"),
+        "restricted": _cell("flags", ["--available-tools=view,grep,glob"]),
+    },
+    "crush": {
+        "personal": _cell("flags", ["--yolo"]),
+        "shared": _cell("default"),
+        "restricted": _cell(
+            "extra_file",
+            extra={"disabled_tools": ["bash", "edit", "multiedit", "write", "download", "job_output", "job_kill"]},
+            note="a config file the launcher writes before exec, not a flag; "
+                 "delivering it without touching the project's own .crush.json is verify on rig.",
+            verify_on_rig=True,
+        ),
+    },
+    "grok": {
+        "personal": _cell("flags", ["--permission-mode", "bypassPermissions"]),
+        "shared": _cell("flags", ["--permission-mode", "default"]),
+        "restricted": _cell(
+            "extra_rule",
+            flags=["--allow", "Read", "--allow", "Grep", "--deny", "Bash", "--deny", "Edit"],
+            extra={"settings_file": {"defaultMode": "dontAsk"}},
+            note="dontAsk cannot be set by --permission-mode, only by defaultMode "
+                 "in a settings file read at startup; the launcher writes that "
+                 "file alongside the allow/deny flags.",
+            verify_on_rig=True,
+        ),
+    },
+    "hermes": {
+        "personal": _cell("flags", ["--yolo"]),
+        "shared": _cell("refuse", note="no mode that asks before every action.", verify_on_rig=True),
+        "restricted": _cell("refuse", note="no read-only mode.", verify_on_rig=True),
+    },
+    "agy": {
+        "personal": _cell("flags", ["--dangerously-skip-permissions"]),
+        "shared": _cell("default"),
+        "restricted": _cell(
+            "extra_rule", flags=["--mode=plan"],
+            extra={"permissions_rule": "read-only"},
+            note="--mode=plan stops file writes but shell commands go through a "
+                 "separate /permissions gate in every mode; restricted also needs "
+                 "a read-only /permissions rule.",
+            verify_on_rig=True,
+        ),
+    },
+    "omp": {
+        "personal": _cell("flags", ["--auto-approve"], verify_on_rig=True,
+                           note="from a third party's integration notes, not OMP's own reference."),
+        "shared": _cell("default", verify_on_rig=True),
+        "restricted": _cell("unknown", note="tool filter unconfirmed.", verify_on_rig=True),
+    },
+    "pi": {
+        "personal": _cell("none", note="ships no permission gate at all; nothing needed."),
+        "shared": _cell("refuse", note="no config satisfies the mode's contract.", verify_on_rig=True),
+        "restricted": _cell("refuse", note="no config satisfies the mode's contract.", verify_on_rig=True),
+    },
+    "ori": {
+        # "inherits wrapped harness" for all three columns. This skeleton's
+        # --agent <kind> is a single token with no documented syntax for
+        # naming a wrapped harness (e.g. "ori claude"), so a bare "ori" is
+        # always treated as its own native agent and, per spec-04, handled
+        # like "pi" until the rig says otherwise. Wrapped-form resolution is
+        # unimplemented; see README-core.md.
+        "personal": _cell("none", note="bare ori has no confirmed flag in any mode; treated like pi."),
+        "shared": _cell("refuse", note="treated like pi until the rig says otherwise.", verify_on_rig=True),
+        "restricted": _cell("refuse", note="treated like pi until the rig says otherwise.", verify_on_rig=True),
+    },
+}
+
+# 02-command-surface.md: Herdr agent aliases must match this.
+_ALIAS_CHAR_RE = re.compile(r"[a-z0-9_-]")
+_ALIAS_STARTS_LETTER_RE = re.compile(r"^[a-z]")
+
+
+def validate_mode_supported(kind, mode):
+    """Raise ConflictError if `kind` has no safe expression of `mode` at all
+    (04-permission-modes.md's "no match, refuse" rows)."""
+    row = HARNESS_TABLE.get(kind)
+    if row is None:
+        raise UsageError(f"unknown agent kind '{kind}'")
+    cell = row[mode]
+    if cell["kind"] == "refuse":
+        raise ConflictError(
+            f"harness '{kind}' has no safe expression of {mode} mode ({cell['note']}) "
+            f"(invariant 5, 01-session-model.md)"
+        )
+
+
+def _contains_subsequence(argv, seq):
+    if not seq:
+        return False
+    n, m = len(argv), len(seq)
+    for i in range(0, n - m + 1):
+        if argv[i:i + m] == seq:
+            return True
+    return False
+
+
+def check_invariant5(kind, mode, argv, env):
+    """A session in shared/restricted mode is never bound to a harness
+    launched with a bypass-permissions flag (invariant 5). Checks the fully
+    assembled argv/env -- the mode's own flags plus anything a caller tried
+    to smuggle in via extra agent args -- against the harness's Personal-
+    column deny-list, plus the one named "looks safe alone" combination
+    (codex's --ask-for-approval never without --sandbox read-only)."""
+    if mode == "personal":
+        return
+    row = HARNESS_TABLE.get(kind)
+    if row is None:
+        raise UsageError(f"unknown agent kind '{kind}'")
+    deny_seq = row["personal"]["flags"]
+    if _contains_subsequence(list(argv), list(deny_seq)):
+        raise ConflictError(
+            f"refusing {mode} launch for '{kind}': argv contains the Personal-mode "
+            f"bypass flag {' '.join(deny_seq)!r} (invariant 5, 01-session-model.md)"
+        )
+    if kind == "codex" and "--ask-for-approval" in argv:
+        # Scan every occurrence, not just the first: the mode's own cell
+        # may already carry one --ask-for-approval before a smuggled extra
+        # argument adds a second, later one.
+        values = [argv[i + 1] for i, tok in enumerate(argv) if tok == "--ask-for-approval" and i + 1 < len(argv)]
+        has_readonly_sandbox = _contains_subsequence(list(argv), ["--sandbox", "read-only"])
+        if "never" in values and not has_readonly_sandbox:
+            raise ConflictError(
+                "refusing launch for 'codex': --ask-for-approval never without "
+                "--sandbox read-only only looks safe alone (invariant 5, "
+                "04-permission-modes.md)"
+            )
+
+
+def assemble_launch(kind, mode, extra_args=None):
+    """Build the argv/env for launching `kind` in `mode`, plus the mode
+    cell itself (so callers can act on extra_file/extra_rule mechanisms).
+    Raises ConflictError via validate_mode_supported/check_invariant5."""
+    validate_mode_supported(kind, mode)
+    cell = HARNESS_TABLE[kind][mode]
+    argv = list(cell["flags"]) + list(extra_args or [])
+    env = dict(cell["env"])
+    check_invariant5(kind, mode, argv, env)
+    return argv, env, cell
+
+
+def derive_herdr_alias(name, session_id, existing_aliases=()):
+    """02-command-surface.md's alias derivation rule."""
+    lowered = (name or "session").lower()
+    out, prev_dash = [], False
+    for ch in lowered:
+        if _ALIAS_CHAR_RE.match(ch):
+            out.append(ch)
+            prev_dash = False
+        elif not prev_dash:
+            out.append("-")
+            prev_dash = True
+    slug = "".join(out).strip("-") or "s"
+    if not _ALIAS_STARTS_LETTER_RE.match(slug):
+        slug = "s-" + slug
+    slug = slug[:32]
+    if slug in existing_aliases:
+        suffix = session_id[-4:].lower()
+        slug = slug[: max(0, 31 - len(suffix))] + "-" + suffix
+    return slug
+
+
+# --------------------------------------------------------------------------
+# Herdr client
+# --------------------------------------------------------------------------
+
+class HerdrUnavailable(Exception):
+    """Herdr's socket is absent, refused the connection, or timed out."""
+
+
+class HerdrError(Exception):
+    """Herdr answered with a wire-level {"error": {...}} reply."""
+
+    def __init__(self, code, message, data=None):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.data = data
+
+
+class HerdrClient:
+    """Newline-delimited JSON over a Unix domain socket.
+
+    VERIFY ON RIG: everything about the wire format below is this build's
+    own assumption, unconfirmed against a real Herdr install. Assumed
+    request shape: {"id": <int>, "method": "<name>", "params": {...}}\\n
+    on one line. Assumed reply shape, one line back per request:
+    {"id": <int>, "result": <any>} on success or
+    {"id": <int>, "error": {"code": ..., "message": ..., "data": ...}} on
+    failure. `events_subscribe` assumes the same framing but as a
+    long-lived stream of unsolicited lines after the initial subscribe
+    reply, rather than one reply per request.
+
+    Every method here opens a fresh connection per call (simple and robust
+    for a short-lived CLI process); `events_subscribe` is the one exception,
+    since it needs to hold a connection open to read a stream.
+    """
+
+    def __init__(self, socket_path=None, timeout=5.0):
+        self.socket_path = pathlib.Path(socket_path) if socket_path else herdr_socket_path()
+        self.timeout = timeout
+        self._next_id = 0
+
+    def _id(self):
+        self._next_id += 1
+        return self._next_id
+
+    def _connect(self):
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(self.timeout)
+        try:
+            sock.connect(str(self.socket_path))
+        except OSError as e:
+            sock.close()
+            raise HerdrUnavailable(f"cannot reach Herdr socket at {self.socket_path}: {e}") from e
+        return sock
+
+    def call(self, method, params=None):
+        """Generic escape hatch for a Herdr method beyond the named ones
+        below (e.g. worktree.open, worktree.remove, agent.send_keys,
+        agent.focus, agent.read -- named by 02-command-surface.md /
+        07-worktrees.md but not part of this client's required method
+        list)."""
+        sock = self._connect()
+        try:
+            req = {"id": self._id(), "method": method, "params": params or {}}
+            try:
+                sock.sendall((json.dumps(req) + "\n").encode("utf-8"))
+                f = sock.makefile("r", encoding="utf-8")
+                line = f.readline()
+            except (OSError, socket.timeout) as e:
+                raise HerdrUnavailable(f"Herdr call '{method}' failed: {e}") from e
+            if not line:
+                raise HerdrUnavailable(f"Herdr closed the connection with no reply to '{method}'")
+            try:
+                reply = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise HerdrUnavailable(f"Herdr sent a non-JSON reply to '{method}': {e}") from e
+            if reply.get("error"):
+                err = reply["error"]
+                raise HerdrError(err.get("code"), err.get("message", "Herdr error"), err.get("data"))
+            return reply.get("result")
+        finally:
+            sock.close()
+
+    def agent_list(self, **params):
+        return self.call("agent.list", params)
+
+    def pane_list(self, **params):
+        return self.call("pane.list", params)
+
+    def agent_get(self, **params):
+        return self.call("agent.get", params)
+
+    def agent_start(self, **params):
+        return self.call("agent.start", params)
+
+    def agent_prompt(self, **params):
+        return self.call("agent.prompt", params)
+
+    def agent_rename(self, **params):
+        return self.call("agent.rename", params)
+
+    def pane_close(self, **params):
+        return self.call("pane.close", params)
+
+    def worktree_create(self, **params):
+        return self.call("worktree.create", params)
+
+    def snapshot(self, **params):
+        return self.call("snapshot", params)
+
+    def events_subscribe(self, **params):
+        """Yields parsed JSON events from a long-lived stream. VERIFY ON
+        RIG: assumes the stream is newline-delimited JSON on the same kind
+        of socket, starting with a subscribe request."""
+        sock = self._connect()
+        try:
+            req = {"id": self._id(), "method": "events.subscribe", "params": params or {}}
+            sock.sendall((json.dumps(req) + "\n").encode("utf-8"))
+            f = sock.makefile("r", encoding="utf-8")
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+        finally:
+            sock.close()
+
+
+# --------------------------------------------------------------------------
+# Git helpers (05-receipts-and-artifacts.md, 07-worktrees.md)
+# --------------------------------------------------------------------------
+
+class GitError(Exception):
+    pass
+
+
+def run_git(args, cwd=None, check=True):
+    try:
+        result = subprocess.run(
+            ["git", *args], cwd=str(cwd) if cwd else None,
+            capture_output=True, text=True,
+        )
+    except FileNotFoundError as e:
+        raise GitError(f"git not found: {e}") from e
+    if check and result.returncode != 0:
+        raise GitError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
+    return result
+
+
+def git_top_level(path):
+    r = run_git(["rev-parse", "--show-toplevel"], cwd=path, check=False)
+    if r.returncode != 0:
+        return None
+    return pathlib.Path(r.stdout.strip())
+
+
+def git_current_branch(path):
+    r = run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=path, check=False)
+    if r.returncode != 0:
+        return None
+    branch = r.stdout.strip()
+    return branch if branch and branch != "HEAD" else None
+
+
+_UNSAFE_REF_RE = re.compile(r"[~^:?*\[\]\\\s]")
+
+
+def git_safe_ref(name):
+    """Best-effort git ref-name sanitizing. Unicode/emoji names are
+    07-worktrees.md's own open "verify on rig" question; this is a plain
+    ASCII-oriented pass, not a full `git check-ref-format` reimplementation."""
+    s = _UNSAFE_REF_RE.sub("-", (name or "session").strip())
+    s = re.sub(r"\.\.+", "-", s)
+    s = s.strip("/.")
+    s = re.sub(r"-{2,}", "-", s)
+    return s or "session"
+
+
+def create_worktree(repo_root, dest, branch, base_branch, herdr):
+    dest = pathlib.Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if herdr is not None:
+        try:
+            herdr.worktree_create(repo=str(repo_root), path=str(dest), branch=branch,
+                                   base=base_branch, focus=False)
+            return "herdr"
+        except HerdrUnavailable:
+            pass  # 07-worktrees.md: plain git when there is no Herdr backend
+    run_git(["worktree", "add", str(dest), "-b", branch, base_branch], cwd=repo_root)
+    return "git"
+
+
+def remove_worktree(repo_root, worktree_path, herdr):
+    if herdr is not None:
+        try:
+            herdr.call("worktree.remove", {"repo": str(repo_root), "path": str(worktree_path)})
+            return "herdr"
+        except HerdrUnavailable:
+            pass
+    run_git(["worktree", "remove", str(worktree_path)], cwd=repo_root, check=False)
+    return "git"
+
+
+def git_commits(worktree_path, base_branch, branch):
+    if not base_branch or not branch:
+        return None
+    r = run_git(["log", "--no-merges", "--reverse", "--format=%H\x1f%s\x1f%an",
+                 f"{base_branch}..{branch}"], cwd=worktree_path, check=False)
+    if r.returncode != 0:
+        return None
+    commits = []
+    for line in r.stdout.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\x1f")
+        if len(parts) == 3:
+            commits.append({"sha": parts[0], "subject": parts[1], "author": parts[2]})
+    return commits
+
+
+def parse_shortstat(s):
+    files = ins = dele = 0
+    m = re.search(r"(\d+) files? changed", s)
+    if m:
+        files = int(m.group(1))
+    m = re.search(r"(\d+) insertions?\(\+\)", s)
+    if m:
+        ins = int(m.group(1))
+    m = re.search(r"(\d+) deletions?\(-\)", s)
+    if m:
+        dele = int(m.group(1))
+    return {"files": files, "insertions": ins, "deletions": dele}
+
+
+def git_diff_stat(worktree_path, base_branch, branch):
+    if not base_branch or not branch:
+        return None
+    r = run_git(["diff", "--shortstat", f"{base_branch}...{branch}"], cwd=worktree_path, check=False)
+    if r.returncode != 0:
+        return None
+    return parse_shortstat(r.stdout)
+
+
+def git_dirty(worktree_path):
+    r = run_git(["status", "--porcelain"], cwd=worktree_path, check=False)
+    if r.returncode != 0:
+        return None
+    return bool(r.stdout.strip())
+
+
+def git_has_remote(worktree_path):
+    r = run_git(["remote"], cwd=worktree_path, check=False)
+    return bool(r.stdout.strip()) if r.returncode == 0 else False
+
+
+def git_unpushed(worktree_path, branch):
+    if not branch:
+        return None
+    if not git_has_remote(worktree_path):
+        return True
+    r = run_git(["rev-list", branch, "--not", "--remotes"], cwd=worktree_path, check=False)
+    if r.returncode != 0:
+        return None
+    return bool(r.stdout.strip())
+
+
+def git_merged_into(worktree_path, branch, base_branch):
+    r = run_git(["merge-base", "--is-ancestor", branch, base_branch], cwd=worktree_path, check=False)
+    return r.returncode == 0
+
+
+def decide_worktree_cleanup(worktree_path, branch, base_branch):
+    """07-worktrees.md's cleanup table. Only meaningful when the worktree
+    still exists; callers check created_by_session first. Returns
+    (should_remove, reason)."""
+    if git_dirty(worktree_path):
+        return False, "uncommitted changes present"
+    merged = bool(branch and base_branch and git_merged_into(worktree_path, branch, base_branch))
+    pushed = bool(branch) and git_has_remote(worktree_path) and not git_unpushed(worktree_path, branch)
+    if merged or pushed:
+        return True, "merged into base_branch" if merged else "pushed to a remote"
+    return False, "committed but not pushed to any remote and not merged into base_branch"
+
+
+def cleanup_workspace_if_owned(session, herdr):
+    """Runs 07-worktrees.md's cleanup table at a session's terminal
+    transition (called from `stop` and `done`). No-op unless this session's
+    own `new` created the worktree (created_by_session) and it still
+    exists; a shared or plain (--no-worktree / no-repo) workspace is never
+    touched. The branch itself is never deleted (invariant 7) -- only the
+    worktree directory, via remove_worktree(), which already keeps the
+    branch. Mutates session["workspace"] in place with `worktree_removed`
+    and `worktree_removed_reason`, which then flow into the receipt
+    unchanged since compute_receipt copies `workspace` wholesale."""
+    ws = session.get("workspace") or {}
+    worktree_path = ws.get("worktree_path")
+    if not ws.get("created_by_session") or not worktree_path or not pathlib.Path(worktree_path).exists():
+        return
+    should_remove, reason = decide_worktree_cleanup(worktree_path, ws.get("branch"), ws.get("base_branch"))
+    if should_remove:
+        remove_worktree(ws.get("repo_root"), worktree_path, herdr)
+    ws["worktree_removed"] = should_remove
+    ws["worktree_removed_reason"] = reason
+    session["workspace"] = ws
+
+
+# --------------------------------------------------------------------------
+# Session store
+# --------------------------------------------------------------------------
+
+class SessionStore:
+    def __init__(self, root):
+        self.root = pathlib.Path(root)
+
+    def session_dir(self, session_id):
+        return self.root / session_id
+
+    def session_json_path(self, session_id):
+        return self.session_dir(session_id) / "session.json"
+
+    def events_path(self, session_id):
+        return self.session_dir(session_id) / "events.jsonl"
+
+    def receipt_path(self, session_id):
+        return self.session_dir(session_id) / "receipt.json"
+
+    def artifacts_dir(self, session_id):
+        return self.session_dir(session_id) / "artifacts"
+
+    def session_exists(self, session_id):
+        return self.session_json_path(session_id).exists()
+
+    def all_ids(self):
+        if not self.root.exists():
+            return []
+        return sorted(
+            p.name for p in self.root.iterdir()
+            if p.is_dir() and (p / "session.json").exists()
+        )
+
+    def try_load(self, session_id):
+        path = self.session_json_path(session_id)
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def load(self, id_or_name):
+        s = self.try_load(id_or_name)
+        if s is not None:
+            return s
+        matches = [m for m in self.list_sessions() if m.get("name") == id_or_name]
+        if not matches:
+            raise NotFoundError(f"no session matches id or name '{id_or_name}'")
+        live = [m for m in matches if m["status"]["state"] not in TERMINAL_STATES]
+        pool = live or matches
+        pool.sort(key=lambda m: m["created_at"], reverse=True)
+        return pool[0]
+
+    def list_sessions(self):
+        out = []
+        for sid in self.all_ids():
+            s = self.try_load(sid)
+            if s is not None:
+                out.append(s)
+        return out
+
+    def save_session(self, session):
+        atomic_write_json(self.session_json_path(session["id"]), session)
+
+    def _last_seq(self, session_id):
+        path = self.events_path(session_id)
+        if not path.exists():
+            return 0
+        last = 0
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                with contextlib.suppress(json.JSONDecodeError):
+                    last = max(last, json.loads(line).get("seq", 0))
+        return last
+
+    def append_event(self, session_id, event_type, actor, data=None):
+        if event_type not in EVENT_TYPES:
+            raise ValueError(f"unknown event type '{event_type}'")
+        seq = self._last_seq(session_id) + 1
+        event = {"seq": seq, "ts": now_rfc3339(), "type": event_type, "actor": actor, "data": data or {}}
+        path = self.events_path(session_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(event, sort_keys=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        return event
+
+    def read_events(self, session_id, since=None, type_filter=None):
+        path = self.events_path(session_id)
+        if not path.exists():
+            return []
+        out = []
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if since is not None and e.get("seq", 0) <= since:
+                    continue
+                if type_filter is not None and e.get("type") != type_filter:
+                    continue
+                out.append(e)
+        return out
+
+    def name_taken(self, name, exclude_id=None):
+        """Name uniqueness is scoped to "live" sessions (01-session-model.md
+        doesn't define "live" precisely outside the state machine's own
+        state list; this build reads it as "not yet in a terminal state",
+        i.e. every state except done/failed/stopped, orphaned included since
+        an orphaned session can still be reopened)."""
+        for s in self.list_sessions():
+            if s["id"] == exclude_id:
+                continue
+            if s["status"]["state"] in TERMINAL_STATES:
+                continue
+            if s["name"] == name:
+                return True
+        return False
+
+
+def compute_depth(store, session_id):
+    depth, cur, seen = 0, session_id, set()
+    while True:
+        if cur in seen:
+            break  # defensive: never loop on a corrupt lineage cycle
+        seen.add(cur)
+        s = store.try_load(cur)
+        if not s:
+            break
+        parent = s.get("lineage", {}).get("parent_id")
+        if not parent:
+            break
+        depth += 1
+        cur = parent
+    return depth
+
+
+# --------------------------------------------------------------------------
+# Artifacts (05-receipts-and-artifacts.md)
+# --------------------------------------------------------------------------
+
+_LABEL_SAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def sanitize_label_for_filename(label):
+    s = _LABEL_SAFE_RE.sub("-", (label or "").strip())
+    return s.strip("-") or "artifact"
+
+
+def fetch_url_title(url):
+    """Best-effort <title> fetch; a failed fetch leaves the label as the
+    bare URL, per 05-receipts-and-artifacts.md."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "omarchy-agent-session-core/1"})
+        with urllib.request.urlopen(req, timeout=3) as resp:  # noqa: S310 (fixed scheme set below)
+            html = resp.read(65536).decode("utf-8", errors="replace")
+        m = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
+        if m:
+            return re.sub(r"\s+", " ", m.group(1)).strip()
+    except Exception:
+        return None
+    return None
+
+
+def add_artifact(store, session_id, kind, source, label, added_by, state="proposed"):
+    """Writes the artifact file plus its JSON sidecar under artifacts/,
+    named <ulid>-<label>.<ext>, per 05-receipts-and-artifacts.md. Returns
+    (index_entry, artifact_path)."""
+    artifacts_dir = store.artifacts_dir(session_id)
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    ulid = new_ulid()
+    resolved_source = source
+
+    if kind == "file":
+        src_path = pathlib.Path(source).expanduser()
+        if not src_path.is_file():
+            raise UsageError(f"--file path does not exist: {source}")
+        ext = src_path.suffix.lstrip(".") or "bin"
+        resolved_label = label or src_path.stem
+        dest = artifacts_dir / f"{ulid}-{sanitize_label_for_filename(resolved_label)}.{ext}"
+        shutil.copyfile(src_path, dest)
+        resolved_source = str(src_path)
+    elif kind == "url":
+        resolved_label = label or fetch_url_title(source) or source
+        dest = artifacts_dir / f"{ulid}-{sanitize_label_for_filename(resolved_label)}.url"
+        atomic_write_text(dest, source + "\n")
+    elif kind == "note":
+        resolved_label = label or "note"
+        dest = artifacts_dir / f"{ulid}-{sanitize_label_for_filename(resolved_label)}.txt"
+        atomic_write_text(dest, source)
+        resolved_source = "typed"
+    elif kind == "capture":
+        # `source` is already a real file on disk (produced by the capture
+        # command's screenshot/region logic); move it into place here.
+        src_path = pathlib.Path(source)
+        ext = src_path.suffix.lstrip(".") or "png"
+        resolved_label = label or src_path.stem
+        dest = artifacts_dir / f"{ulid}-{sanitize_label_for_filename(resolved_label)}.{ext}"
+        shutil.move(str(src_path), str(dest))
+    else:
+        raise UsageError(f"unknown artifact kind '{kind}'")
+
+    added_at = now_rfc3339()
+    sidecar = dest.with_suffix(dest.suffix + ".json") if False else artifacts_dir / (dest.stem + ".json")
+    sidecar_data = {
+        "label": resolved_label, "added_by": added_by, "added_at": added_at,
+        "kind": kind, "source": resolved_source, "state": state,
+    }
+    atomic_write_json(sidecar, sidecar_data)
+    entry = {"path": str(dest), "label": resolved_label, "added_by": added_by, "added_at": added_at}
+    return entry, dest
+
+
+def read_artifacts_index(artifacts_dir):
+    artifacts_dir = pathlib.Path(artifacts_dir)
+    if not artifacts_dir.exists():
+        return []
+    entries = []
+    for sidecar in sorted(artifacts_dir.glob("*.json")):
+        try:
+            data = json.loads(sidecar.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        stem = sidecar.stem
+        candidates = [p for p in artifacts_dir.glob(stem + ".*") if p.suffix != ".json"]
+        entries.append({
+            "path": str(candidates[0]) if candidates else None,
+            "label": data.get("label"), "added_by": data.get("added_by"),
+            "added_at": data.get("added_at"),
+        })
+    return entries
+
+
+class CaptureError(SessionError):
+    exit_code = EXIT_USAGE  # `capture`'s own Exit table is 0,2,3 -- no 4/5
+
+
+def do_screenshot_capture(session):
+    """--screenshot's underlying mechanism: 05-receipts-and-artifacts.md
+    describes `capture window`/`capture region` against `omarchy capture
+    screenshot`; mapping --screenshot to one of the two is left to core's
+    judgment by the shell layer (README-shell.md). This maps it to `windows`
+    (matching a session's own registered preview window when set, else
+    whatever has focus, exactly as spec-05 describes), falling back to
+    `fullscreen` -- which the manual confirms is unattended -- if `windows`
+    can't complete without a person clicking. Both are unconfirmed against a
+    real compositor: VERIFY ON RIG."""
+    scratch = pathlib.Path(tempfile.mkdtemp(prefix="omarchy-capture-"))
+    env = dict(os.environ)
+    env["OMARCHY_SCREENSHOT_DIR"] = str(scratch)
+    try:
+        subprocess.run(["omarchy", "capture", "screenshot", "windows", "save"],
+                        env=env, check=True, capture_output=True, text=True, timeout=15)
+        source_hint = "window"
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        try:
+            subprocess.run(["omarchy", "capture", "screenshot", "fullscreen", "save"],
+                            env=env, check=True, capture_output=True, text=True, timeout=15)
+            source_hint = "monitor"
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e2:
+            raise CaptureError(f"screenshot tool unavailable in this environment (verify on rig): {e2}") from e2
+    files = sorted(scratch.glob("*"))
+    if not files:
+        raise CaptureError("screenshot tool produced no file (verify on rig)")
+    return files[-1], source_hint
+
+
+# --------------------------------------------------------------------------
+# Receipts (05-receipts-and-artifacts.md, 07-worktrees.md)
+# --------------------------------------------------------------------------
+
+def compute_receipt(store, session, end_state=None, end_reason=None, ended_at=None):
+    ws = session.get("workspace") or {}
+    worktree_path, base_branch, branch = ws.get("worktree_path"), ws.get("base_branch"), ws.get("branch")
+    repo_root = ws.get("repo_root")
+    worktree_exists = bool(worktree_path) and pathlib.Path(worktree_path).exists()
+    # A clean, owned worktree may already have been removed by
+    # cleanup_workspace_if_owned (07-worktrees.md) by the time a receipt is
+    # written. `log`/`diff --shortstat`/`rev-list` only read refs and don't
+    # need a working tree, so they still run fine from repo_root; only
+    # `status --porcelain` (dirty) genuinely needs the worktree, and a
+    # worktree cleanup only ever removes a worktree it already found clean.
+    git_cwd = worktree_path if worktree_exists else repo_root
+    has_git = bool(git_cwd) and pathlib.Path(git_cwd).exists() and bool(base_branch) and bool(branch)
+
+    if has_git:
+        commits = git_commits(git_cwd, base_branch, branch)
+        diff_stat = git_diff_stat(git_cwd, base_branch, branch)
+        dirty = git_dirty(worktree_path) if worktree_exists else False
+        unpushed = git_unpushed(git_cwd, branch)
+    else:
+        commits = diff_stat = dirty = unpushed = None
+
+    started_at = session["created_at"]
+    end_dt = parse_rfc3339(ended_at) if ended_at else dt.datetime.now(dt.timezone.utc)
+    duration_s = int((end_dt - parse_rfc3339(started_at)).total_seconds())
+
+    events = store.read_events(session["id"])
+    delivered = [e for e in events if e["type"] == "instruction.delivered"]
+    dropped = [e for e in events if e["type"] == "instruction.dropped"]
+    authors = sorted({actor_to_string(e["actor"]) for e in delivered if e.get("actor")})
+    approvals_req = [e for e in events if e["type"] == "approval.requested"]
+    approvals_res = [e for e in events if e["type"] == "approval.resolved"]
+    approved = sum(1 for e in approvals_res if e.get("data", {}).get("decision") == "approved")
+    denied = sum(1 for e in approvals_res if e.get("data", {}).get("decision") == "denied")
+    children = [
+        {"id": e["data"]["child_id"], "end_state": e["data"]["state"]}
+        for e in events if e["type"] == "child.completed"
+    ]
+
+    return {
+        "session_id": session["id"], "name": session["name"], "agent": session["agent"],
+        "owner": session["owner"]["actor"], "created_by": session["created_by"],
+        "started_at": started_at, "ended_at": ended_at, "duration_s": duration_s,
+        "end_state": end_state, "end_reason": end_reason,
+        "started_with": session["started_with"], "goal": session.get("goal"),
+        "workspace": session.get("workspace"),
+        "commits": commits, "diff_stat": diff_stat, "dirty": dirty, "unpushed": unpushed,
+        "artifacts": read_artifacts_index(store.artifacts_dir(session["id"])),
+        "instructions": {"delivered": len(delivered), "dropped": len(dropped), "authors": authors},
+        "approvals": {"requested": len(approvals_req), "approved": approved, "denied": denied},
+        "children": children,
+        "harness_session_ref": session["agent"].get("harness_session_ref"),
+        "state_version": session["state_version"],
+    }
+
+
+def write_receipt(store, receipt):
+    atomic_write_json(store.receipt_path(receipt["session_id"]), receipt)
+
+
+def render_receipt_text(receipt):
+    """Fixed-order plain-text rendering, same groups every time whether or
+    not a group has anything in it, per 05-receipts-and-artifacts.md."""
+    lines = []
+    ws = receipt.get("workspace") or {}
+    goal = receipt.get("goal")
+    lines.append(f"Session    {receipt['name']}  {receipt['session_id']}")
+    agent = receipt["agent"]
+    lines.append(f"Agent      {agent.get('kind')}   harness ref {agent.get('harness_session_ref')}")
+    lines.append(f"Owner      {actor_to_string(receipt['owner'])}   created by {actor_to_string(receipt['created_by'])}")
+    status_bits = f"{receipt.get('end_state') or 'in progress'}"
+    lines.append(f"Status     {status_bits}   {receipt['started_at']} -> {receipt.get('ended_at')}, {receipt['duration_s']}s")
+    started_with = receipt.get("started_with") or {}
+    lines.append(f"Started    {started_with.get('command')}   cwd {started_with.get('cwd')}")
+    lines.append(f"Goal       {goal['text'] if goal else '(none)'}")
+    lines.append("")
+    lines.append(
+        f"Workspace  repo {ws.get('repo_root')}   worktree {ws.get('worktree_path')}   "
+        f"branch {ws.get('branch')}   base {ws.get('base_branch')}"
+    )
+    commits = receipt.get("commits")
+    lines.append(f"Commits    {len(commits) if commits is not None else 'n/a'}")
+    for c in (commits or []):
+        lines.append(f"  {c['sha'][:7]}  {c['subject']}")
+    diff_stat = receipt.get("diff_stat")
+    if diff_stat is not None:
+        lines.append(f"Diff       {diff_stat['files']} files changed, {diff_stat['insertions']} insertions(+), {diff_stat['deletions']} deletions(-)")
+    else:
+        lines.append("Diff       n/a")
+    lines.append(f"Dirty      {receipt.get('dirty')}")
+    lines.append(f"Unpushed   {receipt.get('unpushed')}")
+    lines.append("")
+    artifacts = receipt.get("artifacts") or []
+    lines.append(f"Artifacts  {len(artifacts)}")
+    for a in artifacts:
+        lines.append(f"  {pathlib.Path(a['path']).name if a['path'] else '(missing)'}   {a['label']}   {a['added_at']}   {actor_to_string(a['added_by']) if isinstance(a['added_by'], dict) else a['added_by']}")
+    lines.append("")
+    instr = receipt["instructions"]
+    lines.append(f"Instructions  {instr['delivered']} delivered, {instr['dropped']} dropped, {len(instr['authors'])} author(s) ({', '.join(instr['authors'])})")
+    appr = receipt["approvals"]
+    lines.append(f"Approvals     {appr['requested']} requested, {appr['approved']} approved, {appr['denied']} denied")
+    children = receipt.get("children") or []
+    lines.append(f"Children      {'none' if not children else ', '.join(c['id'] + ':' + c['end_state'] for c in children)}")
+    lines.append("")
+    lines.append(f"Receipt    state_version {receipt['state_version']}")
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
+# Session construction (new)
+# --------------------------------------------------------------------------
+
+def summarize_env():
+    # env_summary's shape is undefined by 01-session-model.md; kept small
+    # and non-secret on purpose.
+    return {"shell": os.environ.get("SHELL"), "term": os.environ.get("TERM")}
+
+
+def resolve_workspace(cwd, name, worktree_ref, no_worktree, herdr):
+    cwd = pathlib.Path(cwd).resolve()
+    repo_root = git_top_level(cwd)
+
+    if worktree_ref:
+        path = pathlib.Path(worktree_ref).expanduser().resolve()
+        branch = git_current_branch(path) if path.exists() else None
+        return {
+            "repo_root": str(repo_root) if repo_root else None,
+            "worktree_path": str(path), "branch": branch, "base_branch": None,
+            "created_by_session": False,
+        }
+
+    if repo_root is None or no_worktree:
+        return {
+            "repo_root": str(repo_root) if repo_root else None,
+            "worktree_path": str(cwd), "branch": None, "base_branch": None,
+            "created_by_session": False,
+        }
+
+    base_branch = git_current_branch(repo_root)
+    branch_name = f"session/{git_safe_ref(name)}"
+    dest = herdr_worktrees_directory() / git_safe_ref(name)
+    create_worktree(repo_root, dest, branch_name, base_branch, herdr)
+    return {
+        "repo_root": str(repo_root), "worktree_path": str(dest),
+        "branch": branch_name, "base_branch": base_branch, "created_by_session": True,
+    }
+
+
+def check_invariant6(store, workspace, new_session_created_by_session):
+    """Two sessions never share a worktree unless both records name the
+    same worktree_path and both say created_by_session: false
+    (07-worktrees.md, invariant 6)."""
+    if new_session_created_by_session:
+        return  # this session made its own worktree; nothing to share yet
+    path = workspace.get("worktree_path")
+    if not path:
+        return
+    for s in store.list_sessions():
+        other_ws = s.get("workspace") or {}
+        if other_ws.get("worktree_path") == path and other_ws.get("created_by_session") is True:
+            raise ConflictError(
+                f"refusing to share worktree '{path}': session {s['id']} auto-created it "
+                f"(created_by_session: true) (invariant 6, 01-session-model.md)"
+            )
+
+
+def default_session_name(kind):
+    return f"{kind}-{new_ulid()[-6:].lower()}"
+
+
+def new_session_record(session_id, name, created_by, owner, mode, agent_kind, workspace,
+                        cwd, command, goal_text=None, parent_id=None, spawn_reason=None):
+    now = now_rfc3339()
+    return {
+        "id": session_id, "name": name, "created_at": now, "created_by": created_by,
+        "owner": {"actor": owner, "assigned_at": now, "assigned_by": created_by},
+        "participants": [{"actor": created_by, "first_input_at": now, "last_input_at": now}],
+        "agent": {"kind": agent_kind, "harness_session_ref": None, "version": None},
+        "mode": mode, "workspace": workspace, "runtime": None,
+        "status": {"state": "starting", "since": now, "source": "omarchy", "detail": None},
+        "lineage": {"parent_id": parent_id, "children": [], "spawn_reason": spawn_reason},
+        "goal": {"text": goal_text, "set_by": created_by, "set_at": now} if goal_text else None,
+        "queue": [], "state_version": 0, "labels": [], "preview": None,
+        "started_with": {"command": command, "cwd": cwd, "env_summary": summarize_env()},
+    }
+
+
+# --------------------------------------------------------------------------
+# CLI plumbing
+# --------------------------------------------------------------------------
+
+class Context:
+    def __init__(self, store, herdr):
+        self.store = store
+        self.herdr = herdr
+
+
+def split_double_dash(argv):
+    if "--" in argv:
+        idx = argv.index("--")
+        return argv[:idx], argv[idx + 1:]
+    return argv, []
+
+
+def add_id_arg(p):
+    p.add_argument("id_or_name")
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(prog="omarchy-agent-session-core")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("new")
+    p.add_argument("--agent", required=True)
+    p.add_argument("--mode", choices=["personal", "shared", "restricted"])
+    p.add_argument("--name")
+    p.add_argument("--goal")
+    p.add_argument("--worktree")
+    p.add_argument("--cwd", default=".")
+    p.add_argument("--owner")
+    p.add_argument("--no-worktree", action="store_true")
+    p.add_argument("--from", dest="from_session")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("list")
+    p.add_argument("--state", choices=STATES)
+    p.add_argument("--mine", action="store_true")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("show")
+    add_id_arg(p)
+    p.add_argument("--refresh", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--loop", action="store_true")
+
+    p = sub.add_parser("open")
+    add_id_arg(p)
+
+    p = sub.add_parser("send")
+    add_id_arg(p)
+    p.add_argument("text")
+    p.add_argument("--from", dest="from_session")
+    p.add_argument("--about", dest="about_artifact")
+    p.add_argument("--wait", action="store_true")
+    p.add_argument("--until", action="append", default=[])
+    p.add_argument("--timeout", type=int)
+
+    p = sub.add_parser("stop")
+    add_id_arg(p)
+    p.add_argument("--keep-children", action="store_true")
+    p.add_argument("--reason")
+
+    p = sub.add_parser("rename")
+    add_id_arg(p)
+    p.add_argument("new_name")
+
+    p = sub.add_parser("assign")
+    add_id_arg(p)
+    p.add_argument("owner_actor")
+
+    p = sub.add_parser("goal")
+    add_id_arg(p)
+    p.add_argument("action", choices=["set", "clear", "show"])
+    p.add_argument("text", nargs="?")
+
+    p = sub.add_parser("log")
+    add_id_arg(p)
+    p.add_argument("--since", type=int)
+    p.add_argument("--type", dest="type_filter")
+    p.add_argument("--follow", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--transcript", type=int)
+
+    p = sub.add_parser("receipt")
+    add_id_arg(p)
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--write", action="store_true")
+
+    p = sub.add_parser("capture")
+    add_id_arg(p)
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--screenshot", action="store_true")
+    g.add_argument("--file")
+    g.add_argument("--url")
+    p.add_argument("--label")
+
+    p = sub.add_parser("artifact-add")
+    add_id_arg(p)
+    p.add_argument("--kind", required=True, choices=["capture", "file", "url", "note"])
+    p.add_argument("--source", required=True)
+    p.add_argument("--label")
+
+    p = sub.add_parser("preview")
+    add_id_arg(p)
+    p.add_argument("value")
+
+    p = sub.add_parser("mode")
+    add_id_arg(p)
+    p.add_argument("new_mode", choices=["personal", "shared", "restricted"])
+
+    p = sub.add_parser("done")
+    add_id_arg(p)
+    p.add_argument("--verdict", required=True, choices=["kept", "reverted", "needs-person"])
+    p.add_argument("--note", required=True)
+
+    p = sub.add_parser("reconcile")
+    p.add_argument("--json", action="store_true")
+
+    return parser
+
+
+# --------------------------------------------------------------------------
+# Command handlers
+# --------------------------------------------------------------------------
+
+def session_list_entry(s):
+    return {
+        "id": s["id"], "name": s["name"], "agent": {"kind": s["agent"]["kind"]},
+        "status": {"state": s["status"]["state"], "since": s["status"]["since"]},
+        "owner": s["owner"]["actor"],
+        "workspace": {"branch": (s.get("workspace") or {}).get("branch")},
+        "needs_attention": s["status"]["state"] in NEEDS_ATTENTION_STATES,
+        "children": len(s["lineage"]["children"]),
+        "state_version": s["state_version"],
+    }
+
+
+def cmd_new(args, ctx):
+    kind = args.agent
+    mode = args.mode
+    if mode is None:
+        mode = "shared" if args.from_session else "personal"
+
+    name = args.name or default_session_name(kind)
+    if ctx.store.name_taken(name):
+        raise ConflictError(f"session name '{name}' is already in use by a live session")
+
+    created_by = agent_actor(args.from_session) if args.from_session else current_human_actor()
+    owner = parse_actor_string(args.owner) if args.owner else created_by
+
+    parent = None
+    if args.from_session:
+        parent = ctx.store.try_load(args.from_session)
+        if parent is None:
+            raise NotFoundError(f"--from session '{args.from_session}' not found")
+        if compute_depth(ctx.store, args.from_session) + 1 > MAX_LINEAGE_DEPTH:
+            raise ConflictError(f"lineage depth limit ({MAX_LINEAGE_DEPTH}) exceeded")
+        if len(parent["lineage"]["children"]) >= MAX_CHILDREN:
+            raise ConflictError(f"children-per-session limit ({MAX_CHILDREN}) exceeded")
+
+    # Validate the harness/mode combination and the deny-list before
+    # creating anything on disk (extra agent args count toward invariant 5).
+    extra_args = list(getattr(args, "extra_args", []) or [])
+    argv, env, cell = assemble_launch(kind, mode, extra_args)
+
+    cwd = str(pathlib.Path(args.cwd).resolve())
+    session_id = new_ulid()
+    workspace = resolve_workspace(cwd, name, args.worktree, args.no_worktree, ctx.herdr)
+    if args.worktree:
+        check_invariant6(ctx.store, workspace, workspace["created_by_session"])
+
+    command_str = "omarchy-agent-session-core " + getattr(args, "raw_command", "new")
+    record = new_session_record(
+        session_id, name, created_by, owner, mode, kind, workspace, cwd, command_str,
+        goal_text=args.goal, parent_id=args.from_session, spawn_reason="agent_spawn" if args.from_session else None,
+    )
+    ctx.store.append_event(session_id, "session.created", created_by, {"name": name, "agent": {"kind": kind}, "mode": mode})
+    record["state_version"] = 1
+    ctx.store.save_session(record)
+
+    if args.goal:
+        ev = ctx.store.append_event(session_id, "goal.set", created_by, {"text": args.goal})
+        record["state_version"] = ev["seq"]
+        ctx.store.save_session(record)
+
+    if parent is not None:
+        parent["lineage"]["children"].append(session_id)
+        pev = ctx.store.append_event(args.from_session, "child.spawned", created_by,
+                                      {"child_id": session_id, "agent": {"kind": kind}, "spawn_reason": "agent_spawn"})
+        parent["state_version"] = pev["seq"]
+        ctx.store.save_session(parent)
+
+    # Start the harness through Herdr. A session record now exists whether
+    # or not this succeeds (invariant 1); on HerdrUnavailable the session is
+    # left in `starting` with no runtime rather than fabricating a `failed`
+    # transition neither Herdr nor a human actually reported (see
+    # README-core.md).
+    alias = derive_herdr_alias(name, session_id)
+    try:
+        result = ctx.herdr.agent_start(
+            alias=alias, kind=kind, cwd=workspace["worktree_path"], flags=argv, env=env, focus=False,
+        )
+    except HerdrUnavailable as e:
+        eprint(f"session {session_id} created but not started: {e}")
+        raise
+    except HerdrError as e:
+        eprint(f"session {session_id} created but Herdr refused agent.start: {e}")
+        raise ConflictError(str(e)) from e
+
+    result = result or {}
+    runtime = {
+        "backend": "herdr", "session": result.get("session"),
+        "workspace_id": result.get("workspace_id"), "tab_id": result.get("tab_id"),
+        "pane_id": result.get("pane_id"), "agent_id": result.get("agent_id"),
+    }
+    ev = ctx.store.append_event(session_id, "runtime.bound", created_by, runtime)
+    record["runtime"] = runtime
+    record["state_version"] = ev["seq"]
+    ctx.store.save_session(record)
+
+    # No persistent events.subscribe loop runs inside this CLI process; a
+    # successful agent.start is treated as the "Herdr confirms the agent
+    # appeared" trigger, moving straight to working (see README-core.md).
+    ev = ctx.store.append_event(session_id, "status.changed", agent_actor(session_id, "herdr"),
+                                 {"from": "starting", "to": "working", "source": "herdr-hook", "detail": None})
+    record["status"] = {"state": "working", "since": ev["ts"], "source": "herdr-hook", "detail": None}
+    record["state_version"] = ev["seq"]
+    ctx.store.save_session(record)
+
+    if args.json:
+        print(json.dumps(record, indent=2))
+    else:
+        print(session_id)
+    return EXIT_OK
+
+
+def cmd_list(args, ctx):
+    sessions = ctx.store.list_sessions()
+    if args.state:
+        sessions = [s for s in sessions if s["status"]["state"] == args.state]
+    if args.mine:
+        me = current_human_actor()
+        sessions = [s for s in sessions if s["owner"]["actor"].get("id") == me["id"]]
+    sessions.sort(key=lambda s: s["created_at"])
+    if args.json:
+        print(json.dumps({"sessions": [session_list_entry(s) for s in sessions]}, indent=2))
+        return EXIT_OK
+    for s in sessions:
+        entry = session_list_entry(s)
+        flag = "!" if entry["needs_attention"] else " "
+        print(f"{flag} {entry['id']}  {entry['name']:<24} {entry['status']['state']:<10} {entry['agent']['kind']}")
+    return EXIT_OK
+
+
+def cmd_show(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    if args.refresh:
+        try:
+            live = ctx.herdr.agent_get(agent_id=(session.get("runtime") or {}).get("agent_id"))
+        except HerdrUnavailable as e:
+            raise
+        else:
+            live_state = (live or {}).get("state")
+            if live_state and live_state != session["status"]["state"]:
+                ev = ctx.store.append_event(session["id"], "status.changed", system_actor(),
+                                             {"from": session["status"]["state"], "to": live_state,
+                                              "source": "herdr-hook", "detail": None})
+                session["status"] = {"state": live_state, "since": ev["ts"], "source": "herdr-hook", "detail": None}
+                session["state_version"] = ev["seq"]
+                ctx.store.save_session(session)
+
+    if args.loop:
+        events = ctx.store.read_events(session["id"])
+        print(f"Goal: {(session.get('goal') or {}).get('text', '(none)')}")
+        for e in events:
+            if e["type"] in ("instruction.queued", "instruction.delivered", "artifact.added", "status.changed"):
+                print(f"[{e['ts']}] {e['type']} {json.dumps(e['data'])}")
+        return EXIT_OK
+
+    if args.json:
+        entry = session_list_entry(session)
+        entry.update({
+            "goal": session.get("goal"), "runtime": session.get("runtime"),
+            "lineage": session.get("lineage"), "created_at": session["created_at"],
+            "created_by": session["created_by"], "mode": session["mode"],
+            "started_with": session["started_with"],
+            "recent_events": ctx.store.read_events(session["id"])[-20:],
+        })
+        print(json.dumps({"session": entry}, indent=2))
+    else:
+        print(json.dumps(session, indent=2))
+    return EXIT_OK
+
+
+def cmd_open(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    actor = current_human_actor()
+    state = session["status"]["state"]
+    runtime = session.get("runtime")
+
+    if state == "orphaned":
+        ref = session["agent"].get("harness_session_ref")
+        worktree_path = (session.get("workspace") or {}).get("worktree_path")
+        argv, env, _cell = assemble_launch(session["agent"]["kind"], session["mode"])
+        detail = None
+        if ref:
+            argv = list(RESUME_FLAGS.get(session["agent"]["kind"], ["--resume"])) + [ref] + argv
+        else:
+            detail = "no transcript to resume"
+        alias = derive_herdr_alias(session["name"], session["id"])
+        result = ctx.herdr.agent_start(alias=alias, kind=session["agent"]["kind"],
+                                        cwd=worktree_path, flags=argv, env=env, focus=False)
+        result = result or {}
+        new_runtime = {"backend": "herdr", "session": result.get("session"),
+                       "workspace_id": result.get("workspace_id"), "tab_id": result.get("tab_id"),
+                       "pane_id": result.get("pane_id"), "agent_id": result.get("agent_id")}
+        ev = ctx.store.append_event(session["id"], "runtime.bound", actor, new_runtime)
+        session["runtime"] = new_runtime
+        session["state_version"] = ev["seq"]
+        ev = ctx.store.append_event(session["id"], "status.changed", actor,
+                                     {"from": "orphaned", "to": "working", "source": "omarchy", "detail": detail})
+        session["status"] = {"state": "working", "since": ev["ts"], "source": "omarchy", "detail": detail}
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+    elif runtime is not None:
+        # Bound and live: confirm the binding, then attach a terminal.
+        ctx.herdr.agent_get(agent_id=runtime.get("agent_id"))
+        alias = derive_herdr_alias(session["name"], session["id"])
+        with contextlib.suppress(FileNotFoundError, OSError):
+            subprocess.run(["omarchy-launch-or-focus-tui", f"--app-id=org.omarchy.session.{session['id']}",
+                            "herdr", "agent", "attach", alias], check=False)
+    else:
+        raise ConflictError(f"session {session['id']} has no runtime and is not orphaned; nothing to open")
+    return EXIT_OK
+
+
+# Per-harness native-resume command, from Herdr's resume table
+# (02-command-surface.md gives two examples: claude, codex). Harnesses not
+# listed here fall back to a fresh start with detail "no transcript to
+# resume" even when harness_session_ref is set -- verify on rig.
+RESUME_FLAGS = {
+    "claude": ["--resume"],
+    "codex": ["resume"],
+}
+
+
+def cmd_send(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    if args.from_session:
+        origin = ctx.store.try_load(args.from_session)
+        origin_name = origin["name"] if origin else args.from_session
+        author = agent_actor(args.from_session, label=origin_name)
+        delivered_text = format_marked_instruction(args.from_session, origin_name, args.text)
+    else:
+        author = current_human_actor()
+        delivered_text = args.text
+
+    instr = new_instruction(args.text, author, delivery="steer",
+                             origin_session=args.from_session, about_artifact=args.about_artifact)
+    ev = ctx.store.append_event(session["id"], "instruction.queued", author, instr)
+    session["queue"].append(instr)
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+
+    runtime = session.get("runtime")
+    if runtime is None:
+        return EXIT_OK  # stays queued; delivered on the next `open`
+
+    alias = derive_herdr_alias(session["name"], session["id"])
+    try:
+        ctx.herdr.agent_prompt(alias=alias, text=delivered_text, wait=args.wait,
+                                until=args.until, timeout_ms=args.timeout)
+    except HerdrError as e:
+        ev = ctx.store.append_event(session["id"], "instruction.dropped", author,
+                                     {"instruction_id": instr["id"], "reason": "agent_blocked"})
+        session["queue"] = [q for q in session["queue"] if q["id"] != instr["id"]]
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+        raise ConflictError(f"instruction dropped: {e}") from e
+
+    ev = ctx.store.append_event(session["id"], "instruction.delivered", author,
+                                 {"instruction_id": instr["id"], "delivery": "steer"})
+    session["queue"] = [q for q in session["queue"] if q["id"] != instr["id"]]
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    return EXIT_OK
+
+
+def _stop_one(session_id, store, herdr, actor, reason):
+    session = store.try_load(session_id)
+    if session is None:
+        return
+    state = session["status"]["state"]
+    if state in TERMINAL_STATES:
+        return
+    runtime = session.get("runtime")
+    if state != "orphaned" and runtime is not None:
+        alias = derive_herdr_alias(session["name"], session["id"])
+        with contextlib.suppress(HerdrError):
+            herdr.call("agent.send_keys", {"alias": alias, "keys": "ctrl+c"})  # courtesy; verify on rig
+        herdr.pane_close(pane_id=runtime.get("pane_id"))  # let HerdrUnavailable propagate
+    cleanup_workspace_if_owned(session, herdr)
+    ev = store.append_event(session_id, "status.changed", actor, {"from": state, "to": "stopped", "source": actor["kind"], "detail": reason})
+    session["status"] = {"state": "stopped", "since": ev["ts"], "source": actor["kind"], "detail": reason}
+    session["state_version"] = ev["seq"]
+    if runtime is not None:
+        ev = store.append_event(session_id, "runtime.unbound", actor, {"reason": "stopped"})
+        session["runtime"] = None
+        session["state_version"] = ev["seq"]
+    ev = store.append_event(session_id, "session.ended", actor, {"state": "stopped", "reason": reason})
+    session["state_version"] = ev["seq"]
+    store.save_session(session)
+
+
+def cmd_stop(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    actor = current_human_actor()
+    reason = args.reason or "stopped"
+    if not args.keep_children:
+        for child_id in list(session["lineage"]["children"]):
+            _stop_one(child_id, ctx.store, ctx.herdr, actor, "parent_stopped")
+    _stop_one(session["id"], ctx.store, ctx.herdr, actor, reason)
+    return EXIT_OK
+
+
+def cmd_rename(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    if ctx.store.name_taken(args.new_name, exclude_id=session["id"]):
+        raise ConflictError(f"session name '{args.new_name}' is already in use by a live session")
+    actor = current_human_actor()
+    old_name = session["name"]
+    ev = ctx.store.append_event(session["id"], "session.renamed", actor, {"from": old_name, "to": args.new_name})
+    session["name"] = args.new_name
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    if session.get("runtime") is not None:
+        new_alias = derive_herdr_alias(args.new_name, session["id"])
+        ctx.herdr.agent_rename(agent_id=session["runtime"].get("agent_id"), new_alias=new_alias)
+    return EXIT_OK
+
+
+def cmd_assign(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    new_owner = parse_actor_string(args.owner_actor)
+    actor = current_human_actor()
+    old_owner = session["owner"]["actor"]
+    ev = ctx.store.append_event(session["id"], "owner.assigned", actor, {"from": old_owner, "to": new_owner})
+    session["owner"] = {"actor": new_owner, "assigned_at": ev["ts"], "assigned_by": actor}
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    return EXIT_OK
+
+
+def cmd_goal(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    if args.action == "show":
+        goal = session.get("goal")
+        print(goal["text"] if goal else "")
+        return EXIT_OK
+    if args.action == "set" and not args.text:
+        raise UsageError("goal set requires <text>")
+    text = args.text if args.action == "set" else ""
+    actor = current_human_actor()
+    ev = ctx.store.append_event(session["id"], "goal.set", actor, {"text": text})
+    session["goal"] = {"text": text, "set_by": actor, "set_at": ev["ts"]} if text else None
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    return EXIT_OK
+
+
+def cmd_log(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    if args.transcript is not None:
+        try:
+            result = ctx.herdr.call("agent.read", {
+                "agent_id": (session.get("runtime") or {}).get("agent_id"),
+                "source": "recent-unwrapped", "lines": args.transcript,
+            })
+        except (HerdrUnavailable, HerdrError) as e:
+            # log's own Exit table is 0,3 only (no 4): degrade gracefully.
+            print(f"# transcript unavailable: {e}")
+            return EXIT_OK
+        print(result)
+        return EXIT_OK
+
+    events = ctx.store.read_events(session["id"], since=args.since, type_filter=args.type_filter)
+    if args.json:
+        for e in events:
+            print(json.dumps(e))
+    else:
+        for e in events:
+            print(f"{e['seq']:>6}  {e['ts']}  {e['type']:<22} {actor_to_string(e['actor'])}  {json.dumps(e['data'])}")
+
+    if args.follow:
+        last_seq = events[-1]["seq"] if events else (args.since or 0)
+        try:
+            while True:
+                time.sleep(0.5)
+                new_events = ctx.store.read_events(session["id"], since=last_seq, type_filter=args.type_filter)
+                for e in new_events:
+                    if args.json:
+                        print(json.dumps(e))
+                    else:
+                        print(f"{e['seq']:>6}  {e['ts']}  {e['type']:<22} {actor_to_string(e['actor'])}  {json.dumps(e['data'])}")
+                    last_seq = e["seq"]
+        except KeyboardInterrupt:
+            pass
+    return EXIT_OK
+
+
+def cmd_receipt(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    if args.write:
+        end_state = session["status"]["state"] if session["status"]["state"] in TERMINAL_STATES else None
+        end_reason = session["status"].get("detail") if end_state else None
+        ended_at = session["status"]["since"] if end_state else None
+        receipt = compute_receipt(ctx.store, session, end_state, end_reason, ended_at)
+        write_receipt(ctx.store, receipt)
+        ev = ctx.store.append_event(session["id"], "receipt.written", current_human_actor(),
+                                     {"receipt_summary": {"end_state": end_state, "state_version": receipt["state_version"]}})
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+    else:
+        existing = ctx.store.receipt_path(session["id"])
+        if existing.exists():
+            receipt = json.loads(existing.read_text(encoding="utf-8"))
+        else:
+            receipt = compute_receipt(ctx.store, session)  # display-only, not persisted
+
+    if args.json:
+        print(json.dumps(receipt, indent=2))
+    else:
+        print(render_receipt_text(receipt))
+    return EXIT_OK
+
+
+def cmd_capture(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    actor = current_human_actor()
+    if args.screenshot:
+        path, source_hint = do_screenshot_capture(session)
+        entry, _dest = add_artifact(ctx.store, session["id"], "capture", str(path), args.label, actor)
+    elif args.file:
+        entry, _dest = add_artifact(ctx.store, session["id"], "file", args.file, args.label, actor)
+    else:
+        entry, _dest = add_artifact(ctx.store, session["id"], "url", args.url, args.label, actor)
+    ev = ctx.store.append_event(session["id"], "artifact.added", actor,
+                                 {"path": entry["path"], "label": entry["label"], "added_by": actor})
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    print(entry["path"])
+    return EXIT_OK
+
+
+def cmd_artifact_add(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    actor = current_human_actor()
+    entry, _dest = add_artifact(ctx.store, session["id"], args.kind, args.source, args.label, actor)
+    ev = ctx.store.append_event(session["id"], "artifact.added", actor,
+                                 {"path": entry["path"], "label": entry["label"], "added_by": actor})
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    print(entry["path"])
+    return EXIT_OK
+
+
+_URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
+
+
+def cmd_preview(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    kind = "url" if _URL_SCHEME_RE.match(args.value) else "app_id"
+    actor = current_human_actor()
+    ev = ctx.store.append_event(session["id"], "preview.set", actor, {"kind": kind, "value": args.value})
+    session["preview"] = {"kind": kind, "value": args.value}
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    return EXIT_OK
+
+
+def cmd_mode(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    validate_mode_supported(session["agent"]["kind"], args.new_mode)
+    actor = current_human_actor()
+    runtime = session.get("runtime")
+
+    if runtime is not None and session["status"]["state"] != "orphaned":
+        ref = session["agent"].get("harness_session_ref")
+        argv, env, _cell = assemble_launch(session["agent"]["kind"], args.new_mode)
+        if ref:
+            argv = list(RESUME_FLAGS.get(session["agent"]["kind"], ["--resume"])) + [ref] + argv
+        alias = derive_herdr_alias(session["name"], session["id"])
+        with contextlib.suppress(HerdrError):
+            ctx.herdr.call("agent.send_keys", {"alias": alias, "keys": "ctrl+c"})
+        ctx.herdr.pane_close(pane_id=runtime.get("pane_id"))  # HerdrUnavailable propagates -> exit 4
+        result = ctx.herdr.agent_start(alias=alias, kind=session["agent"]["kind"],
+                                        cwd=(session.get("workspace") or {}).get("worktree_path"),
+                                        flags=argv, env=env, focus=False)
+        result = result or {}
+        new_runtime = {"backend": "herdr", "session": result.get("session"),
+                       "workspace_id": result.get("workspace_id"), "tab_id": result.get("tab_id"),
+                       "pane_id": result.get("pane_id"), "agent_id": result.get("agent_id")}
+        ev = ctx.store.append_event(session["id"], "runtime.bound", actor, new_runtime)
+        session["runtime"] = new_runtime
+        session["state_version"] = ev["seq"]
+
+    old_mode = session["mode"]
+    ev = ctx.store.append_event(session["id"], "mode.changed", actor, {"from": old_mode, "to": args.new_mode, "changed_by": actor})
+    session["mode"] = args.new_mode
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    return EXIT_OK
+
+
+def cmd_done(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    actor = current_human_actor()
+    entry, _dest = add_artifact(ctx.store, session["id"], "note", args.note, "verdict", actor)
+    ev = ctx.store.append_event(session["id"], "artifact.added", actor,
+                                 {"path": entry["path"], "label": "verdict", "added_by": actor})
+    session["state_version"] = ev["seq"]
+
+    cleanup_workspace_if_owned(session, ctx.herdr)
+
+    old_state = session["status"]["state"]
+    ev = ctx.store.append_event(session["id"], "status.changed", actor,
+                                 {"from": old_state, "to": "done", "source": "human", "detail": args.verdict})
+    session["status"] = {"state": "done", "since": ev["ts"], "source": "human", "detail": args.verdict}
+    session["state_version"] = ev["seq"]
+
+    ev = ctx.store.append_event(session["id"], "session.ended", actor, {"state": "done", "reason": f"verdict:{args.verdict}"})
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+
+    receipt = compute_receipt(ctx.store, session, "done", f"verdict:{args.verdict}", ev["ts"])
+    write_receipt(ctx.store, receipt)
+    ev = ctx.store.append_event(session["id"], "receipt.written", actor,
+                                 {"receipt_summary": {"end_state": "done", "state_version": receipt["state_version"]}})
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    return EXIT_OK
+
+
+def cmd_reconcile(args, ctx):
+    actor = system_actor()
+    known = ctx.store.list_sessions()
+    live_panes = ctx.herdr.pane_list() or []
+    live_agents = ctx.herdr.agent_list() or []
+    live_agent_ids = {a.get("agent_id") for a in live_agents if a.get("agent_id")}
+    live_pane_ids = {p.get("pane_id") for p in live_panes if p.get("pane_id")}
+
+    orphaned, adopted = [], []
+    for s in known:
+        runtime = s.get("runtime")
+        if runtime is None or s["status"]["state"] in TERMINAL_STATES:
+            continue
+        agent_id, pane_id = runtime.get("agent_id"), runtime.get("pane_id")
+        still_present = (agent_id and agent_id in live_agent_ids) or (pane_id and pane_id in live_pane_ids)
+        if not still_present:
+            ev = ctx.store.append_event(s["id"], "status.changed", actor,
+                                         {"from": s["status"]["state"], "to": "orphaned",
+                                          "source": "reconciler", "detail": "pane not found in Herdr's list"})
+            s["status"] = {"state": "orphaned", "since": ev["ts"], "source": "reconciler", "detail": "pane not found in Herdr's list"}
+            s["state_version"] = ev["seq"]
+            ev = ctx.store.append_event(s["id"], "runtime.unbound", actor, {"reason": "pane_gone"})
+            s["runtime"] = None
+            s["state_version"] = ev["seq"]
+            ctx.store.save_session(s)
+            orphaned.append(s["id"])
+
+    known_agent_ids = {(s.get("runtime") or {}).get("agent_id") for s in known if s.get("runtime")}
+    for a in live_agents:
+        agent_id = a.get("agent_id")
+        if not agent_id or agent_id in known_agent_ids:
+            continue
+        session_id = new_ulid()
+        name = f"herdr-{a.get('name') or agent_id}"
+        runtime = {"backend": "herdr", "session": a.get("session"), "workspace_id": a.get("workspace_id"),
+                   "tab_id": a.get("tab_id"), "pane_id": a.get("pane_id"), "agent_id": agent_id}
+        workspace = {"repo_root": None, "worktree_path": None, "branch": None, "base_branch": None, "created_by_session": False}
+        # Mode is unknown for an externally-started agent; "shared" is this
+        # build's conservative default since Personal's trust model (a
+        # human already watching) can't be asserted for a pane omarchy
+        # didn't launch -- see README-core.md.
+        record = new_session_record(session_id, name, actor, actor, "shared", a.get("kind", "unknown"),
+                                     workspace, cwd=None, command=None)
+        ctx.store.append_event(session_id, "session.created", actor, {"name": name, "adopted": True})
+        record["state_version"] = 1
+        ctx.store.save_session(record)
+        ev = ctx.store.append_event(session_id, "runtime.bound", actor, runtime)
+        record["runtime"] = runtime
+        record["state_version"] = ev["seq"]
+        ev = ctx.store.append_event(session_id, "status.changed", actor,
+                                     {"from": "starting", "to": "working", "source": "herdr-manifest", "detail": "adopted by reconcile"})
+        record["status"] = {"state": "working", "since": ev["ts"], "source": "herdr-manifest", "detail": "adopted by reconcile"}
+        record["state_version"] = ev["seq"]
+        ctx.store.save_session(record)
+        adopted.append(session_id)
+
+    if args.json:
+        print(json.dumps({"orphaned": orphaned, "adopted": adopted}, indent=2))
+    else:
+        print(f"orphaned {len(orphaned)}, adopted {len(adopted)}")
+    return EXIT_OK
+
+
+COMMAND_HANDLERS = {
+    "new": cmd_new, "list": cmd_list, "show": cmd_show, "open": cmd_open,
+    "send": cmd_send, "stop": cmd_stop, "rename": cmd_rename, "assign": cmd_assign,
+    "goal": cmd_goal, "log": cmd_log, "receipt": cmd_receipt, "capture": cmd_capture,
+    "artifact-add": cmd_artifact_add, "preview": cmd_preview, "mode": cmd_mode,
+    "done": cmd_done, "reconcile": cmd_reconcile,
+}
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    main_args, extra_args = split_double_dash(argv)
+    parser = build_parser()
+    try:
+        args = parser.parse_args(main_args)
+    except SystemExit as e:
+        return e.code if isinstance(e.code, int) else EXIT_USAGE
+    args.extra_args = extra_args
+    # The literal invocation this process was asked to run, reconstructed
+    # from the argv actually passed to main() -- not from sys.argv, which
+    # would be wrong whenever main() is called in-process (tests) and
+    # wouldn't reliably round-trip a `-- <agent args>` tail either way.
+    # Used for the receipt's started_with.command (05-receipts-and-artifacts.md).
+    raw_parts = list(main_args) + (["--"] + list(extra_args) if extra_args else [])
+    args.raw_command = shlex.join(raw_parts)
+
+    store = SessionStore(sessions_root())
+    herdr = HerdrClient(herdr_socket_path())
+    ctx = Context(store, herdr)
+    handler = COMMAND_HANDLERS[args.command]
+
+    try:
+        return handler(args, ctx)
+    except UsageError as e:
+        eprint(str(e))
+        return e.exit_code
+    except NotFoundError as e:
+        eprint(str(e))
+        return e.exit_code
+    except ConflictError as e:
+        eprint(str(e))
+        return e.exit_code
+    except HerdrUnavailable as e:
+        eprint(f"Herdr unreachable: {e}")
+        return EXIT_HERDR_UNREACHABLE
+    except HerdrError as e:
+        eprint(f"Herdr error: {e}")
+        return EXIT_HERDR_UNREACHABLE
+    except SessionError as e:
+        eprint(str(e))
+        return getattr(e, "exit_code", 1)
+    except GitError as e:
+        eprint(str(e))
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
