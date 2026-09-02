@@ -1,0 +1,4 @@
+8531 alacritty --class=org.omarchy.agent -e claude --permission-mode auto -- Reply with the single word ready, then wait for my next message.
+8557 /home/omarchy/.local/share/mise/installs/claude/latest/claude --permission-mode auto -- Reply with the single word ready, then wait for my next message.
+10194 alacritty --class=org.omarchy.agent -e claude --permission-mode auto -- Reply with the single word ready, then wait for my next message.
+10215 /home/omarchy/.local/share/mise/installs/claude/latest/claude --permission-mode auto -- Reply with the single word ready, then wait for my next message.
