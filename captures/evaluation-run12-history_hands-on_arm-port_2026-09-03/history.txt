@@ -1,0 +1,16 @@
+History · last 14 days · 46 ended
+
+Thursday 2026-09-03 · 7 ended
+  09:16  shared-page-c                stopped                                      17s  claude  spike-repo
+  09:14  shared-page-b                done · kept                                   2m  claude  spike-repo
+  09:05  shared-page                  done · kept                                   5m  claude  spike-repo
+  09:00  shared-page                  stopped                                       7m  claude  spike-repo
+  08:53  shared-page                  stopped · resumes                             2m  claude  spike-repo
+  08:53  my-draft                     stopped                                       2m  claude  Work
+  08:44  lanes-page                   done · kept                                   5m  claude  spike-repo
+
+Wednesday 2026-09-02 · 39 ended
+  23:05  continue-the-minie-ai-websit stopped · resumes                            45m  claude  Work
+  23:05  can-you-do-a                 stopped · resumes                            39m  claude  Work
+
+[the Wednesday 2026-09-02 block, 39 sessions, is cut here: it lists sessions of Praneet's own beside the evaluation ones]
