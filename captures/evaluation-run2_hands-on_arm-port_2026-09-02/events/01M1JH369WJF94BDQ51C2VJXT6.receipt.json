@@ -1,0 +1,68 @@
+{
+  "session_id": "01M1JH369WJF94BDQ51C2VJXT6",
+  "name": "run2-done",
+  "agent": {
+    "kind": "claude",
+    "harness_session_ref": "33d683c8-6b04-41b1-b641-93f561dd4cfd",
+    "version": null
+  },
+  "owner": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "created_by": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "started_at": "2026-09-03T02:20:47Z",
+  "ended_at": "2026-09-03T02:22:00Z",
+  "duration_s": 73,
+  "end_state": "done",
+  "end_reason": "harness exited; pane still open",
+  "started_with": {
+    "command": "omarchy-agent-session-core new --agent claude --mode personal --cwd /home/omarchy/Work/spike-repo --no-worktree --name run2-done --goal 'Finish on its own: the done row' --prompt 'Reply with the single word READY and nothing else.'",
+    "cwd": "/home/omarchy/Work/spike-repo",
+    "env_summary": {
+      "shell": "/bin/bash",
+      "term": null
+    }
+  },
+  "goal": {
+    "text": "Finish on its own: the done row",
+    "set_by": {
+      "kind": "human",
+      "id": "omarchy@omarchy",
+      "label": "omarchy"
+    },
+    "set_at": "2026-09-03T02:20:47Z"
+  },
+  "workspace": {
+    "repo_root": "/home/omarchy/Work/spike-repo",
+    "worktree_path": "/home/omarchy/Work/spike-repo",
+    "branch": null,
+    "base_branch": null,
+    "created_by_session": false
+  },
+  "commits": null,
+  "diff_stat": null,
+  "dirty": null,
+  "unpushed": null,
+  "artifacts": [],
+  "instructions": {
+    "delivered": 2,
+    "dropped": 0,
+    "authors": [
+      "human:omarchy@omarchy"
+    ]
+  },
+  "approvals": {
+    "requested": 0,
+    "approved": 0,
+    "denied": 0
+  },
+  "children": [],
+  "harness_session_ref": "33d683c8-6b04-41b1-b641-93f561dd4cfd",
+  "state_version": 14
+}

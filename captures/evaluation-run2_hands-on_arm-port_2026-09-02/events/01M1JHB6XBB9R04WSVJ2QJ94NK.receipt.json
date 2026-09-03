@@ -1,0 +1,60 @@
+{
+  "session_id": "01M1JHB6XBB9R04WSVJ2QJ94NK",
+  "name": "run2-ref-c",
+  "agent": {
+    "kind": "claude",
+    "harness_session_ref": "061e75ef-6eac-47a5-b4d4-d9a6212dcf62",
+    "version": null
+  },
+  "owner": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "created_by": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "started_at": "2026-09-03T02:25:10Z",
+  "ended_at": "2026-09-03T02:25:56Z",
+  "duration_s": 46,
+  "end_state": "done",
+  "end_reason": "harness exited",
+  "started_with": {
+    "command": "omarchy-agent-session-core new --agent claude --mode personal --cwd /home/omarchy/Work/spike-repo --no-worktree --name run2-ref-c --prompt 'Reply with the single word CHARLIE and nothing else.'",
+    "cwd": "/home/omarchy/Work/spike-repo",
+    "env_summary": {
+      "shell": "/bin/bash",
+      "term": null
+    }
+  },
+  "goal": null,
+  "workspace": {
+    "repo_root": "/home/omarchy/Work/spike-repo",
+    "worktree_path": "/home/omarchy/Work/spike-repo",
+    "branch": null,
+    "base_branch": null,
+    "created_by_session": false
+  },
+  "commits": null,
+  "diff_stat": null,
+  "dirty": null,
+  "unpushed": null,
+  "artifacts": [],
+  "instructions": {
+    "delivered": 2,
+    "dropped": 0,
+    "authors": [
+      "human:omarchy@omarchy"
+    ]
+  },
+  "approvals": {
+    "requested": 0,
+    "approved": 0,
+    "denied": 0
+  },
+  "children": [],
+  "harness_session_ref": "061e75ef-6eac-47a5-b4d4-d9a6212dcf62",
+  "state_version": 13
+}

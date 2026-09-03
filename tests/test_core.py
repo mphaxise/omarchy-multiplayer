@@ -857,6 +857,57 @@ class TestWorktreeCleanup(CoreTestCase):
 # reconcile marking an orphan
 # --------------------------------------------------------------------------
 
+class TestHarnessSessionRefDiscovery(CoreTestCase):
+    def _write_transcript(self, project_dir, ref, started_iso):
+        project_dir.mkdir(parents=True, exist_ok=True)
+        path = project_dir / f"{ref}.jsonl"
+        path.write_text(json.dumps({"type": "user", "timestamp": started_iso, "sessionId": ref}) + "\n")
+        return path
+
+    def test_two_sessions_in_one_directory_get_their_own_transcripts(self):
+        # Run 2 (2026-09-02): both sessions took the newest file by mtime.
+        os.environ["CLAUDE_CONFIG_DIR"] = str(self.plain_dir / "claude")
+        cwd = str(self.plain_dir / "project")
+        pathlib.Path(cwd).mkdir()
+        project_dir = core.claude_project_dir(cwd)
+        # session A started at t=100, its transcript at t=104; session B
+        # started at t=105, its transcript at t=109. Both files are touched
+        # again at the end, so mtime order says nothing.
+        self._write_transcript(project_dir, "aaaa", "2026-09-03T02:20:54Z")
+        self._write_transcript(project_dir, "bbbb", "2026-09-03T02:21:04Z")
+        a_since = core.dt.datetime.fromisoformat("2026-09-03T02:20:50+00:00").timestamp()
+        b_since = core.dt.datetime.fromisoformat("2026-09-03T02:21:00+00:00").timestamp()
+        self.assertEqual(core.discover_harness_session_ref("claude", cwd, a_since), "aaaa")
+        self.assertEqual(core.discover_harness_session_ref("claude", cwd, b_since), "bbbb")
+        # With A's ref taken, B cannot be given it even when B's own file
+        # is missing.
+        self.assertEqual(core.discover_harness_session_ref("claude", cwd, a_since, taken={"aaaa"}), "bbbb")
+        # A file that started before the session is never its transcript.
+        c_since = core.dt.datetime.fromisoformat("2026-09-03T02:22:00+00:00").timestamp()
+        self.assertIsNone(core.discover_harness_session_ref("claude", cwd, c_since))
+
+    def test_record_ref_skips_refs_held_by_other_sessions(self):
+        os.environ["CLAUDE_CONFIG_DIR"] = str(self.plain_dir / "claude")
+        cwd = str(self.plain_dir / "project")
+        pathlib.Path(cwd).mkdir()
+        project_dir = core.claude_project_dir(cwd)
+        self._write_transcript(project_dir, "held", "2026-09-03T02:20:54Z")
+        self._write_transcript(project_dir, "free", "2026-09-03T02:20:56Z")
+        workspace = {"repo_root": None, "worktree_path": cwd, "branch": None, "base_branch": None, "created_by_session": False}
+        runtime = {"backend": "herdr", "session": None, "workspace_id": "w1", "tab_id": "t1", "pane_id": "p1", "agent_id": "a"}
+        first = make_bare_session(self.store, "first", runtime=runtime, workspace=workspace)
+        rec = self.store.try_load(first)
+        rec["agent"]["harness_session_ref"] = "held"
+        rec["created_at"] = "2026-09-03T02:20:50Z"
+        self.store.save_session(rec)
+        second = make_bare_session(self.store, "second", runtime=dict(runtime, pane_id="p2", agent_id="b"), workspace=workspace)
+        rec2 = self.store.try_load(second)
+        rec2["created_at"] = "2026-09-03T02:20:50Z"
+        self.store.save_session(rec2)
+        self.assertTrue(core.record_harness_session_ref(self.store, rec2))
+        self.assertEqual(self.store.try_load(second)["agent"]["harness_session_ref"], "free")
+
+
 class TestReconcile(CoreTestCase):
     def test_reconcile_marks_missing_pane_orphaned(self):
         self.start_fake_herdr()
@@ -909,14 +960,79 @@ class TestReconcile(CoreTestCase):
         self.assertEqual(rc, 0, err)
         session = self.store.try_load(session_id)
         self.assertEqual(session["status"]["state"], "done")
-        self.assertEqual(session["status"]["detail"], "harness exited; pane still open")
+        self.assertEqual(session["status"]["detail"], "harness exited")
         self.assertIsNone(session["runtime"])
         self.assertIn(session_id, json.loads(out)["ended"])
+        # The empty shell pane is closed with the session.
+        self.assertEqual([c["pane_id"] for c in self.fake_herdr.calls("pane.close")], ["p1"])
         types = [e["type"] for e in self.store.read_events(session_id)]
         self.assertEqual(types[-3:], ["runtime.unbound", "session.ended", "receipt.written"])
         self.assertTrue(self.store.receipt_path(session_id).exists())
         receipt = json.loads(self.store.receipt_path(session_id).read_text())
         self.assertEqual(receipt["end_state"], "done")
+
+    def test_reconcile_fails_a_session_whose_harness_vanished_while_working(self):
+        # Herdr exposes no exit status; a harness that disappears mid-turn
+        # is a failure, one that disappears between turns is an exit.
+        self.start_fake_herdr()
+        self.fake_herdr.set_result("agent.list", {"agents": []})
+        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "p1"}]})
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
+                   "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
+        session_id = make_bare_session(self.store, "died-mid-turn", runtime=runtime, state="working")
+        rc, out, err = self.run_cli(["reconcile", "--json"])
+        self.assertEqual(rc, 0, err)
+        session = self.store.try_load(session_id)
+        self.assertEqual(session["status"]["state"], "failed")
+        self.assertEqual(session["status"]["detail"], "harness exited while working")
+        self.assertIn(session_id, json.loads(out)["ended"])
+        receipt = json.loads(self.store.receipt_path(session_id).read_text())
+        self.assertEqual(receipt["end_state"], "failed")
+
+    def test_reconcile_sweeps_the_workspace_of_an_ended_session(self):
+        # Herdr restores workspaces with a fresh shell after a server
+        # restart; a stopped or orphaned session must not leave one behind.
+        self.start_fake_herdr()
+        self.fake_herdr.set_result("agent.list", {"agents": []})
+        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "wZ:p1", "workspace_id": "wZ"},
+                                                          {"pane_id": "w1:p1", "workspace_id": "w1"}]})
+        runtime = {"backend": "herdr", "session": None, "workspace_id": "wZ",
+                   "tab_id": "wZ:t1", "pane_id": "wZ:p1", "agent_id": "gone"}
+        session_id = make_bare_session(self.store, "ended-earlier", runtime=runtime, state="working")
+        rec = self.store.try_load(session_id)
+        # Ended and unbound already, the way `stop` on an orphan leaves it.
+        ev = self.store.append_event(session_id, "runtime.unbound", core.system_actor(), {"reason": "pane_gone"})
+        rec["runtime"] = None
+        ev = self.store.append_event(session_id, "status.changed", core.system_actor(),
+                                     {"from": "working", "to": "stopped", "source": "test", "detail": None})
+        rec["status"] = {"state": "stopped", "since": ev["ts"], "source": "test", "detail": None}
+        rec["state_version"] = ev["seq"]
+        self.store.save_session(rec)
+        rc, out, err = self.run_cli(["reconcile", "--json"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(json.loads(out)["swept"], [session_id])
+        self.assertEqual([c["pane_id"] for c in self.fake_herdr.calls("pane.close")], ["wZ:p1"])
+
+    def test_reconcile_never_sweeps_an_adopted_sessions_workspace(self):
+        self.start_fake_herdr()
+        self.fake_herdr.set_result("agent.list", {"agents": []})
+        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "w1:p1", "workspace_id": "w1"}]})
+        session_id = core.new_ulid()
+        actor = core.system_actor()
+        workspace = {"repo_root": None, "worktree_path": None, "branch": None, "base_branch": None, "created_by_session": False}
+        record = core.new_session_record(session_id, "herdr-spike", actor, actor, "shared", "claude", workspace, cwd=None, command=None)
+        self.store.append_event(session_id, "session.created", actor, {"name": "herdr-spike", "adopted": True})
+        ev = self.store.append_event(session_id, "runtime.bound", actor,
+                                     {"backend": "herdr", "session": None, "workspace_id": "w1", "tab_id": "w1:t1", "pane_id": "w1:p1", "agent_id": "spike"})
+        ev = self.store.append_event(session_id, "status.changed", actor, {"from": "starting", "to": "stopped", "source": "test", "detail": None})
+        record["status"] = {"state": "stopped", "since": ev["ts"], "source": "test", "detail": None}
+        record["runtime"] = None
+        record["state_version"] = ev["seq"]
+        self.store.save_session(record)
+        rc, out, err = self.run_cli(["reconcile", "--json"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(json.loads(out)["swept"], [])
+        self.assertEqual(self.fake_herdr.calls("pane.close"), [])
 
     def test_reconcile_leaves_a_starting_session_alone_while_its_harness_boots(self):
         # A harness that is still booting is not in agent.list yet either;
@@ -980,7 +1096,7 @@ class TestReconcile(CoreTestCase):
 
         rc, out, err = self.run_cli(["reconcile", "--json"])
         self.assertEqual(rc, 0, err)
-        self.assertEqual(json.loads(out), {"orphaned": [gone_id], "adopted": [], "ended": []})  # stdout shape unchanged
+        self.assertEqual(json.loads(out), {"orphaned": [gone_id], "adopted": [], "ended": [], "swept": []})  # stdout shape unchanged
 
         index = self.read_index()
         self.assertEqual(index["herdr"], "running")
@@ -1030,7 +1146,7 @@ class TestReconcile(CoreTestCase):
         self.start_fake_herdr()
         rc, out, err = self.run_cli(["reconcile", "--json"])
         self.assertEqual(rc, 0, err)
-        self.assertEqual(json.loads(out), {"orphaned": [], "adopted": [], "ended": []})
+        self.assertEqual(json.loads(out), {"orphaned": [], "adopted": [], "ended": [], "swept": []})
         self.assertIn("could not write", err)
         self.assertTrue(squatter.is_dir())
         # No temp file left behind next to it either.

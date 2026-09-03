@@ -76,8 +76,8 @@ States: `starting`, `working`, `waiting`, `blocked`, `idle`, `done`, `failed`, `
 | `waiting`, `blocked` | `working` | an instruction or approval is delivered | omarchy, herdr |
 | `working` | `idle` | Herdr reports idle with no pending question | herdr |
 | `idle` | `working` | new instruction delivered | omarchy |
-| any live | `done` | harness exited cleanly, or owner marks complete; the reconciler applies this when Herdr's agent list no longer has the agent while its pane lives on (detail `harness exited; pane still open`), except from `starting`, where the harness is still booting | herdr, human, reconciler |
-| any live | `failed` | harness exited with error | herdr |
+| any live | `done` | harness exited cleanly, or owner marks complete; the reconciler applies this when Herdr's agent list no longer has the agent while its pane lives on and the session was idle, waiting, or blocked (detail `harness exited`), except from `starting`, where the harness is still booting; the pane is closed with it | herdr, human, reconciler |
+| any live | `failed` | harness exited with error; Herdr exposes no exit status, so the reconciler applies this when the agent vanished while the session was `working` (detail `harness exited while working`, run 2 on 2026-09-02); a person who kills a harness mid-turn on purpose gets `failed` too, and the receipt says why | herdr, reconciler |
 | any live | `stopped` | `session stop` | human, agent, system |
 | any live | `orphaned` | Herdr pane gone with no exit event | reconciler |
 | `orphaned` | `working` | `session open` re-binds a pane and resumes the harness session | omarchy |
@@ -157,7 +157,7 @@ The receipt answers success signal 3 in `PLAN.md`: a completed session shows wor
 
 Omarchy creates the pane and starts the harness through Herdr's socket API, then records the returned ids in `runtime`. Omarchy subscribes to Herdr's `pane.agent_status_changed` events and writes `status.changed` events from them. When Herdr's per-agent lifecycle hooks are available for the harness, the status source is `herdr-hook`; otherwise `herdr-manifest`. Herdr's own agent name is set to the session name so the Herdr sidebar and the Omarchy panel agree. Herdr's custom state and metadata channel carries the session id so a Herdr-side view can link back.
 
-The reconciler runs every 5 s from the watcher and on every Herdr nudge: it lists Herdr panes and agents, compares with bound sessions, marks missing panes `orphaned`, ends sessions whose agent left Herdr's list while the pane lives on (`done`, unbound, receipt written; rig, 2026-09-02), adopts a Herdr agent pane with no session record as a session created by `system:omarchy` named after the Herdr agent, so agents started outside the launcher still appear, and rewrites `index.json` with the Herdr state (`03-sessions-panel.md`). When Herdr itself is unreachable it orphans every bound live session and exits 4.
+The reconciler runs every 5 s from the watcher and on every Herdr nudge: it lists Herdr panes and agents, compares with bound sessions, marks missing panes `orphaned`, ends sessions whose agent left Herdr's list while the pane lives on (`done`, unbound, receipt written; rig, 2026-09-02), adopts a Herdr agent pane with no session record as a session created by `system:omarchy` named after the Herdr agent, so agents started outside the launcher still appear, and rewrites `index.json` with the Herdr state (`03-sessions-panel.md`). When Herdr itself is unreachable it orphans every bound live session and exits 4. It also sweeps the workspaces its own `runtime.bound` events name for any ended or orphaned session, closing their empty shell panes, never an adopted agent's workspace and never one with a live agent in it; Herdr restores every workspace with a fresh shell after a server restart, and by run 2 nine dead panes sat in its list.
 
 ## Invariants
 

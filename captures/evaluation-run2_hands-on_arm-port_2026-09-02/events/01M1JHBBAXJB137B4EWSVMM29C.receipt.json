@@ -1,0 +1,60 @@
+{
+  "session_id": "01M1JHBBAXJB137B4EWSVMM29C",
+  "name": "run2-ref-d",
+  "agent": {
+    "kind": "claude",
+    "harness_session_ref": "1873caff-ee1f-41a3-bd69-9a98fce7b541",
+    "version": null
+  },
+  "owner": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "created_by": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "started_at": "2026-09-03T02:25:14Z",
+  "ended_at": "2026-09-03T02:28:22Z",
+  "duration_s": 188,
+  "end_state": "stopped",
+  "end_reason": "run 2 over",
+  "started_with": {
+    "command": "omarchy-agent-session-core new --agent claude --mode personal --cwd /home/omarchy/Work/spike-repo --no-worktree --name run2-ref-d --prompt 'Reply with the single word DELTA and nothing else.'",
+    "cwd": "/home/omarchy/Work/spike-repo",
+    "env_summary": {
+      "shell": "/bin/bash",
+      "term": null
+    }
+  },
+  "goal": null,
+  "workspace": {
+    "repo_root": "/home/omarchy/Work/spike-repo",
+    "worktree_path": "/home/omarchy/Work/spike-repo",
+    "branch": null,
+    "base_branch": null,
+    "created_by_session": false
+  },
+  "commits": null,
+  "diff_stat": null,
+  "dirty": null,
+  "unpushed": null,
+  "artifacts": [],
+  "instructions": {
+    "delivered": 1,
+    "dropped": 0,
+    "authors": [
+      "human:omarchy@omarchy"
+    ]
+  },
+  "approvals": {
+    "requested": 0,
+    "approved": 0,
+    "denied": 0
+  },
+  "children": [],
+  "harness_session_ref": "1873caff-ee1f-41a3-bd69-9a98fce7b541",
+  "state_version": 11
+}

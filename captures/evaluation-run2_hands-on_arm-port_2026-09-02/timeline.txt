@@ -1,0 +1,33 @@
+run2-start 2026-09-03T02:20:47Z
+run2-done idle 14 lines; last: ('assistant', 'READY')
+run2-failed working 14 lines; last: ('assistant', 'READY')
+== kill B mid-turn 02:21:25
+claude-pids=154757
+killed-at 02:21:25.482Z
+  01M1JH3AGRWDMXHK3MGW8FTS6B  run2-failed              failed     claude
+toast 02:21:25.793Z urgency 2 'run2-failed failed' 'claude · harness exited while working; pane still open · Click to open the receipt' ["omarchy-launch-tui","--app-id=org.omarchy.session-receipt","omarchy-agent-session-receipt","--pager","01M1JH3AGRWDMXHK3MGW8FTS6B"]
+toast 01:56:49.356Z urgency 1 'eval-shared needs you' 'claude · Shared-mode write test · Click to open and answer' ["omarchy-agent-session-open","01M1JFPZ4KGCDGZZM0PVEJEWBP"]
+run2-done 33d683c8-6b04-41b1-b641-93f561dd4cfd
+run2-failed 33d683c8-6b04-41b1-b641-93f561dd4cfd
+== send /exit to A 02:21:59
+send-rc=0
+  01M1JH369WJF94BDQ51C2VJXT6  run2-done                done       claude
+toast 02:22:00.870Z urgency 0 'run2-done finished' 'claude · Finish on its own: the done row · Click to open the receipt' ["omarchy-launch-tui","--app-id=org.omarchy.session-receipt","omarchy-agent-session-receipt","--pager","01M1JH369WJF94BDQ51C2VJXT6"]
+== refs-test 02:25:09
+run2-ref-c idle ref 061e75ef-6eac-47a5-b4d4-d9a6212dcf62
+run2-ref-d idle ref 1873caff-ee1f-41a3-bd69-9a98fce7b541
+run2-ref-c idle 16 lines; last: ('assistant', 'CHARLIE')
+run2-ref-d idle 16 lines; last: ('assistant', 'DELTA')
+== pane-close-on-exit test 02:25:55
+C-pane=w0:p1
+panes before: 9 ['w1:p1', 'wE:p1', 'wK:p1', 'wP:p1', 'wR:p1', 'wY:p1', 'wZ:p1', 'w0:p1', 'w11:p1']
+  01M1JHB6XBB9R04WSVJ2QJ94NK  run2-ref-c               done       claude
+panes after: 8 ['w1:p1', 'wE:p1', 'wK:p1', 'wP:p1', 'wR:p1', 'wY:p1', 'wZ:p1', 'w11:p1']
+== done-toast click 02:26:05
+[('org.omarchy.session-receipt', 162169)]
+== sweep 02:28:21
+swept: 0 ended: []
+workspaces left: [('w1', 'spike'), ('wE', 'try-1'), ('wK', 'session/crash-17157'), ('w11', 'run2-ref-d')]
+workspaces after stop: [('w1', 'spike'), ('wE', 'try-1'), ('wK', 'session/crash-17157')]
+swept: []
+workspaces now: [('w1', 'spike'), ('wK', 'session/crash-17157')]

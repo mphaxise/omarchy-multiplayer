@@ -1,0 +1,68 @@
+{
+  "session_id": "01M1JH3AGRWDMXHK3MGW8FTS6B",
+  "name": "run2-failed",
+  "agent": {
+    "kind": "claude",
+    "harness_session_ref": "33d683c8-6b04-41b1-b641-93f561dd4cfd",
+    "version": null
+  },
+  "owner": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "created_by": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "started_at": "2026-09-03T02:20:51Z",
+  "ended_at": "2026-09-03T02:21:25Z",
+  "duration_s": 34,
+  "end_state": "failed",
+  "end_reason": "harness exited while working; pane still open",
+  "started_with": {
+    "command": "omarchy-agent-session-core new --agent claude --mode personal --cwd /home/omarchy/Work/spike-repo --no-worktree --name run2-failed --goal 'Die mid-turn: the failed row' --prompt 'Write the numbers from 1 to 400, one per line, into count.txt using the Write tool in chunks of 50 numbers per call, and after each chunk print the word chunk. Do not stop until 400.'",
+    "cwd": "/home/omarchy/Work/spike-repo",
+    "env_summary": {
+      "shell": "/bin/bash",
+      "term": null
+    }
+  },
+  "goal": {
+    "text": "Die mid-turn: the failed row",
+    "set_by": {
+      "kind": "human",
+      "id": "omarchy@omarchy",
+      "label": "omarchy"
+    },
+    "set_at": "2026-09-03T02:20:51Z"
+  },
+  "workspace": {
+    "repo_root": "/home/omarchy/Work/spike-repo",
+    "worktree_path": "/home/omarchy/Work/spike-repo",
+    "branch": null,
+    "base_branch": null,
+    "created_by_session": false
+  },
+  "commits": null,
+  "diff_stat": null,
+  "dirty": null,
+  "unpushed": null,
+  "artifacts": [],
+  "instructions": {
+    "delivered": 1,
+    "dropped": 0,
+    "authors": [
+      "human:omarchy@omarchy"
+    ]
+  },
+  "approvals": {
+    "requested": 0,
+    "approved": 0,
+    "denied": 0
+  },
+  "children": [],
+  "harness_session_ref": "33d683c8-6b04-41b1-b641-93f561dd4cfd",
+  "state_version": 11
+}

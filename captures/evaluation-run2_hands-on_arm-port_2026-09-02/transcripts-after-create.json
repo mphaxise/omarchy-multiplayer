@@ -1,0 +1,32 @@
+[
+ {
+  "id": "01M1JH369WJF94BDQ51C2VJXT6",
+  "name": "run2-done",
+  "state": "idle",
+  "ref": "33d683c8-6b04-41b1-b641-93f561dd4cfd",
+  "transcript": "/home/omarchy/.claude/projects/-home-omarchy-Work-spike-repo/33d683c8-6b04-41b1-b641-93f561dd4cfd.jsonl",
+  "lines": 14,
+  "last": [
+   "assistant",
+   "READY"
+  ],
+  "mtime": 1788402053.8799434,
+  "pane": "wY:p1",
+  "at": "2026-09-03T02:21:25Z"
+ },
+ {
+  "id": "01M1JH3AGRWDMXHK3MGW8FTS6B",
+  "name": "run2-failed",
+  "state": "working",
+  "ref": "33d683c8-6b04-41b1-b641-93f561dd4cfd",
+  "transcript": "/home/omarchy/.claude/projects/-home-omarchy-Work-spike-repo/33d683c8-6b04-41b1-b641-93f561dd4cfd.jsonl",
+  "lines": 14,
+  "last": [
+   "assistant",
+   "READY"
+  ],
+  "mtime": 1788402053.8799434,
+  "pane": "wZ:p1",
+  "at": "2026-09-03T02:21:25Z"
+ }
+]

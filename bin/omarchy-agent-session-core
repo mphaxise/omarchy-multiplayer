@@ -543,15 +543,13 @@ class HerdrError(Exception):
 class HerdrClient:
     """Newline-delimited JSON over a Unix domain socket.
 
-    VERIFY ON RIG: everything about the wire format below is this build's
-    own assumption, unconfirmed against a real Herdr install. Assumed
-    request shape: {"id": <int>, "method": "<name>", "params": {...}}\\n
-    on one line. Assumed reply shape, one line back per request:
-    {"id": <int>, "result": <any>} on success or
-    {"id": <int>, "error": {"code": ..., "message": ..., "data": ...}} on
-    failure. `events_subscribe` assumes the same framing but as a
-    long-lived stream of unsolicited lines after the initial subscribe
-    reply, rather than one reply per request.
+    Wire format as observed on Herdr 0.8.2 (rig, 2026-09-02; the schema
+    is in spikes/): request {"id": "<string>", "method": "<name>",
+    "params": {...}} on one line (Herdr rejects integer ids); reply
+    {"id", "result": {"type": ..., ...}} on success or {"id", "error":
+    {"code", "message", "data"}} on failure. `events_subscribe` uses the
+    same framing as a long-lived stream of unsolicited lines after the
+    subscribe reply.
 
     Every method here opens a fresh connection per call (simple and robust
     for a short-lived CLI process); `events_subscribe` is the one exception,
@@ -2230,23 +2228,57 @@ def claude_project_dir(cwd):
     return pathlib.Path(os.environ.get("CLAUDE_CONFIG_DIR", str(pathlib.Path.home() / ".claude"))) / "projects" / slug
 
 
-def discover_harness_session_ref(kind, cwd, since_epoch):
+def transcript_started_at(path):
+    """Epoch of the first timestamped line of a Claude Code transcript, or
+    the file's mtime when no line carries one."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for _ in range(20):
+                line = fh.readline()
+                if not line:
+                    break
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                ts = d.get("timestamp") if isinstance(d, dict) else None
+                if isinstance(ts, str):
+                    try:
+                        return dt.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+                    except ValueError:
+                        pass
+        return os.path.getmtime(path)
+    except OSError:
+        return None
+
+
+def discover_harness_session_ref(kind, cwd, since_epoch, taken=()):
     """Find the harness's own resume id for a session started at or after
-    since_epoch in cwd. Only Claude Code is wired in slice 1: the newest
-    transcript file in its project directory whose mtime is at or after the
-    start. Returns None when nothing qualifies yet (Claude writes the file
-    on the first turn, not at launch)."""
+    since_epoch in cwd. Only Claude Code is wired in slice 1: of the
+    transcript files in its project directory that *started* at or after
+    the session did, the earliest-starting one not already held by another
+    session. Run 2 (2026-09-02): two sessions created five seconds apart in
+    the same directory both took the newest file by mtime, so one would
+    have revived the other's conversation. Returns None when nothing
+    qualifies yet (Claude writes the file on the first turn, not at
+    launch)."""
     if kind != "claude" or not cwd:
         return None
     d = claude_project_dir(cwd)
+    taken = set(taken or ())
     try:
-        candidates = [f for f in d.glob("*.jsonl") if f.stat().st_mtime >= since_epoch - 2]
+        files = [f for f in d.glob("*.jsonl") if f.stem not in taken and f.stat().st_mtime >= since_epoch - 2]
     except OSError:
         return None
+    candidates = []
+    for f in files:
+        started = transcript_started_at(f)
+        if started is not None and started >= since_epoch - 2:
+            candidates.append((started, f.stem))
     if not candidates:
         return None
-    newest = max(candidates, key=lambda f: f.stat().st_mtime)
-    return newest.stem
+    candidates.sort()
+    return candidates[0][1]
 
 
 def record_harness_session_ref(store, session, herdr=None):
@@ -2264,7 +2296,9 @@ def record_harness_session_ref(store, session, herdr=None):
         since = dt.datetime.fromisoformat(session["created_at"].replace("Z", "+00:00")).timestamp()
     except (KeyError, ValueError):
         since = 0
-    ref = discover_harness_session_ref(session["agent"]["kind"], cwd, since)
+    taken = {s["agent"].get("harness_session_ref") for s in store.list_sessions()
+             if s["id"] != session["id"] and s["agent"].get("harness_session_ref")}
+    ref = discover_harness_session_ref(session["agent"]["kind"], cwd, since, taken=taken)
     if not ref:
         return False
     session["agent"]["harness_session_ref"] = ref
@@ -2333,6 +2367,51 @@ def write_sessions_index(store, herdr_state, orphaned, adopted):
         eprint(f"reconcile: could not write {store.index_path()}: {e}")
 
 
+def sweep_ended_workspaces(ctx, known, live_agents, live_panes):
+    """Close the empty shell panes Herdr keeps for sessions that have
+    ended or been orphaned. Herdr restores every workspace, with a fresh
+    shell, when its server restarts, and `stop` on an orphaned session has
+    no pane to close, so by the end of run 2 (2026-09-02) eight dead
+    workspaces sat in Herdr's list. Precise on purpose: only a workspace
+    this launcher bound to the session (the last `runtime.bound` event
+    names it), never one that came from an adopted agent, and only while
+    no live agent runs in it. Returns the session ids whose panes were
+    closed."""
+    agent_workspaces = {a.get("workspace_id") for a in live_agents if a.get("workspace_id")}
+    panes_by_workspace = {}
+    for p in live_panes:
+        wid = p.get("workspace_id")
+        if wid and p.get("pane_id"):
+            panes_by_workspace.setdefault(wid, []).append(p["pane_id"])
+    swept = []
+    for s in known:
+        state = s["status"]["state"]
+        if state not in TERMINAL_STATES and state != "orphaned":
+            continue
+        if s.get("runtime") is not None:
+            continue
+        events = ctx.store.read_events(s["id"])
+        if any(e["type"] == "session.created" and (e.get("data") or {}).get("adopted") for e in events):
+            continue
+        # Every workspace this launcher ever bound to the session: a
+        # revived session binds a new one, and Herdr restores the old one
+        # too after a server restart.
+        wids = {(e.get("data") or {}).get("workspace_id") for e in events if e["type"] == "runtime.bound"}
+        closed = False
+        for wid in wids:
+            if not wid or wid in agent_workspaces or wid not in panes_by_workspace:
+                continue
+            for pane_id in panes_by_workspace[wid]:
+                try:
+                    ctx.herdr.pane_close(pane_id=pane_id)
+                    closed = True
+                except (HerdrError, HerdrUnavailable):
+                    pass
+        if closed:
+            swept.append(s["id"])
+    return swept
+
+
 def cmd_reconcile(args, ctx):
     actor = system_actor()
     known = ctx.store.list_sessions()
@@ -2383,13 +2462,28 @@ def cmd_reconcile(args, ctx):
                 record_harness_session_ref(ctx.store, s, ctx.herdr)
         elif pane_alive and s["status"]["state"] != "starting":
             # The harness exited and left its shell pane behind (the person
-            # typed /quit, or the process died). Herdr drops the agent from
+            # typed /exit, or the process died). Herdr drops the agent from
             # its list while the pane lives on, so this used to read as
             # `idle` forever (rig, 2026-09-02). 01-session-model.md: any
-            # live state -> done when the harness exits cleanly. `starting`
-            # is excluded because a harness that is still booting is not in
-            # Herdr's agent list yet either.
-            _end_session(s, ctx.store, actor, "done", "harness exited; pane still open", unbind_reason="harness_exited")
+            # live state -> done when the harness exits cleanly, failed when
+            # it exits with an error. Herdr exposes no exit status, so the
+            # state at the moment it vanished decides: gone while `working`
+            # is a failure (nothing finishes a turn by exiting), gone while
+            # idle, waiting, or blocked is an exit. `starting` is excluded
+            # because a harness that is still booting is not in Herdr's
+            # agent list yet either.
+            # The pane existed for the session; with the harness gone it is
+            # an empty shell that would sit in Herdr's list forever (run 2,
+            # 2026-09-02: `stop` on an ended session leaves panes alone).
+            # Pane and worktree first, as `stop` does, so the receipt
+            # carries the worktree decision.
+            with contextlib.suppress(HerdrError, HerdrUnavailable):
+                ctx.herdr.pane_close(pane_id=pane_id)
+            cleanup_workspace_if_owned(s, ctx.herdr)
+            if s["status"]["state"] == "working":
+                _end_session(s, ctx.store, actor, "failed", "harness exited while working", unbind_reason="harness_exited")
+            else:
+                _end_session(s, ctx.store, actor, "done", "harness exited", unbind_reason="harness_exited")
             ended.append(s["id"])
             continue
         if not still_present:
@@ -2403,6 +2497,8 @@ def cmd_reconcile(args, ctx):
             s["state_version"] = ev["seq"]
             ctx.store.save_session(s)
             orphaned.append(s["id"])
+
+    swept = sweep_ended_workspaces(ctx, known, live_agents, live_panes)
 
     known_agent_ids = {(s.get("runtime") or {}).get("agent_id") for s in known if s.get("runtime")}
     for a in live_agents:
@@ -2435,9 +2531,9 @@ def cmd_reconcile(args, ctx):
 
     write_sessions_index(ctx.store, "running", orphaned, adopted)
     if args.json:
-        print(json.dumps({"orphaned": orphaned, "adopted": adopted, "ended": ended}, indent=2))
+        print(json.dumps({"orphaned": orphaned, "adopted": adopted, "ended": ended, "swept": swept}, indent=2))
     else:
-        print(f"orphaned {len(orphaned)}, adopted {len(adopted)}, ended {len(ended)}")
+        print(f"orphaned {len(orphaned)}, adopted {len(adopted)}, ended {len(ended)}, swept {len(swept)}")
     return EXIT_OK
 
 
