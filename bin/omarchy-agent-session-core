@@ -1656,7 +1656,15 @@ def build_parser():
     p.add_argument("--all", action="store_true", help="include drafts and private sessions you were not given access to")
     p.add_argument("--state", choices=STATES)
     p.add_argument("--mine", action="store_true")
+    p.add_argument("--ended-within", metavar="DURATION",
+                   help="keep every live or orphaned session and only the ended ones that ended within DURATION (90m, 24h, 14d); --json then reports how many ended earlier")
     p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("history", help="ended sessions by day, newest first (the panel shows one day; this shows fourteen)")
+    p.add_argument("--days", type=int, default=14)
+    p.add_argument("--all", action="store_true", help="include private sessions someone else owns")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--pager", action="store_true", help="pipe through `less -R` (prints plainly when less is missing)")
 
     p = sub.add_parser("show")
     add_id_arg(p)
@@ -1849,6 +1857,9 @@ def session_list_entry(s):
         "goal": goal_first_line(s.get("goal")),
         "mode": s["mode"],
         "resumable": isinstance(ref, str) and bool(ref),
+        # Whether `open` brings it back, decided here and nowhere else
+        # (02-command-surface.md, 2026-09-03).
+        "revivable": session_revivable(s),
         "created_by": {"kind": created_by.get("kind"), "label": created_by.get("label")},
         "project": session_project(s),
         # 09-closed-loop-surfaces.md section 7: the registered preview and
@@ -2576,6 +2587,40 @@ def notify_parent_of_completion(store, herdr, child, end_state, reason):
         cmd_send(send_args, Context(store, herdr))
 
 
+_DURATION_RE = re.compile(r"^(\d+)([mhd])$")
+_DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400}
+
+
+def parse_duration(text):
+    """`90m`, `24h`, `14d` to seconds; anything else is a usage error."""
+    m = _DURATION_RE.match(str(text or "").strip())
+    if not m:
+        raise UsageError(f"a duration is an integer and m, h, or d (for example 24h), not '{text}'")
+    return int(m.group(1)) * _DURATION_UNITS[m.group(2)]
+
+
+def ended_at(session):
+    """When an ended session ended, as a datetime, from `status.since`;
+    None for a live session or an unreadable timestamp."""
+    if session["status"]["state"] not in TERMINAL_STATES:
+        return None
+    try:
+        return parse_rfc3339(session["status"]["since"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def in_window(session, cutoff):
+    """The panel's window (02-command-surface.md, `--ended-within`): every
+    live or orphaned session, plus the ended ones that ended at or after
+    `cutoff`. An ended session with no readable end time stays visible
+    rather than silently leaving."""
+    when = ended_at(session)
+    if session["status"]["state"] not in TERMINAL_STATES:
+        return True
+    return when is None or when >= cutoff
+
+
 def cmd_list(args, ctx):
     sessions = ctx.store.list_sessions()
     if args.state:
@@ -2589,10 +2634,23 @@ def cmd_list(args, ctx):
     me = current_human_actor()
     if not getattr(args, "all", False):
         sessions = [s for s in sessions if can_see(s, me)]
+    # The window a surface reads through. The store keeps everything
+    # (01-session-model.md, Retention); the surface says how much it wants,
+    # and hears how much lies outside that (2026-09-03: 52 records, 53 KB
+    # against the panel's 64 KB cap).
+    window = None
+    if getattr(args, "ended_within", None):
+        cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=parse_duration(args.ended_within))
+        earlier = sum(1 for s in sessions if not in_window(s, cutoff) and not is_lane(s))
+        sessions = [s for s in sessions if in_window(s, cutoff)]
+        window = {"ended_within": args.ended_within, "earlier_ended": earlier}
     everything = ctx.store.list_sessions()
     entries = attach_lane_entries([session_list_entry(s) for s in sessions], everything)
     if args.json:
-        print(json.dumps({"sessions": entries}, indent=2))
+        payload = {"sessions": entries}
+        if window is not None:
+            payload["window"] = window
+        print(json.dumps(payload, indent=2))
         return EXIT_OK
     for entry in entries:
         flag = "!" if entry["needs_attention"] else " "
@@ -2773,6 +2831,47 @@ def inferred_exit_revivable(session):
             and bool(session["agent"].get("harness_session_ref")))
 
 
+def stop_revivable(session):
+    """A session a person stopped, with a transcript to resume. Stop reads
+    as "stop for now" to the person who pressed it (Praneet, 2026-09-03:
+    six sessions from the evening before, all stopped by hand, none
+    reachable), so `open` resumes it the way an orphan resumes. A `done`
+    closed with a verdict stays closed: a verdict is a decision, a stop is
+    a pause (01-session-model.md, 2026-09-03)."""
+    return (session["status"]["state"] == "stopped"
+            and bool(session["agent"].get("harness_session_ref")))
+
+
+def session_revivable(session):
+    """True exactly when `open` would bring the session back rather than
+    refuse it. Computed here and carried in `list --json` as `revivable`,
+    so no surface re-derives the rule (02-command-surface.md)."""
+    return (session["status"]["state"] == "orphaned"
+            or inferred_exit_revivable(session)
+            or stop_revivable(session))
+
+
+def restore_worktree_if_missing(session):
+    """`stop` runs 07-worktrees.md's cleanup, which removes a merged or
+    pushed worktree the session's own `new` created; the branch survives
+    (invariant 7). A harness resumes its transcript by working directory,
+    so a resume after that cleanup puts the worktree back at the recorded
+    path from the recorded branch. Returns True when it did."""
+    ws = session.get("workspace") or {}
+    path = ws.get("worktree_path")
+    if not path or pathlib.Path(path).exists():
+        return False
+    if not (ws.get("created_by_session") and ws.get("repo_root") and ws.get("branch")):
+        raise ConflictError(f"session {session['id']} worked in {path}, which no longer exists; nothing to resume in")
+    r = run_git(["worktree", "add", str(path), ws["branch"]], cwd=ws["repo_root"], check=False)
+    if r.returncode != 0:
+        raise ConflictError(f"session {session['id']}: could not re-create its worktree at {path} from {ws['branch']}: {r.stderr.strip()}")
+    ws["worktree_removed"] = False
+    ws["worktree_removed_reason"] = None
+    session["workspace"] = ws
+    return True
+
+
 def cmd_open(args, ctx):
     session = ctx.store.load(args.id_or_name)
     if getattr(args, "lane", None):
@@ -2795,6 +2894,18 @@ def cmd_open(args, ctx):
         state = "orphaned"
     if inferred_exit_revivable(session):
         detail = "reopened after an inferred exit"
+        ev = ctx.store.append_event(session["id"], "status.changed", actor,
+                                     {"from": state, "to": "orphaned", "source": "omarchy", "detail": detail})
+        session["status"] = {"state": "orphaned", "since": ev["ts"], "source": "omarchy", "detail": detail}
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+        state = "orphaned"
+    elif stop_revivable(session):
+        # A stop is a pause (01-session-model.md, 2026-09-03): the record
+        # keeps the stop's receipt, and the session goes on from its
+        # transcript through the orphan path below.
+        restored = restore_worktree_if_missing(session)
+        detail = "resumed after a stop" + ("; worktree re-created" if restored else "")
         ev = ctx.store.append_event(session["id"], "status.changed", actor,
                                      {"from": state, "to": "orphaned", "source": "omarchy", "detail": detail})
         session["status"] = {"state": "orphaned", "since": ev["ts"], "source": "omarchy", "detail": detail}
@@ -3221,6 +3332,102 @@ def page_text(text):
         subprocess.run(["less", "-R"], input=text + "\n", text=True)
     except FileNotFoundError:
         print(text)
+
+
+def format_span(seconds):
+    """A duration for a person: 17s, 39m, 1h 24m, 2d 3h."""
+    s = max(0, int(seconds))
+    if s < 60:
+        return f"{s}s"
+    m, h, d = s // 60, s // 3600, s // 86400
+    if d > 0:
+        return f"{d}d {h % 24}h"
+    if h > 0:
+        return f"{h}h {m % 60}m"
+    return f"{m}m"
+
+
+def history_days(sessions, days, viewer, include_all):
+    """The ended, non-lane sessions the viewer may see, grouped by the
+    local calendar day they ended, newest day first and newest session
+    first within a day. Returns (groups, ended_in_window, earlier_ended)
+    where groups is a list of (date, [(local_end, session), ...])."""
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
+    ended = [s for s in sessions if s["status"]["state"] in TERMINAL_STATES and not is_lane(s)]
+    if not include_all:
+        ended = [s for s in ended if can_see(s, viewer)]
+    by_day = {}
+    earlier = 0
+    for s in ended:
+        when = ended_at(s)
+        if when is None:
+            continue
+        if when < cutoff:
+            earlier += 1
+            continue
+        local = when.astimezone()
+        by_day.setdefault(local.date(), []).append((local, s))
+    groups = []
+    for date in sorted(by_day, reverse=True):
+        groups.append((date, sorted(by_day[date], key=lambda t: t[0], reverse=True)))
+    return groups, sum(len(g[1]) for g in groups), earlier
+
+
+def history_state_text(session):
+    """`stopped`, `done · kept`, `failed · harness exited while working`,
+    and `stopped · resumes` when `open` would bring it back."""
+    st = session["status"]
+    text = st["state"]
+    detail = str(st.get("detail") or "").strip()
+    if detail and detail != st["state"]:
+        text += f" · {detail}"
+    if stop_revivable(session):
+        text += " · resumes"
+    return text
+
+
+def render_history_text(groups, days, ended, earlier):
+    lines = [f"History · last {days} day{'s' if days != 1 else ''} · {ended} ended"
+             + (f" · {earlier} earlier" if earlier else "")]
+    if not groups:
+        lines.append("")
+        lines.append(f"Nothing ended in the last {days} day{'s' if days != 1 else ''}."
+                     + (f" {earlier} ended before that: --days {days * 2} reaches further back." if earlier else ""))
+    for date, items in groups:
+        lines.append("")
+        lines.append(f"{date.strftime('%A %Y-%m-%d')} · {len(items)} ended")
+        for local, s in items:
+            try:
+                span = format_span((parse_rfc3339(s["status"]["since"]) - parse_rfc3339(s["created_at"])).total_seconds())
+            except (KeyError, TypeError, ValueError):
+                span = ""
+            project = session_project(s) or ""
+            lines.append(f"  {local.strftime('%H:%M')}  {s['name']:<28} {history_state_text(s):<40} {span:>7}  {s['agent']['kind']:<7} {project}".rstrip())
+    lines.append("")
+    lines.append("receipt <name> shows what a session produced · open <name> resumes a stopped session that says so")
+    return "\n".join(lines)
+
+
+def cmd_history(args, ctx):
+    """Ended sessions by day (02-command-surface.md): the surface for what
+    the panel no longer shows, since the record keeps everything and the
+    panel shows one day (01-session-model.md, Retention; 2026-09-03)."""
+    if args.days < 1:
+        raise UsageError("--days wants a positive integer")
+    viewer = current_human_actor()
+    groups, ended, earlier = history_days(ctx.store.list_sessions(), args.days, viewer, getattr(args, "all", False))
+    if args.json:
+        print(json.dumps({
+            "days": [{"date": date.isoformat(), "sessions": [session_list_entry(s) for _, s in items]} for date, items in groups],
+            "window": {"days": args.days, "ended": ended, "earlier_ended": earlier},
+        }, indent=2))
+        return EXIT_OK
+    text = render_history_text(groups, args.days, ended, earlier)
+    if getattr(args, "pager", False):
+        page_text(text)
+    else:
+        print(text)
+    return EXIT_OK
 
 
 def cmd_capture(args, ctx):
@@ -3869,7 +4076,7 @@ def cmd_reconcile(args, ctx):
 COMMAND_HANDLERS = {
     "new": cmd_new, "list": cmd_list, "show": cmd_show, "open": cmd_open,
     "send": cmd_send, "stop": cmd_stop, "rename": cmd_rename, "assign": cmd_assign,
-    "goal": cmd_goal, "log": cmd_log, "receipt": cmd_receipt, "capture": cmd_capture,
+    "goal": cmd_goal, "log": cmd_log, "receipt": cmd_receipt, "history": cmd_history, "capture": cmd_capture,
     "artifact-add": cmd_artifact_add, "preview": cmd_preview, "mode": cmd_mode,
     "done": cmd_done, "reconcile": cmd_reconcile,
     "add": cmd_add, "lanes": cmd_lanes, "subscribe": cmd_subscribe, "artifact-mark": cmd_artifact_mark,

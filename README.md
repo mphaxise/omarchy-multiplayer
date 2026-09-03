@@ -16,6 +16,8 @@ Slice 1 is live on the ARM rig as of 2026-09-02: sessions survive window close a
 
 Slices 2 and 3 as of 2026-09-03: agent lanes (`spec/11-agent-lanes.md`) held all five slice-2a signals on the rig, two Claude Code lanes on one goal with a merge and a forced conflict (`findings/evaluation-run9-lanes-2026-09-03.md`), and ship as Keepalive 0.2.0 once pushed; watchers and artifact links landed with them. Two people on one session (`spec/12-two-people.md`) held in proxy form, the Mac over ssh as the second person (`findings/evaluation-run10-two-people-2026-09-03.md`): visibility, access, a suggestion the owner accepts or dismisses from the panel, assignment, presence outside the record. What those runs cannot say is whether a person stays oriented on any of it; the sittings are ahead.
 
+History, as of 2026-09-03 afternoon, on `slice-4/history`: the record keeps every session and nothing ages out (`spec/01-session-model.md`, Retention); the panel reads through a one-day window and says how many ended before it, `e` opens `history` (fourteen days by day), and a session a person stopped resumes its conversation on Enter (`findings/evaluation-run12-history-2026-09-03.md`). It came from Praneet's question after a VM start, where yesterday's agents were: the record had them, the panel hid them after a day, and `open` refused them.
+
 ## Known issues
 
 Slice 1 ships with these, each with its repro in `findings/evaluation-slice1-2026-09-02.md`:

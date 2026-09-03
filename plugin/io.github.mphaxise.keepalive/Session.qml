@@ -101,12 +101,17 @@ CursorSurface {
   readonly property bool isOrphaned: state === "orphaned"
   readonly property bool isEnded: state === "done" || state === "failed" || state === "stopped"
   readonly property string statusDetail: session && session.status ? String(session.status.detail || "") : ""
-  // An end the reconciler inferred from a vanished harness, with a
-  // transcript on disk: nobody decided it was over, so Enter revives it
+  // Whether Enter brings the session back: the core decides and says so
+  // as `revivable` (02-command-surface.md, 2026-09-03): orphaned; an end
+  // the reconciler inferred from a vanished harness, with a transcript
   // (a reboot before the restart rule ended two sessions this way, rig
-  // 2026-09-02 22:30). The receipt stays on `r`.
-  readonly property bool revivable: isOrphaned
-    || (isEnded && resumable && statusDetail.indexOf("harness exited") === 0)
+  // 2026-09-02 22:30); a stop with a transcript, since a stop is a pause.
+  // The older rule stays as the fallback for a core that predates the
+  // field. The receipt stays on `r` either way.
+  readonly property bool revivable: (session && typeof session.revivable === "boolean")
+    ? session.revivable
+    : (isOrphaned || (isEnded && resumable && statusDetail.indexOf("harness exited") === 0))
+  readonly property bool isStopped: state === "stopped"
 
   readonly property var spinnerFrames: ["◐", "◓", "◑", "◒"]
   property int spinnerIndex: 0
@@ -173,7 +178,10 @@ CursorSurface {
     : [project, branch].filter(function(t) { return t !== "" }).join(" · "), presenceText]
     .filter(function(t) { return t !== "" }).join(" · ")
 
-  readonly property string openLabel: revivable ? "⏎ Revive" : (isEnded ? "⏎ Receipt" : (needsAttention ? "⏎ Answer" : "⏎ Open"))
+  // Revive is for a session that lost its pane without anyone deciding;
+  // Resume is for one a person stopped (03-sessions-panel.md, row actions).
+  readonly property string openLabel: revivable ? (isStopped ? "⏎ Resume" : "⏎ Revive")
+    : (isEnded ? "⏎ Receipt" : (needsAttention ? "⏎ Answer" : "⏎ Open"))
 
   function stopLabel() {
     if (stopping) return "stopping…"

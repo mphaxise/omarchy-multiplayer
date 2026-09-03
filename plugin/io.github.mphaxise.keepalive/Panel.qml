@@ -157,6 +157,11 @@ Panel {
 
   readonly property var allSessions: snapshot && Array.isArray(snapshot.sessions) ? snapshot.sessions : []
   readonly property bool hasErrorRow: !!snapshot && typeof snapshot.error === "string" && snapshot.error !== ""
+  // How many sessions ended before the window the list was asked through
+  // (scripts/snapshot.sh passes --ended-within 24h; 02-command-surface.md).
+  // The record keeps them; `e` opens History. Zero from a core that
+  // predates the window, which then sends everything and never drops.
+  readonly property int earlierEnded: snapshot && snapshot.window ? Math.max(0, Number(snapshot.window.earlier_ended || 0)) : 0
 
   function scriptPath(name) {
     return Qt.resolvedUrl("scripts/" + name).toString().replace(/^file:\/\//, "")
@@ -200,7 +205,12 @@ Panel {
         // the last nowMs read as a negative age (the hero's "0M", rig e5).
         var previousIndex = root.selectedIndex
         root.nowMs = Date.now()
-        root.snapshot = { sessions: root.foldLanes(Array.isArray(parsed.sessions) ? parsed.sessions : []) }
+        root.snapshot = {
+          sessions: root.foldLanes(Array.isArray(parsed.sessions) ? parsed.sessions : []),
+          // The window the list was asked through, with how much ended
+          // before it (absent from a core that predates the window).
+          window: (parsed.window && typeof parsed.window === "object") ? parsed.window : null
+        }
         root.clearStoppedFromStopping(root.snapshot.sessions)
         root.reconcileCursor(previousIndex)
         root.recordSuccess()
@@ -401,7 +411,10 @@ Panel {
   readonly property color barGlyphColor: barState === "needs-you" ? urgentColor
     : (barState === "orphaned" ? foreground : restColor)
 
-  visible: allSessions.length > 0 || showWhenEmpty || hasErrorRow
+  // Hidden only on a fresh install: once a record exists the icon stays,
+  // because an icon that leaves with the last live session reads as the
+  // sessions being gone (03-sessions-panel.md, 2026-09-03).
+  visible: allSessions.length > 0 || earlierEnded > 0 || showWhenEmpty || hasErrorRow
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -411,8 +424,12 @@ Panel {
     if (root.hasErrorRow) return "Sessions"
     if (root.needsYouRows.length > 0) return root.needsYouRows[0].name || root.needsYouRows[0].id
     if (root.orphanedRows.length > 0) return root.orphanedRows.length + " orphaned"
-    if (root.allSessions.length === 0) return "No sessions"
+    if (root.allSessions.length === 0) return root.earlierEnded > 0 ? "Nothing running" : "No sessions"
     return "Nothing needs you"
+  }
+
+  function earlierText() {
+    return root.earlierEnded + " earlier"
   }
 
   function heroMeta() {
@@ -433,7 +450,7 @@ Panel {
     } else if (root.orphanedRows.length > 0) {
       base = root.herdrDown ? "Herdr is not running · Enter revives" : "Enter revives"
     } else if (root.allSessions.length === 0) {
-      base = "n starts one"
+      base = root.earlierEnded > 0 ? (root.earlierText() + " · e history · n new") : "n starts one"
     } else {
       var parts = []
       if (root.workingCount > 0) parts.push(root.workingCount + " working")
@@ -547,10 +564,13 @@ Panel {
     return !!(s && s.status && (s.status.state === "done" || s.status.state === "failed" || s.status.state === "stopped"))
   }
 
-  // Mirrors Session.qml's `revivable`: orphaned, or ended by the
-  // reconciler's inference with a transcript to resume.
+  // Mirrors Session.qml's `revivable`: the core's own `revivable` field
+  // when the payload carries it (02-command-surface.md, 2026-09-03);
+  // otherwise orphaned, or ended by the reconciler's inference with a
+  // transcript to resume.
   function sessionRevivable(s) {
     if (!s || !s.status) return false
+    if (typeof s.revivable === "boolean") return s.revivable
     if (s.status.state === "orphaned") return true
     return root.sessionEnded(s) && s.resumable === true && String(s.status.detail || "").indexOf("harness exited") === 0
   }
@@ -565,7 +585,17 @@ Panel {
     var s = root.sessionById(id)
     var argv = ["omarchy-agent-session-open", String(id)]
     if (lane) argv.push("--lane", String(lane))
-    root.runAction(id, "open", argv, root.sessionRevivable(s) ? "reviving…" : "opening…")
+    var busy = "opening…"
+    if (root.sessionRevivable(s)) busy = (s.status.state === "stopped") ? "resuming…" : "reviving…"
+    root.runAction(id, "open", argv, busy)
+  }
+
+  // History: what ended before the panel's window, fourteen days by day,
+  // in a TUI window the way the receipt opens (03-sessions-panel.md).
+  function openHistory() {
+    Quickshell.execDetached(["omarchy-launch-tui", "--app-id=org.omarchy.session-history",
+                             "omarchy-agent-session-history", "--pager"])
+    root.close()
   }
 
   // The cursor's lane, or the lane that needs you when the cursor is on
@@ -882,6 +912,9 @@ Panel {
       onTextKey: function(t) {
         if (root.sendOpenId !== "" || root.newOpen || root.addOpenId !== "") return
         if (t === "n" || t === "N") { root.openNew(); return }
+        // `e` for earlier: History needs no row under the cursor. (`h`
+        // is an arrow to PanelKeyCatcher, like j, k, and l; run 9.)
+        if (t === "e" || t === "E") { root.openHistory(); return }
         var s = root.selectedSession
         if (!s) return
         var ended = s.status && (s.status.state === "done" || s.status.state === "failed" || s.status.state === "stopped")
@@ -1108,7 +1141,10 @@ Panel {
 
               Text {
                 width: parent.width
-                text: root.snapshot ? "No sessions yet. Press n, or click above, to start one." : "Checking for sessions…"
+                text: !root.snapshot ? "Checking for sessions…"
+                  : (root.earlierEnded > 0
+                     ? ("Nothing running. " + root.earlierEnded + " ended earlier: e opens History. n starts one.")
+                     : "No sessions yet. Press n, or click above, to start one.")
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
@@ -1210,6 +1246,32 @@ Panel {
                     onStopConfirmRequested: function(id) { root.stopSession(id, root.selectedId === id ? root.selectedLane : ""); root.armedStopId = "" }
                   }
                 }
+              }
+            }
+
+            // ---------- Earlier: what ended before the window ----------
+            // Under the last section, so the day the panel shows ends
+            // with a pointer to the days it does not (03-sessions-panel.md).
+            Item {
+              visible: !root.hasErrorRow && root.earlierEnded > 0 && root.allSessions.length > 0
+              width: parent.width
+              height: visible ? earlierText.implicitHeight + Style.space(8) : 0
+
+              Text {
+                id: earlierText
+                textFormat: Text.PlainText
+                text: root.earlierText() + " · e"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.openHistory()
               }
             }
 

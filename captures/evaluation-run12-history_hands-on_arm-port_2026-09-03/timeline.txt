@@ -1,0 +1,17 @@
+21:29:36Z shell restarted, refresh probe rc=0
+21:29:36Z list --ended-within 24h --json: 35345 bytes, 31 sessions, window {'ended_within': '24h', 'earlier_ended': 18}
+21:29:36Z list --json (no window): 54453 bytes
+21:29:40Z captured panel-done-today-earlier (crop to the panel before committing)
+21:29:42Z captured panel-done-expanded (crop to the panel before committing)
+21:30:06Z before: restart-page is stopped · stopped
+21:30:06Z open rc=0
+21:30:09Z   restart-page: working · unknown
+21:30:12Z   restart-page: working · unknown
+21:30:15Z   restart-page: idle · None
+21:30:15Z harness ref before 86cfa28c… after 86cfa28c… same
+  herdr restart-page idle wF:p1
+21:30:19Z captured panel-resumed-working (crop to the panel before committing)
+21:30:53Z history: History · last 14 days · 46 ended
+21:31:00Z captured history-window at 967,38 941x1150
+21:33:37Z stop rc=0: restart-page is stopped · stopped
+21:33:38Z done; evidence in /tmp/eval-run12

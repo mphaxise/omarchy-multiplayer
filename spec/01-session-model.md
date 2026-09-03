@@ -82,6 +82,7 @@ States: `starting`, `working`, `waiting`, `blocked`, `idle`, `done`, `failed`, `
 | any live | `orphaned` | Herdr pane gone with no exit event; or the pane is the fresh shell Herdr opened when its server restarted after the binding (a reboot), detail "Herdr restarted; Enter revives" (rig, 2026-09-02) | reconciler |
 | `orphaned` | `working` | `session open` re-binds a pane and resumes the harness session | omarchy |
 | `done`, `failed` with detail "harness exited…" and a transcript | `orphaned`, then `working` | `session open` on an end the reconciler inferred, which nobody decided; the receipt from that end stays in the record (rig, 2026-09-02) | omarchy |
+| `stopped` with a transcript | `orphaned`, then `working` | `session open` on a session a person stopped, detail "resumed after a stop": stop reads as "stop for now" to the person who pressed it, and the transcript is on disk, so it resumes the way an orphan does; the receipt from the stop stays in the record (decision of 2026-09-03). A `stopped` session without a transcript, and a `done` closed with a verdict, stay closed: exit 5 | omarchy |
 
 Herdr reports `blocked`, `working`, `done`, `idle`, `unknown`. Omarchy maps Herdr `done` to `idle` when the pane is alive and to `done` when the harness process has exited, and maps `unknown` to the previous state with `status.detail = "unknown"` and a timestamp. Herdr's detection is authoritative for six harnesses with lifecycle hooks and heuristic for the rest; `status.source` records which, so the panel can show a confidence hint.
 
@@ -168,7 +169,13 @@ The reconciler runs every 5 s from the watcher and on every Herdr nudge: it list
 4. `created_by` never changes. `owner` changes only through `owner.assigned`.
 5. A session in `shared` or `restricted` mode is never bound to a harness launched with a bypass-permissions flag.
 6. Two sessions never share a worktree unless both records name the same `worktree_path` and `workspace.created_by_session` is false for both.
-7. Deleting a session directory is the only way to lose history, and no command in slice 1 does it.
+7. Deleting a session directory is the only way to lose history, and no command does it.
+
+## Retention
+
+Records are kept for as long as the directory exists. Nothing ages out on its own: an ended session stays on disk with its events, receipt, artifacts, and harness resume reference until a person deletes the directory. A `prune` command, explicit and never scheduled, is the only deletion this model will ever add, and it is not built.
+
+What changes with age is which surface shows a record, and that is a property of the surface, never of the record (`03-sessions-panel.md`): the bar panel shows what is live plus what ended in the last day, and `history` shows what ended in the last fourteen days by default, further back on request. On 2026-09-03 the rig held 52 records, every one of them ended, 42 of them stopped by a person, and the panel showed none of the previous evening's; that is the day this section was written.
 
 ## Open questions for the rig
 

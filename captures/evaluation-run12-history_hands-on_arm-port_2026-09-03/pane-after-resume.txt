@@ -1,0 +1,11 @@
+non-empty lines: 10
+    ▐▛███▛█   Claude Code v2.1.259
+   ▝▜██████▀  Opus 5 · Claude Max
+     ▝▝ ▝▝    ~/.herdr/worktrees/restart-page
+   ❯ Say hello in one line and nothing else.
+   ● Hello!
+   ✻ Crunched for 2s · done 9:22 AM
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   ❯
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents                                                         
