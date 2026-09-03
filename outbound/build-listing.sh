@@ -8,10 +8,12 @@
 #   outbound/build-listing.sh [output-dir]                 default /tmp/omarchy-keepalive
 #   LISTING_ID=<other id> outbound/build-listing.sh              (to build under a different id)
 #
-# The output directory is created fresh; an existing one is reused only when
-# this script built it (it leaves a marker), so a stray path is never emptied.
-# Nothing here touches git remotes or GitHub; publishing is a separate,
-# approved step.
+# The output directory is either a clone of the listing repository, whose
+# .git is kept so releases stack as history, or a scratch directory this
+# script built before (it leaves a marker); any other existing path is
+# refused so nothing unrelated is emptied. SOURCE in the output names the
+# dev commit the build came from. Nothing here touches git remotes or
+# GitHub; publishing is a separate, approved step (release-keepalive.sh).
 
 set -euo pipefail
 
@@ -28,8 +30,14 @@ fail() { printf 'build-listing: %s\n' "$*" >&2; exit 1; }
 [[ $id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && $id != *..* && $id != omarchy.* ]] || fail "invalid plugin id: $id"
 
 if [[ -e $out ]]; then
-  [[ -f $out/$marker ]] || fail "$out exists and was not built by this script; choose another path"
-  rm -rf "$out"
+  if [[ -d $out/.git ]]; then
+    # A clone of the listing repository: replace its files, keep its history.
+    ( cd "$out" && git ls-files -z | xargs -0 rm -f && find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} + )
+  elif [[ -f $out/$marker ]]; then
+    rm -rf "$out"
+  else
+    fail "$out exists and is neither a listing clone nor a directory this script built; choose another path"
+  fi
 fi
 mkdir -p "$out"
 
@@ -68,7 +76,12 @@ find "$out" -name __pycache__ -type d -prune -exec rm -rf {} +
 # The submission body with the id filled in, next to the draft that explains it.
 sed -n '/^```markdown$/,/^```$/p' "$root/outbound/submission-issue.md" | sed '1d;$d' | sed "s/@PLUGIN_ID@/$id/g" > "$root/outbound/submission-issue-body.md"
 
-touch "$out/$marker"
+# Where this build came from, for anyone reading the listing repository.
+src_sha=$(git -C "$root" rev-parse HEAD 2>/dev/null || echo unknown)
+src_dirty=$(git -C "$root" status --porcelain --untracked-files=no 2>/dev/null | grep -q . && echo " (with uncommitted changes)" || true)
+printf 'Built from mphaxise/omarchy-multiplayer@%s%s\nby outbound/build-listing.sh on %s\n' "$src_sha" "$src_dirty" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$out/SOURCE"
+
+[[ -d $out/.git ]] || touch "$out/$marker"
 
 echo "built $out with id $id"
 if command -v omarchy-plugin-validate >/dev/null; then
