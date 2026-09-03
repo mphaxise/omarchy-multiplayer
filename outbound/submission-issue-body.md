@@ -16,7 +16,7 @@ _No response_
 
 ### Maintainer notes
 
-Keepalive keeps coding agents running on the desktop as named sessions on top of Herdr. It adds a bar widget and panel, notifications, receipts, and permission modes. `omarchy plugin add` installs the widget. The repo's `install.sh` links the commands into `~/.local/bin/` and installs two user units: one keeps the Herdr server running, one sends notifications. `uninstall.sh` removes exactly those. Nothing runs as root. Nothing is downloaded at install or run time. The plugin changes no Omarchy configuration. Tested on Omarchy Quattro `0b3f1b7` on the community aarch64 port with Claude Code. Other agents are untested live. Tests: `python3 -m unittest discover -s tests`.
+Keepalive keeps coding agents running on the desktop as named sessions on top of Herdr. It adds a bar widget and panel, notifications, receipts, and permission modes. `omarchy plugin add` installs the widget. The repo's `install.sh` links the commands into `~/.local/bin/` and installs two user units: one keeps the Herdr server running, one sends notifications. `uninstall.sh` removes exactly those. Nothing runs as root. Nothing is downloaded at install or run time. The plugin changes no Omarchy configuration. Tested on Omarchy Quattro `0b3f1b7` on the ggalancs/omarchy-arm-utm aarch64 image with Claude Code. Other agents are untested live. Tests: `python3 -m unittest discover -s tests`.
 
 ### Submission checklist
 

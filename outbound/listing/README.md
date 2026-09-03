@@ -24,7 +24,7 @@ Herdr, Omarchy's agent runtime, keeps the agent process alive. This plugin keeps
 
 ## Requirements
 
-- Omarchy Quattro (4.0.x). I tested on the community aarch64 UTM port at commit `0b3f1b7`. I have not tested on x86.
+- Omarchy Quattro (4.0.x). I tested on Gabriel Galán's aarch64 UTM image ([ggalancs/omarchy-arm-utm](https://github.com/ggalancs/omarchy-arm-utm)) at Omarchy commit `0b3f1b7`. I have not tested on x86.
 - Herdr. Omarchy installs it.
 - Python 3.11 or later.
 - `grim` and `hyprctl`, for screen captures and window focus. Both come with Omarchy.
@@ -85,7 +85,7 @@ That is the full list. It writes nothing to `/usr`, your project files, or Omarc
 
 - A question and a permission prompt look the same. Herdr reports both as `blocked`, so the panel says "needs you" for both.
 - Previews given as a URL open in a Chromium app window. Previews given as an app id are untested.
-- On the aarch64 image, every Claude Code launch opens the keyring password prompt. That comes from the image.
+- On that aarch64 image, every Claude Code launch opens the keyring password prompt. That comes from the image.
 - After you edit the plugin's files, the shell's hot reload can keep running the old code. `omarchy-restart-shell` fixes it.
 
 ## Source

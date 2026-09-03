@@ -1,6 +1,6 @@
 # Upstream candidate texts
 
-Six findings from `findings/upstream-contributions.md`, each written as the issue it would become. Status: drafts, 2026-09-02; none filed. Praneet approves each text and its target before it goes anywhere, and `findings/upstream-contributions.md` records the outcome. Targets are the repositories as they stood on 2026-09-02; the aarch64 port's canonical repository should be confirmed before filing (the image came from `ggalancs/omarchy-arm-utm`; the package repository is `omarchy-aarch64`).
+Six findings from `findings/upstream-contributions.md`, each written as the issue it would become. Status: drafts, 2026-09-02; none filed. Praneet approves each text and its target before it goes anywhere, and `findings/upstream-contributions.md` records the outcome. Targets are the repositories as they stood on 2026-09-02. The aarch64 image is Gabriel Galán's `ggalancs/omarchy-arm-utm` (pushed the same day); its pacman repository is `omarchy-mac/omarchy-pkgs-aarch64` (edge), and Herdr on the image is a local build ("Unknown Packager", 2026-08-29).
 
 Every text keeps to what the rig showed. Where a fix is suggested it is one of several, and says so.
 

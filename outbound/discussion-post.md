@@ -6,7 +6,7 @@ Target: GitHub Discussions on `omacom/omarchy`, category **Show and tell** (the 
 
 **Title:** Keepalive: coding agents that stay running on the Omarchy desktop. Should any of it live upstream?
 
-I built Keepalive, a session layer for coding agents on Omarchy. It is a user plugin plus twenty small commands. I spent two days testing it on the aarch64 port. The plugin is at [mphaxise/omarchy-keepalive](https://github.com/mphaxise/omarchy-keepalive). The specs, test runs, and screenshots are at [mphaxise/omarchy-multiplayer](https://github.com/mphaxise/omarchy-multiplayer).
+I built Keepalive, a session layer for coding agents on Omarchy. It is a user plugin plus twenty small commands. I spent two days testing it on Gabriel Galán's aarch64 UTM image ([ggalancs/omarchy-arm-utm](https://github.com/ggalancs/omarchy-arm-utm)). The plugin is at [mphaxise/omarchy-keepalive](https://github.com/mphaxise/omarchy-keepalive). The specs, test runs, and screenshots are at [mphaxise/omarchy-multiplayer](https://github.com/mphaxise/omarchy-multiplayer).
 
 I am posting because three pieces might belong in Omarchy itself. I want your read before I build more.
 
@@ -42,8 +42,8 @@ Least certain first:
 
 Does Omarchy want to own a durable session object, or leave it to plugins? Either answer works for me. As a plugin, I keep the record format and the commands as they are and keep the marketplace listing current. As an upstream direction, I turn the `omarchy-agent` change into a pull request with tests. If the shape is wrong, tell me.
 
-One limit: everything ran with Claude Code on the community aarch64 UTM image. The other agents have permission tables and no live run. x86 is untested.
+One limit: everything ran with Claude Code on that aarch64 image, at Omarchy `0b3f1b7`. The other agents have permission tables and no live run. x86 is untested.
 
 ---
 
-Notes for Praneet before posting: replace "two days" with the real span if the post goes out later; confirm the two repo names; decide whether to name the aarch64 port's maintainer or keep "the community aarch64 UTM image"; the numbers (five checks, 26 defects, four runs) come from `findings/experiment-report-slice1.md` and `findings/closed-loop.md` as of 2026-09-02.
+Notes: "two days" confirmed by Praneet 2026-09-02; the maintainer is named (Gabriel Galán, from the GitHub profile of `ggalancs`, looked up 2026-09-02); the numbers (five checks, 26 defects, four runs) come from `findings/experiment-report-slice1.md` and `findings/closed-loop.md` as of 2026-09-02.
