@@ -4,10 +4,13 @@ Findings that warranted action outside this repository, converted into discussio
 
 | Date | Target | Contribution | Evidence | Status |
 |------|--------|--------------|----------|--------|
+| 2026-09-02 | `mphaxise/omarchy-keepalive` | The listing repository: the plugin, the commands, the units, the tests, install and uninstall, assembled by `outbound/build-listing.sh` at `b96ecbc` | run 8: `omarchy plugin add` from the public URL on the rig, enabled, validated, IPC answering, `plugin update` reporting up to date | public, pushed |
+| 2026-09-02 | `omacom/omarchy-plugin-marketplace` | Submission `[Plugin]: Keepalive`, Developer Tools, tags ai / bar / quickshell | issue [#4566](https://github.com/omacom/omarchy-plugin-marketplace/issues/4566) | open; awaiting the bot's validation and security baseline, then a maintainer's `approved-and-verified` |
+| 2026-09-02 | `omacom/omarchy` | Discussion, Show and tell: "Keepalive: coding agents that stay running on the Omarchy desktop. Should any of it live upstream?" | discussion [#9936](https://github.com/omacom/omarchy/discussions/9936) | posted; the ask is whether a durable session object belongs upstream |
 
 ## Candidates not yet filed
 
-Each needs my approval of the exact text and target before it goes anywhere.
+Each needs my approval of the exact text and target before it goes anywhere. The texts are drafted in `outbound/upstream-candidates.md`.
 
 - **ggalancs/omarchy-arm-utm (or omarchy-mac/omarchy-pkgs-aarch64).** On the aarch64 image `omarchy-update` never updates Omarchy itself: `/usr/share/omarchy` is a root-owned git checkout that no package owns, and upstream's `omarchy-update-dev` exits without pulling for that path, while the port's `omarchy` 4.0.1-2 package sits uninstalled in the `omarchy-aarch64` repo. Evidence: `captures/sessions/2026-09-02_phase4-first-run.md`, late-evening addendum; `pacman -Qo /usr/share/omarchy/bin/omarchy-update` (no owner), `pacman -Si omarchy` (4.0.1-2 available). Suggested fix: ship the tree as the package on the image, or point the dev-checkout path at it.
 - **basecamp/omarchy.** `omarchy-restart-shell` polls readiness for two seconds (20 x 0.1 s) and reports failure while the shell is still coming up on a slow machine; on this VM under a load average of 3 it took about thirty seconds. Evidence: session note, 15:08 incident. Suggested fix: a longer window, or poll until the process exits.

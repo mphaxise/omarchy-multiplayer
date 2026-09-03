@@ -1,6 +1,6 @@
 # Outbound: Phase 6 drafts
 
-Everything here is a draft for Praneet to read. Nothing in this directory has been posted, filed, or pushed anywhere, and nothing will be until he approves the exact text and the target (PLAN.md, Phase 6 gate). Written 2026-09-02, late evening.
+Written 2026-09-02, late evening, as drafts for Praneet. On his "go all four" at about 22:45 the listing repository was created and pushed (`mphaxise/omarchy-keepalive`), the submission opened (`omacom/omarchy-plugin-marketplace#4566`), and the discussion posted (`omacom/omarchy#9936`); the dev repository was pushed first so the links resolve. The six upstream issue texts are still unfiled. Outcomes are tracked in `findings/upstream-contributions.md`.
 
 | File | What it is |
 |---|---|
@@ -14,10 +14,10 @@ Everything here is a draft for Praneet to read. Nothing in this directory has be
 
 ## Decisions that are Praneet's
 
-1. **Target.** Marketplace listing, discussion post, both, or neither. PLAN.md says choose one; both are drafted so the choice is made on the texts.
+1. **Target: both, decided and done** (2026-09-02, "go all four").
 2. **Name and id: decided and applied.** The plugin is Keepalive (Praneet, 2026-09-02, from five options). The id is `io.github.mphaxise.keepalive`, namespaced and lowercase as the marketplace prefers, permanent once listed. The dev checkout, the rig's plugin directory, its `omarchy-shell` IPC target, and the rig's two keybindings all carry it since 2026-09-02 22:27 (run 6).
 3. **Listing repository name.** The drafts say `mphaxise/omarchy-keepalive`, created by pushing the built directory. The development repository stays `mphaxise/omarchy-multiplayer`.
-4. **The five checklist statements** in `submission-issue.md`, each of which the marketplace asks the owner to confirm.
+4. **The five checklist statements**: confirmed by Praneet's go, with the listing repository public and validated on the rig from its public URL (run 8).
 5. **Which of the six upstream texts go**, and whether the aarch64 ones go to the image repository or the package repository.
 
 ## What was verified
