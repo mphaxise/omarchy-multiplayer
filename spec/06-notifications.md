@@ -10,12 +10,14 @@ Description=Omarchy agent session notifier
 After=graphical-session.target
 
 [Service]
-ExecStart=%h/.local/share/omarchy/bin/omarchy-agent-session-watch
+ExecStart=%h/.local/bin/omarchy-agent-session-watch
 Restart=always
 
 [Install]
 WantedBy=graphical-session.target
 ```
+
+The unit as built (`systemd/omarchy-agent-session-watch.service`) runs from `~/.local/bin`, where the install links every command, and adds `PartOf=graphical-session.target` and `RestartSec=2`; the rig has run it that way since 2026-09-02.
 
 The watcher opens Herdr's `events.subscribe` (filtered to `pane.agent_status_changed`) as a low-latency nudge, and tails every session's `events.jsonl` under `~/.local/state/omarchy/sessions/*/`, since only that local log carries the Omarchy-only event types (`child.completed`, `status.changed` to `orphaned`) that Herdr never sees. The local log is authoritative for what to notify; the Herdr subscription only wakes the tail loop sooner than a plain poll would.
 

@@ -626,7 +626,7 @@ class SessionWatcher:
 
 
 def herdr_nudge_thread(wake_event: threading.Event, stop_event: threading.Event) -> None:
-    """Best-effort low-latency wake-up: connects to HERDR_SOCKET, if set, and
+    """Best-effort low-latency wake-up: connects to the Herdr socket and
     sets wake_event whenever a line arrives, without reading or acting on its
     content. events.jsonl stays the sole source of truth for what to notify
     (spec/06-notifications.md), so a wrong assumption in here only costs
@@ -636,7 +636,10 @@ def herdr_nudge_thread(wake_event: threading.Event, stop_event: threading.Event)
     method name and shape, and whether the stream really is newline-delimited
     JSON, per herdr.dev/docs as cited in 06-notifications.md (observed
     2026-09-01, not independently confirmed here)."""
-    socket_path = os.environ.get("HERDR_SOCKET")
+    # Same default as the core (~/.config/herdr/herdr.sock, the path the rig
+    # confirmed 2026-09-02); HERDR_SOCKET still overrides, and an empty
+    # value turns the nudge off.
+    socket_path = os.environ.get("HERDR_SOCKET", os.path.expanduser("~/.config/herdr/herdr.sock"))
     if not socket_path:
         return
 

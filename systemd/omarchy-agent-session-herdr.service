@@ -1,3 +1,5 @@
+# omarchy-agent-session-herdr.service (Agent Sessions for Omarchy, omarchy-multiplayer)
+#
 # Keeps Herdr's server running headless for the whole graphical session, so
 # agent sessions survive every client window closing and come back as
 # `orphaned` records after a reboot instead of vanishing (rig, 2026-09-02:
