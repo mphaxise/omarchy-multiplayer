@@ -67,3 +67,7 @@ What the scenario showed beyond the build: the blocked session's toast was recor
 Rig wiring: `Super+Ctrl+G` toggles the panel and `Super+Ctrl+Shift+G` opens the agent that needs you, both in `~/.config/hypr/bindings.lua` and marked provisional; the watch unit was restarted for the new copy; `~/Work/omarchy-multiplayer/bin` and `tests` match the repo (102 tests green on the rig). One incident: the last `omarchy-restart-shell` reported "did not become ready" and left no shell running under a load average of 3; `hyprctl dispatch 'hl.dsp.exec_cmd("omarchy-launch-shell")'` brought it back in about thirty seconds. The script's readiness window is two seconds; on this VM that is short.
 
 Test sessions were stopped afterwards; `hello.txt` was never written. Remaining for a person: the keyboard path on the restarted shell (arrows, Enter, `s`, `x`, Esc, the inline results, the spinner), and the five-second trials.
+
+## Addendum, evening: runs 1 and 2, and the keyboard
+
+Two scenario runs over ssh (`findings/evaluation-run1-2026-09-02.md`, `findings/evaluation-run2-2026-09-02.md`) and, at about 19:50, a quick keyboard test by me at the rig: the panel's keys work on the restarted shell. Which keys I pressed is not recorded; the stopwatch trials and a full pass over Enter, `s`, `x`, Esc, the inline results, and the spinner are still owed.
