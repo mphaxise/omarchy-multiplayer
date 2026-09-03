@@ -90,7 +90,7 @@ That is the full list. It writes nothing to `/usr`, your project files, or Omarc
 
 ## Source
 
-This plugin is the installable part of [omarchy-multiplayer](https://github.com/mphaxise/omarchy-multiplayer). That repo has the specs, the test runs with screenshots, and the decision log. Run the tests with `python3 -m unittest discover -s tests`: 121 tests, standard library only.
+This plugin is the installable part of [omarchy-multiplayer](https://github.com/mphaxise/omarchy-multiplayer). That repo has the specs, the test runs with screenshots, and the decision log. Run the tests with `python3 -m unittest discover -s tests`: 125 tests, standard library only.
 
 ## Credits
 

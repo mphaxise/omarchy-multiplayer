@@ -21,6 +21,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -1151,6 +1152,64 @@ class TestReconcile(CoreTestCase):
         self.assertIn(session_id, json.loads(out)["ended"])
         receipt = json.loads(self.store.receipt_path(session_id).read_text())
         self.assertEqual(receipt["end_state"], "failed")
+
+    def test_reconcile_orphans_instead_of_ending_after_a_herdr_restart(self):
+        # Rig, 2026-09-02 22:30: a reboot brought Herdr back with a fresh
+        # shell in every restored workspace and no agents; the reconciler
+        # read that as "harness exited while working" and ended two live
+        # sessions, so Enter opened receipts instead of reviving. A server
+        # that started after the binding explains the vanish; the session
+        # is orphaned and revivable.
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
+                   "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
+        session_id = make_bare_session(self.store, "rebooted-under", runtime=runtime, state="working")
+        self.start_fake_herdr()
+        self.fake_herdr.set_result("agent.list", {"agents": []})
+        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "p1"}]})
+        # The socket stands for the server: make it a minute younger than the binding.
+        future = time.time() + 60
+        os.utime(self.herdr_socket, (future, future))
+
+        rc, out, err = self.run_cli(["reconcile", "--json"])
+        self.assertEqual(rc, 0, err)
+        session = self.store.try_load(session_id)
+        self.assertEqual(session["status"]["state"], "orphaned")
+        self.assertEqual(session["status"]["detail"], "Herdr restarted; Enter revives")
+        self.assertIsNone(session["runtime"])
+        self.assertIn(session_id, json.loads(out)["orphaned"])
+        self.assertNotIn(session_id, json.loads(out)["ended"])
+        self.assertFalse(self.store.receipt_path(session_id).exists())
+        # The restored shell pane is closed; the worktree stays for the revive.
+        self.assertEqual([c["pane_id"] for c in self.fake_herdr.calls("pane.close")], ["p1"])
+        types = [e["type"] for e in self.store.read_events(session_id)]
+        self.assertEqual(types[-2:], ["status.changed", "runtime.unbound"])
+
+    def test_open_revives_a_session_whose_end_was_inferred(self):
+        # The two sessions the reboot ended before the restart rule existed:
+        # failed by inference, transcript on disk. Enter revives them.
+        self.start_fake_herdr()
+        session_id = make_bare_session(self.store, "ended-by-inference", runtime=None, state="failed")
+        record = self.store.try_load(session_id)
+        record["status"]["detail"] = "harness exited while working"
+        record["agent"]["harness_session_ref"] = "abc123"
+        self.store.save_session(record)
+
+        rc, out, err = self.run_cli(["open", session_id])
+        self.assertEqual(rc, 0, err)
+        record = self.store.try_load(session_id)
+        self.assertEqual(record["status"]["state"], "working")
+        self.assertEqual(self.fake_herdr.calls("agent.start")[-1]["args"][:2], ["--resume", "abc123"])
+        transitions = [(e["data"]["from"], e["data"]["to"]) for e in self.store.read_events(session_id) if e["type"] == "status.changed"]
+        self.assertEqual(transitions[-2:], [("failed", "orphaned"), ("orphaned", "working")])
+
+    def test_open_refuses_a_session_ended_on_purpose(self):
+        self.start_fake_herdr()
+        session_id = make_bare_session(self.store, "stopped-on-purpose", runtime=None, state="stopped")
+        record = self.store.try_load(session_id)
+        record["agent"]["harness_session_ref"] = "abc123"
+        self.store.save_session(record)
+        rc, out, err = self.run_cli(["open", session_id])
+        self.assertEqual(rc, 5)
 
     def test_reconcile_sweeps_the_workspace_of_an_ended_session(self):
         # Herdr restores workspaces with a fresh shell after a server

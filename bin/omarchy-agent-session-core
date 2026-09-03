@@ -1888,11 +1888,35 @@ def _release_runtime(session, herdr, reason):
     return True
 
 
+INFERRED_EXIT_PREFIX = "harness exited"
+
+
+def inferred_exit_revivable(session):
+    """An ended session whose end the reconciler inferred from a vanished
+    harness ("harness exited", "harness exited while working"), with a
+    transcript to resume: nobody decided it was over, so Enter revives it
+    the way an orphaned session revives (a reboot before the restart rule
+    existed ended sessions this way, rig 2026-09-02)."""
+    st = session["status"]
+    return (st["state"] in ("done", "failed")
+            and str(st.get("detail") or "").startswith(INFERRED_EXIT_PREFIX)
+            and bool(session["agent"].get("harness_session_ref")))
+
+
 def cmd_open(args, ctx):
     session = ctx.store.load(args.id_or_name)
     actor = current_human_actor()
     state = session["status"]["state"]
     runtime = session.get("runtime")
+
+    if inferred_exit_revivable(session):
+        detail = "reopened after an inferred exit"
+        ev = ctx.store.append_event(session["id"], "status.changed", actor,
+                                     {"from": state, "to": "orphaned", "source": "omarchy", "detail": detail})
+        session["status"] = {"state": "orphaned", "since": ev["ts"], "source": "omarchy", "detail": detail}
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+        state = "orphaned"
 
     if state == "orphaned":
         ref = session["agent"].get("harness_session_ref")
@@ -2640,6 +2664,47 @@ def write_sessions_index(store, herdr_state, orphaned, adopted):
         eprint(f"reconcile: could not write {store.index_path()}: {e}")
 
 
+def herdr_server_started_at():
+    """When the running Herdr server came up, from its socket's mtime (a
+    Unix socket is created at server start and never written as a file).
+    None when the socket is missing."""
+    try:
+        return os.stat(herdr_socket_path()).st_mtime
+    except OSError:
+        return None
+
+
+def runtime_bound_at(store, session):
+    """Epoch of the session's latest runtime.bound event, or None."""
+    latest = None
+    for e in store.read_events(session["id"]):
+        if e.get("type") == "runtime.bound":
+            latest = e.get("ts")
+    if not latest:
+        return None
+    try:
+        return parse_rfc3339(latest).timestamp()
+    except ValueError:
+        return None
+
+
+RESTART_MARGIN_S = 2.0
+
+
+def herdr_restarted_since_binding(store, session):
+    """True when the Herdr server started after this session's harness was
+    bound to it. A server restart (a reboot, above all) restores every
+    workspace with a fresh shell and no agent, which looks exactly like a
+    harness that exited on its own; the difference is that the person can
+    revive this one (rig, 2026-09-02 22:30: two working sessions were marked
+    failed one second after the post-reboot Herdr came up)."""
+    started = herdr_server_started_at()
+    bound = runtime_bound_at(store, session)
+    if started is None or bound is None:
+        return False
+    return started >= bound + RESTART_MARGIN_S
+
+
 def sweep_ended_workspaces(ctx, known, live_agents, live_panes):
     """Close the empty shell panes Herdr keeps for sessions that have
     ended or been orphaned. Herdr restores every workspace, with a fresh
@@ -2733,6 +2798,27 @@ def cmd_reconcile(args, ctx):
             if live is not None:
                 apply_herdr_status(ctx.store, s, live.get("agent_status"))
                 record_harness_session_ref(ctx.store, s, ctx.herdr)
+        elif pane_alive and s["status"]["state"] != "starting" and herdr_restarted_since_binding(ctx.store, s):
+            # The pane is the fresh shell Herdr opens for every restored
+            # workspace when its server restarts; the harness did not exit,
+            # the machine (or the server) did. The session is revivable, so
+            # it is orphaned, never ended (rig, 2026-09-02 22:30: a reboot
+            # marked two working sessions failed and Enter opened receipts
+            # instead of reviving them).
+            with contextlib.suppress(HerdrError, HerdrUnavailable):
+                ctx.herdr.pane_close(pane_id=pane_id)
+            detail = "Herdr restarted; Enter revives"
+            ev = ctx.store.append_event(s["id"], "status.changed", actor,
+                                         {"from": s["status"]["state"], "to": "orphaned",
+                                          "source": "reconciler", "detail": detail})
+            s["status"] = {"state": "orphaned", "since": ev["ts"], "source": "reconciler", "detail": detail}
+            s["state_version"] = ev["seq"]
+            ev = ctx.store.append_event(s["id"], "runtime.unbound", actor, {"reason": "herdr_restarted"})
+            s["runtime"] = None
+            s["state_version"] = ev["seq"]
+            ctx.store.save_session(s)
+            orphaned.append(s["id"])
+            continue
         elif pane_alive and s["status"]["state"] != "starting":
             # The harness exited and left its shell pane behind (the person
             # typed /exit, or the process died). Herdr drops the agent from

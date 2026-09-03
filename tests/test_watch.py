@@ -413,6 +413,30 @@ class TestDigest(WatchTestCase):
         watcher.scan_once(now=self.clock())
         self.assertEqual(self.notifier.sent[-1]["urgency"], "critical")
 
+    def test_restart_orphans_notify_at_normal_urgency_too(self):
+        # Four sessions orphaned by one Herdr outage (detail "Herdr server
+        # not running") are each classified normal, and the digest they
+        # roll into carries that classification instead of escalating to
+        # critical by being many.
+        watcher = self.make_watcher()
+        for i, sid in enumerate(["s1", "s2", "s3", "s4"]):
+            write_session(self.tmpdir, sid, sid)
+            append_event(self.tmpdir, sid, 1, "status.changed",
+                         {"from": "working", "to": "orphaned", "detail": "Herdr restarted; Enter revives"})
+            self.clock.advance(1.0)
+            watcher.scan_once(now=self.clock())
+        digest = self.notifier.sent[3]
+        self.assertEqual(digest["exec_argv"], ["omarchy-agent-session-list"])
+        self.assertEqual(digest["urgency"], "normal")
+        # One agent that died on its own is critical, and so is the digest
+        # that contains it.
+        write_session(self.tmpdir, "s5", "s5")
+        append_event(self.tmpdir, "s5", 1, "status.changed",
+                     {"from": "working", "to": "orphaned", "detail": "pane not found in Herdr's list"})
+        self.clock.advance(1.0)
+        watcher.scan_once(now=self.clock())
+        self.assertEqual(self.notifier.sent[-1]["urgency"], "critical")
+
     def test_fifth_event_updates_the_same_digest_by_distinct_session_count(self):
         watcher = self.make_watcher()
         for sid, to_state in [("s1", "waiting"), ("s2", "waiting"), ("s3", "blocked"), ("s4", "failed")]:

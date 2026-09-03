@@ -490,6 +490,18 @@ Panel {
     root.refresh()
   }
 
+  function sessionEnded(s) {
+    return !!(s && s.status && (s.status.state === "done" || s.status.state === "failed" || s.status.state === "stopped"))
+  }
+
+  // Mirrors Session.qml's `revivable`: orphaned, or ended by the
+  // reconciler's inference with a transcript to resume.
+  function sessionRevivable(s) {
+    if (!s || !s.status) return false
+    if (s.status.state === "orphaned") return true
+    return root.sessionEnded(s) && s.resumable === true && String(s.status.detail || "").indexOf("harness exited") === 0
+  }
+
   function sessionById(id) {
     for (var i = 0; i < root.allSessions.length; i++) if (root.allSessions[i].id === id) return root.allSessions[i]
     return null
@@ -498,8 +510,7 @@ Panel {
   function openSession(id) {
     if (!id) return
     var s = root.sessionById(id)
-    var orphaned = s && s.status && s.status.state === "orphaned"
-    root.runAction(id, "open", ["omarchy-agent-session-open", String(id)], orphaned ? "reviving…" : "opening…")
+    root.runAction(id, "open", ["omarchy-agent-session-open", String(id)], root.sessionRevivable(s) ? "reviving…" : "opening…")
   }
 
   function sendToSession(id, text) {
@@ -728,8 +739,7 @@ Panel {
         if (root.sendOpenId !== "" || root.newOpen) return
         var s = root.selectedSession
         if (!s) return
-        var ended = s.status && (s.status.state === "done" || s.status.state === "failed" || s.status.state === "stopped")
-        if (ended) root.openReceipt(s.id); else root.openSession(s.id)
+        if (root.sessionEnded(s) && !root.sessionRevivable(s)) root.openReceipt(s.id); else root.openSession(s.id)
       }
       onDeleteRequested: {
         // PanelKeyCatcher routes `x` here, never to onTextKey.

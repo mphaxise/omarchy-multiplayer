@@ -26,7 +26,7 @@ Slice 1 ships with these, each with its repro in `findings/evaluation-slice1-202
 
 ## Where to start reading
 
-`PLAN.md` for the question, the five success signals, and the phases. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log. `bin/`, `systemd/`, `plugin/`, and `tests/` hold the build; `python3 -m unittest discover -s tests` runs the 121 local tests, and `bin/README-core.md` lists the assumptions and what the rig confirmed.
+`PLAN.md` for the question, the five success signals, and the phases. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log. `bin/`, `systemd/`, `plugin/`, and `tests/` hold the build; `python3 -m unittest discover -s tests` runs the 125 local tests, and `bin/README-core.md` lists the assumptions and what the rig confirmed.
 
 ## Relationship to Omarchy-UX
 

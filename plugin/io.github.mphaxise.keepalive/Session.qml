@@ -73,6 +73,13 @@ CursorSurface {
     || state === "waiting" || state === "blocked"
   readonly property bool isOrphaned: state === "orphaned"
   readonly property bool isEnded: state === "done" || state === "failed" || state === "stopped"
+  readonly property string statusDetail: session && session.status ? String(session.status.detail || "") : ""
+  // An end the reconciler inferred from a vanished harness, with a
+  // transcript on disk: nobody decided it was over, so Enter revives it
+  // (a reboot before the restart rule ended two sessions this way, rig
+  // 2026-09-02 22:30). The receipt stays on `r`.
+  readonly property bool revivable: isOrphaned
+    || (isEnded && resumable && statusDetail.indexOf("harness exited") === 0)
 
   readonly property var spinnerFrames: ["◐", "◓", "◑", "◒"]
   property int spinnerIndex: 0
@@ -103,6 +110,7 @@ CursorSurface {
     var age = ageText()
     if (state === "blocked" || state === "waiting") return "needs you" + (age !== "" ? " · " + age : "")
     if (state === "orphaned") return "orphaned · " + (resumable ? "resumes conversation" : "fresh start")
+    if (isEnded && revivable) return state + " · resumes conversation"
     if (state === "starting") return "starting" + (age !== "" ? " · " + age : "")
     return state + (age !== "" ? " · " + age : "")
   }
@@ -132,7 +140,7 @@ CursorSurface {
     : [project, branch].filter(function(t) { return t !== "" }).join(" · ")]
     .filter(function(t) { return t !== "" }).join(" · ")
 
-  readonly property string openLabel: isOrphaned ? "⏎ Revive" : (isEnded ? "⏎ Receipt" : (needsAttention ? "⏎ Answer" : "⏎ Open"))
+  readonly property string openLabel: revivable ? "⏎ Revive" : (isEnded ? "⏎ Receipt" : (needsAttention ? "⏎ Answer" : "⏎ Open"))
 
   function stopLabel() {
     if (stopping) return "stopping…"
@@ -320,7 +328,16 @@ CursorSurface {
         foreground: row.foreground
         fontFamily: row.fontFamily
         fontSize: Style.font.caption
-        onClicked: row.isEnded ? row.receiptRequested(row.sid) : row.openRequested(row.sid)
+        onClicked: (row.isEnded && !row.revivable) ? row.receiptRequested(row.sid) : row.openRequested(row.sid)
+      }
+      Button {
+        visible: row.isEnded && row.revivable
+        text: "r Receipt"
+        bordered: true
+        foreground: row.foreground
+        fontFamily: row.fontFamily
+        fontSize: Style.font.caption
+        onClicked: row.receiptRequested(row.sid)
       }
       Button {
         visible: row.isLive || row.isOrphaned

@@ -76,6 +76,12 @@ _STATUS_TO_KIND = {
 # in Herdr's list") means one agent died behind the person's back and stays
 # critical. Matched exactly, as written by the core.
 HERDR_DOWN_DETAIL = "Herdr server not running"
+# The reconciler's detail when Herdr came back after a restart (a reboot,
+# above all) and restored the session's workspace without its agent: every
+# bound session is orphaned at once, revivable, expected. Normal, like the
+# outage itself (rig, 2026-09-02 22:30).
+HERDR_RESTARTED_DETAIL = "Herdr restarted; Enter revives"
+EXPECTED_ORPHAN_DETAILS = (HERDR_DOWN_DETAIL, HERDR_RESTARTED_DETAIL)
 
 # Mirrors the core's TERMINAL_STATES: a session in one of these has no pane
 # to attach, so `open` exits 5 and a click on it would do nothing.
@@ -95,7 +101,7 @@ def classify_event(event: dict) -> Optional[tuple]:
     if etype == "status.changed":
         to_state = data.get("to")
         if to_state == "orphaned":
-            urgency = "normal" if data.get("detail") == HERDR_DOWN_DETAIL else "critical"
+            urgency = "normal" if data.get("detail") in EXPECTED_ORPHAN_DETAILS else "critical"
             return ("orphaned", urgency)
         return _STATUS_TO_KIND.get(to_state)
     if etype == "child.completed":
