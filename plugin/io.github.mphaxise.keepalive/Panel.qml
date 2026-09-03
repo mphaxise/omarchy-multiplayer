@@ -26,8 +26,8 @@ import qs.Ui
 // rig; stevequinn/omarchy-hermes-sessions Panel.qml; spec/03, spec/02.
 Panel {
   id: root
-  moduleName: "praneet.agent-sessions"
-  ipcTarget: "praneet.agent-sessions"
+  moduleName: "io.github.mphaxise.keepalive"
+  ipcTarget: "io.github.mphaxise.keepalive"
   manageIpc: false
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
@@ -740,6 +740,13 @@ Panel {
         if (ended) return
         if (root.armedStopId === s.id) { root.stopSession(s.id); root.armedStopId = "" }
         else root.armedStopId = s.id
+      }
+      // Tab and Shift+Tab walk to the neighbouring bar panel, the shell's
+      // convention (plugins.omarchy.org/develop.html, the built-in agents
+      // plugin); a field that is open keeps the key.
+      onTabRequested: function(direction) {
+        if (root.sendOpenId !== "" || root.newOpen) return
+        root.switchPanel(direction)
       }
       onCloseRequested: {
         // Esc clears an open Send field or an armed Stop first, and closes

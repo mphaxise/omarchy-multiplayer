@@ -2,14 +2,14 @@
 
 Status: proposed, 2026-09-01. Slice 1. Builds on the session record, state machine, and reconciler in `01-session-model.md`.
 
-The panel is a user shell plugin, id `praneet.agent-sessions` for the experiment; the release name is a slice 2 decision. Its only kind is `bar-widget`. Entry point `Panel.qml` holds the bar icon and the popup surface. `Main.qml` holds the data: the process, the timer, the FileView, and the derived section lists. `Session.qml` is one row, instantiated per session. This mirrors the entry, data, and row split the `omarchy.agents` plugin uses.
+The panel is a user shell plugin named Keepalive, id `io.github.mphaxise.keepalive` (renamed 2026-09-02 from `praneet.agent-sessions`, the id the experiment used until the listing was prepared; the marketplace makes ids permanent, so the dev checkout and the rig now carry the listing id). Its only kind is `bar-widget`. Entry point `Panel.qml` holds the bar icon and the popup surface. `Main.qml` holds the data: the process, the timer, the FileView, and the derived section lists. `Session.qml` is one row, instantiated per session. This mirrors the entry, data, and row split the `omarchy.agents` plugin uses.
 
 ## Manifest and layout
 
 ```json
 {
   "schemaVersion": 1,
-  "id": "praneet.agent-sessions",
+  "id": "io.github.mphaxise.keepalive",
   "name": "Agent Sessions",
   "version": "0.1.0",
   "kinds": ["bar-widget"],
@@ -36,7 +36,7 @@ The panel is a user shell plugin, id `praneet.agent-sessions` for the experiment
 Directory, no symlinks anywhere in it, per `omarchy plugin validate`:
 
 ```
-~/.config/omarchy/plugins/praneet.agent-sessions/
+~/.config/omarchy/plugins/io.github.mphaxise.keepalive/
   manifest.json
   Panel.qml          entry: bar icon + popup surface
   Main.qml           data: process, timer, FileView, derived lists
@@ -141,7 +141,7 @@ Starting a session from the panel (built 2026-09-02 at Praneet's request, run 5 
 
 Keyboard: up/down move the cursor, which is a session id, so a list that re-sorts keeps it on the same session and the cursor row scrolls into view; Enter opens (or revives, or opens the receipt); `s`/`x`/`r` act on the cursor row; right/left expand and collapse Done today; Esc clears an open Send field or an armed Stop first and closes the panel on the press after that. While a Send field is open the other keys are the field's. A key legend under the list names the keys ("↑↓ move · ⏎ open · s send · x stop · → more · esc"; "n new" is always there, "p preview" joins when the cursor row has one, and the legend holds six entries at most in priority order, "→ more" and esc giving way first, because a seventh entry elided "→ more" on the rig; the Done today header carries "N more · →" anyway) and changes while Stop is armed ("x again stops <name> · esc cancels") or a field is open ("⏎ sends · esc cancels"). Hovering a row moves the cursor to it, so keyboard and mouse share one highlight. Spacing, type, and color all come from `Style.space()`, `Style.font.*`, and `Color.*`.
 
-Bindings on the rig (provisional, free on this image): `Super+Ctrl+G` toggles the panel, `Super+Ctrl+Shift+G` opens the agent that needs you (`omarchy-shell praneet.agent-sessions openMostUrgent`); the same IPC target also answers `open`, `close`, `toggle`, and `refresh`.
+Bindings on the rig (provisional, free on this image): `Super+Ctrl+G` toggles the panel, `Super+Ctrl+Shift+G` opens the agent that needs you (`omarchy-shell io.github.mphaxise.keepalive openMostUrgent`); the same IPC target also answers `open`, `close`, `toggle`, and `refresh`.
 
 Gutwin and Greenberg's workspace awareness elements, mapped to fields already on the row:
 

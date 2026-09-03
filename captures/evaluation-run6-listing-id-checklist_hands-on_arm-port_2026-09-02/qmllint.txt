@@ -1,0 +1,926 @@
+Warning: Panel.qml:4:1: Warnings occurred while importing module "qs.Commons": [import]
+import qs.Commons
+^^^^^^
+---
+Warning: 4:1: Failed to import qs.Commons. Are your import paths set up properly? [import]
+---
+
+Warning: Panel.qml:5:1: Warnings occurred while importing module "qs.Ui": [import]
+import qs.Ui
+^^^^^^
+---
+Warning: 5:1: Failed to import qs.Ui. Are your import paths set up properly? [import]
+---
+
+Warning: Panel.qml:23:1: CursorSurface was not found. Did you add all imports and dependencies? [import]
+// KeyboardPanel,PanelKeyCatcher,PanelHero,PanelSectionHeader}.qml on the
+                      ^^^^^^^^^^^^^
+Warning: Panel.qml:812:13: PanelHero was not found. Did you add all imports and dependencies? [import]
+            PanelHero {
+            ^^^^^^^^^
+Warning: Panel.qml:880:19: TextField was not found. Did you add all imports and dependencies? [import]
+                  TextField {
+                  ^^^^^^^^^
+Warning: Panel.qml:890:19: Button was not found. Did you add all imports and dependencies? [import]
+                  Button {
+                  ^^^^^^
+Warning: Panel.qml:998:17: PanelSeparator was not found. Did you add all imports and dependencies? [import]
+                PanelSeparator {
+                ^^^^^^^^^^^^^^
+Warning: Panel.qml:1006:19: PanelSectionHeader was not found. Did you add all imports and dependencies? [import]
+                  PanelSectionHeader {
+                  ^^^^^^^^^^^^^^^^^^
+Warning: Panel.qml:1085:11: PanelSeparator was not found. Did you add all imports and dependencies? [import]
+          PanelSeparator {
+          ^^^^^^^^^^^^^^
+Warning: Panel.qml:704:3: KeyboardPanel was not found. Did you add all imports and dependencies? [import]
+  KeyboardPanel {
+  ^^^^^^^^^^^^^
+Warning: Panel.qml:714:5: PanelKeyCatcher was not found. Did you add all imports and dependencies? [import]
+    PanelKeyCatcher {
+    ^^^^^^^^^^^^^^^
+Warning: Panel.qml:941:13: BorderSurface was not found. Did you add all imports and dependencies? [import]
+            BorderSurface {
+            ^^^^^^^^^^^^^
+Info: Did you mean "BorderImage"?
+            BorderImage {
+            ^^^^^^^^^^^
+Warning: Panel.qml:625:3: BarIconButton was not found. Did you add all imports and dependencies? [import]
+  BarIconButton {
+  ^^^^^^^^^^^^^
+Warning: Panel.qml:916:13: BorderSurface was not found. Did you add all imports and dependencies? [import]
+            BorderSurface {
+            ^^^^^^^^^^^^^
+Info: Did you mean "BorderImage"?
+            BorderImage {
+            ^^^^^^^^^^^
+Warning: Panel.qml:27:1: Panel is part of an inheritance cycle: Panel -> Panel [inheritance-cycle]
+Panel {
+^^^^^
+Warning: Panel.qml:836:13: BorderSurface was not found. Did you add all imports and dependencies? [import]
+            BorderSurface {
+            ^^^^^^^^^^^^^
+Info: Did you mean "BorderImage"?
+            BorderImage {
+            ^^^^^^^^^^^
+Warning: Panel.qml:627:5: unknown grouped property scope anchors. [unqualified]
+    anchors.fill: parent
+    ^^^^^^^
+Warning: Panel.qml:716:7: unknown grouped property scope anchors. [unqualified]
+      anchors.fill: parent
+      ^^^^^^^
+Warning: Panel.qml:1086:13: unknown grouped property scope anchors. [unqualified]
+            anchors.top: parent.top
+            ^^^^^^^
+Warning: Panel.qml:27:1: Type Panel is used but it is not resolved [unresolved-type]
+Panel {
+^^^^^
+Warning: Panel.qml:209:5: Type QProcess::ExitStatus of parameter exitStatus in signal called exited was not found, but is required to compile onExited. Did you add all imports and dependencies? [signal-handler-parameters]
+    onExited: function(exitCode) { root.loading = false }
+    ^^^^^^^^
+Warning: Panel.qml:452:7: Type QProcess::ExitStatus of parameter exitStatus in signal called exited was not found, but is required to compile onExited. Did you add all imports and dependencies? [signal-handler-parameters]
+      onExited: function(exitCode) {
+      ^^^^^^^^
+Warning: Panel.qml:627:5: Type anchors is used but it is not resolved [unresolved-type]
+    anchors.fill: parent
+    ^^^^^^^
+Warning: Panel.qml:716:7: Type anchors is used but it is not resolved [unresolved-type]
+      anchors.fill: parent
+      ^^^^^^^
+Warning: Panel.qml:1035:29: Type Session is used but it is not resolved [unresolved-type]
+                  delegate: Session {
+                            ^^^^^^^
+Warning: Panel.qml:1086:13: Type anchors is used but it is not resolved [unresolved-type]
+            anchors.top: parent.top
+            ^^^^^^^
+Warning: Panel.qml:1032:17: Component is missing required property index from Session [required]
+                Repeater {
+                ^^^^^^^^
+Warning: Panel.qml:1032:17: Component is missing required property modelData from Session [required]
+                Repeater {
+                ^^^^^^^^
+Warning: Panel.qml:1035:29: Component is missing required property index from Session [required]
+                  delegate: Session {
+                            ^^^^^^^
+Warning: Panel.qml:1035:29: Component is missing required property modelData from Session [required]
+                  delegate: Session {
+                            ^^^^^^^
+Warning: Panel.qml:33:39: Unqualified access [unqualified]
+  readonly property color foreground: bar ? bar.foreground : Color.foreground
+                                      ^^^
+Warning: Panel.qml:33:45: Unqualified access [unqualified]
+  readonly property color foreground: bar ? bar.foreground : Color.foreground
+                                            ^^^
+Warning: Panel.qml:33:62: Unqualified access [unqualified]
+  readonly property color foreground: bar ? bar.foreground : Color.foreground
+                                                             ^^^^^
+Warning: Panel.qml:34:40: Unqualified access [unqualified]
+  readonly property color urgentColor: bar ? bar.urgent : Color.urgent
+                                       ^^^
+Warning: Panel.qml:34:46: Unqualified access [unqualified]
+  readonly property color urgentColor: bar ? bar.urgent : Color.urgent
+                                             ^^^
+Warning: Panel.qml:34:59: Unqualified access [unqualified]
+  readonly property color urgentColor: bar ? bar.urgent : Color.urgent
+                                                          ^^^^^
+Warning: Panel.qml:35:40: Unqualified access [unqualified]
+  readonly property color accentColor: Color.accent
+                                       ^^^^^
+Warning: Panel.qml:44:40: Unqualified access [unqualified]
+  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+                                       ^^^
+Warning: Panel.qml:44:46: Unqualified access [unqualified]
+  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+                                             ^^^
+Warning: Panel.qml:44:63: Unqualified access [unqualified]
+  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+                                                              ^^^^^
+Warning: Panel.qml:126:24: Unqualified access [unqualified]
+  onOpenedChanged: if (opened) {
+                       ^^^^^^
+Info: Did you mean "openNew"?
+  onOpenedChanged: if (openNew) {
+                       ^^^^^^^
+Warning: Panel.qml:699:66: Unqualified access [unqualified]
+      if (top < viewTop) panelFlick.contentY = Math.max(0, top - Style.space(8))
+                                                                 ^^^^^
+Warning: Panel.qml:700:156: Unqualified access [unqualified]
+      else if (bottom > viewBottom) panelFlick.contentY = Math.min(Math.max(0, panelFlick.contentHeight - panelFlick.height), bottom - panelFlick.height + Style.space(8))
+                                                                                                                                                           ^^^^^
+Warning: Panel.qml:453:9: Unqualified access [unqualified]
+        root.actionFinished(sid, kind, exitCode)
+        ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:450:72: Unqualified access [unqualified]
+        onStreamFinished: if (String(text).trim() !== "") console.warn(root.logTag, kind, String(text).trim())
+                                                                       ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:450:85: Unqualified access [unqualified]
+        onStreamFinished: if (String(text).trim() !== "") console.warn(root.logTag, kind, String(text).trim())
+                                                                                    ^^^^
+Info: kind is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+        onStreamFinished: if (String(text).trim() !== "") console.warn(root.logTag, <id>.kind, String(text).trim())
+                                                                                    ^^^^^
+      You first have to give the element an idWarning: Panel.qml:627:19: Unqualified access [unqualified]
+    anchors.fill: parent
+                  ^^^^^^
+Warning: Panel.qml:645:53: Unqualified access [unqualified]
+      width: Math.max(16, badgeText.implicitWidth + Style.space(8))
+                                                    ^^^^^
+Warning: Panel.qml:658:16: Unqualified access [unqualified]
+        color: Color.background
+               ^^^^^
+Info: Did you mean "color"?
+        color: color.background
+               ^^^^^
+Warning: Panel.qml:660:38: Unqualified access [unqualified]
+        font.pixelSize: Math.max(10, Style.font.caption)
+                                     ^^^^^
+Info: Did you mean "style"?
+        font.pixelSize: Math.max(10, style.font.caption)
+                                     ^^^^^
+Warning: Panel.qml:711:44: Unqualified access [unqualified]
+    contentWidth: panel.fittedContentWidth(Style.space(400))
+                                           ^^^^^
+Warning: Panel.qml:712:85: Unqualified access [unqualified]
+    contentHeight: panel.fittedContentHeight(column.implicitHeight + legend.height, Style.space(640))
+                                                                                    ^^^^^
+Warning: Panel.qml:716:21: Unqualified access [unqualified]
+      anchors.fill: parent
+                    ^^^^^^
+Warning: Panel.qml:809:22: Unqualified access [unqualified]
+            spacing: Style.space(10)
+                     ^^^^^
+Warning: Panel.qml:813:22: Unqualified access [unqualified]
+              width: parent.width
+                     ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+              width: outer.parent.width
+                     ^^^^^^
+Warning: Panel.qml:822:26: Unqualified access [unqualified]
+                  color: root.barState === "orphaned" ? "transparent" : root.barGlyphColor
+                         ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:822:73: Unqualified access [unqualified]
+                  color: root.barState === "orphaned" ? "transparent" : root.barGlyphColor
+                                                                        ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:823:33: Unqualified access [unqualified]
+                  border.color: root.barGlyphColor
+                                ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:824:33: Unqualified access [unqualified]
+                  border.width: root.barState === "orphaned" ? 2 : 0
+                                ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:839:22: Unqualified access [unqualified]
+              width: parent.width
+                     ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+              width: outer.parent.width
+                     ^^^^^^
+Warning: Panel.qml:840:62: Unqualified access [unqualified]
+              implicitHeight: starterColumn.implicitHeight + Style.space(16)
+                                                             ^^^^^
+Warning: Panel.qml:843:27: Unqualified access [unqualified]
+              borderSpec: Border.flat(root.alpha(root.newOpen ? root.accentColor : root.foreground, root.newOpen ? 0.45 : 0.18), 1)
+                          ^^^^^^
+Warning: Panel.qml:844:23: Unqualified access [unqualified]
+              radius: Style.cornerRadius
+                      ^^^^^
+Warning: Panel.qml:862:26: Unqualified access [unqualified]
+                spacing: Style.space(6)
+                         ^^^^^
+Warning: Panel.qml:860:37: Unqualified access [unqualified]
+                anchors.leftMargin: Style.space(12)
+                                    ^^^^^
+Warning: Panel.qml:861:38: Unqualified access [unqualified]
+                anchors.rightMargin: Style.space(12)
+                                     ^^^^^
+Warning: Panel.qml:871:35: Unqualified access [unqualified]
+                  font.pixelSize: Style.font.caption
+                                  ^^^^^
+Info: Did you mean "style"?
+                  font.pixelSize: style.font.caption
+                                  ^^^^^
+Warning: Panel.qml:878:28: Unqualified access [unqualified]
+                  spacing: Style.space(6)
+                           ^^^^^
+Warning: Panel.qml:882:28: Unqualified access [unqualified]
+                    width: parent.width - startButton.width - Style.space(6)
+                           ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                    width: outer.parent.width - startButton.width - Style.space(6)
+                           ^^^^^^
+Warning: Panel.qml:882:63: Unqualified access [unqualified]
+                    width: parent.width - startButton.width - Style.space(6)
+                                                              ^^^^^
+Warning: Panel.qml:887:53: Unqualified access [unqualified]
+                    onAccepted: { root.startSession(text); text = "" }
+                                                    ^^^^
+Warning: Panel.qml:887:60: Unqualified access [unqualified]
+                    onAccepted: { root.startSession(text); text = "" }
+                                                           ^^^^
+Warning: Panel.qml:909:35: Unqualified access [unqualified]
+                  font.pixelSize: Style.font.caption
+                                  ^^^^^
+Info: Did you mean "style"?
+                  font.pixelSize: style.font.caption
+                                  ^^^^^
+Warning: Panel.qml:918:22: Unqualified access [unqualified]
+              width: parent.width
+                     ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+              width: outer.parent.width
+                     ^^^^^^
+Warning: Panel.qml:919:58: Unqualified access [unqualified]
+              implicitHeight: herdrText.implicitHeight + Style.space(20)
+                                                         ^^^^^
+Warning: Panel.qml:921:27: Unqualified access [unqualified]
+              borderSpec: Border.flat(root.alpha(root.urgentColor, 0.35), 1)
+                          ^^^^^^
+Warning: Panel.qml:922:23: Unqualified access [unqualified]
+              radius: Style.cornerRadius
+                      ^^^^^
+Warning: Panel.qml:930:37: Unqualified access [unqualified]
+                anchors.leftMargin: Style.space(12)
+                                    ^^^^^
+Info: Did you mean "style"?
+                anchors.leftMargin: style.space(12)
+                                    ^^^^^
+Warning: Panel.qml:931:38: Unqualified access [unqualified]
+                anchors.rightMargin: Style.space(12)
+                                     ^^^^^
+Info: Did you mean "style"?
+                anchors.rightMargin: style.space(12)
+                                     ^^^^^
+Warning: Panel.qml:935:33: Unqualified access [unqualified]
+                font.pixelSize: Style.font.caption
+                                ^^^^^
+Info: Did you mean "style"?
+                font.pixelSize: style.font.caption
+                                ^^^^^
+Warning: Panel.qml:943:22: Unqualified access [unqualified]
+              width: parent.width
+                     ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+              width: outer.parent.width
+                     ^^^^^^
+Warning: Panel.qml:944:58: Unqualified access [unqualified]
+              implicitHeight: errorText.implicitHeight + Style.space(20)
+                                                         ^^^^^
+Warning: Panel.qml:946:27: Unqualified access [unqualified]
+              borderSpec: Border.flat(root.alpha(root.urgentColor, 0.35), 1)
+                          ^^^^^^
+Warning: Panel.qml:947:23: Unqualified access [unqualified]
+              radius: Style.cornerRadius
+                      ^^^^^
+Warning: Panel.qml:955:37: Unqualified access [unqualified]
+                anchors.leftMargin: Style.space(12)
+                                    ^^^^^
+Info: Did you mean "style"?
+                anchors.leftMargin: style.space(12)
+                                    ^^^^^
+Warning: Panel.qml:956:38: Unqualified access [unqualified]
+                anchors.rightMargin: Style.space(12)
+                                     ^^^^^
+Info: Did you mean "style"?
+                anchors.rightMargin: style.space(12)
+                                     ^^^^^
+Warning: Panel.qml:960:33: Unqualified access [unqualified]
+                font.pixelSize: Style.font.caption
+                                ^^^^^
+Info: Did you mean "style"?
+                font.pixelSize: style.font.caption
+                                ^^^^^
+Warning: Panel.qml:969:24: Unqualified access [unqualified]
+              spacing: Style.space(10)
+                       ^^^^^
+Warning: Panel.qml:970:27: Unqualified access [unqualified]
+              topPadding: Style.space(16)
+                          ^^^^^
+Warning: Panel.qml:977:33: Unqualified access [unqualified]
+                font.pixelSize: Style.font.body
+                                ^^^^^
+Info: Did you mean "style"?
+                font.pixelSize: style.font.body
+                                ^^^^^
+Warning: Panel.qml:994:24: Unqualified access [unqualified]
+                width: column.width
+                       ^^^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:995:26: Unqualified access [unqualified]
+                spacing: Style.space(6)
+                         ^^^^^
+Warning: Panel.qml:996:27: Unqualified access [unqualified]
+                visible: !root.hasErrorRow && (modelData.rows.length > 0 || modelData.hidden > 0)
+                          ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:999:31: Unqualified access [unqualified]
+                  foreground: root.foreground
+                              ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1008:28: Unqualified access [unqualified]
+                    width: parent.width
+                           ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                    width: <id>.parent.width
+                           ^^^^^
+      You first have to give the element an idWarning: Panel.qml:1009:27: Unqualified access [unqualified]
+                    text: modelData.title + (modelData.hidden > 0 ? " · " + (modelData.rows.length + modelData.hidden) : "")
+                          ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                    text: <id>.modelData.title + (modelData.hidden > 0 ? " · " + (modelData.rows.length + modelData.hidden) : "")
+                          ^^^^^
+      You first have to give the element an idWarning: Panel.qml:1009:46: Unqualified access [unqualified]
+                    text: modelData.title + (modelData.hidden > 0 ? " · " + (modelData.rows.length + modelData.hidden) : "")
+                                             ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                    text: modelData.title + (<id>.modelData.hidden > 0 ? " · " + (modelData.rows.length + modelData.hidden) : "")
+                                             ^^^^^
+      You first have to give the element an idWarning: Panel.qml:1009:78: Unqualified access [unqualified]
+                    text: modelData.title + (modelData.hidden > 0 ? " · " + (modelData.rows.length + modelData.hidden) : "")
+                                                                             ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                    text: modelData.title + (modelData.hidden > 0 ? " · " + (<id>.modelData.rows.length + modelData.hidden) : "")
+                                                                             ^^^^^
+      You first have to give the element an idWarning: Panel.qml:1009:102: Unqualified access [unqualified]
+                    text: modelData.title + (modelData.hidden > 0 ? " · " + (modelData.rows.length + modelData.hidden) : "")
+                                                                                                     ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                    text: modelData.title + (modelData.hidden > 0 ? " · " + (modelData.rows.length + <id>.modelData.hidden) : "")
+                                                                                                     ^^^^^
+      You first have to give the element an idWarning: Panel.qml:1010:33: Unqualified access [unqualified]
+                    foreground: root.foreground
+                                ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1011:33: Unqualified access [unqualified]
+                    fontFamily: root.fontFamily
+                                ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1015:30: Unqualified access [unqualified]
+                    visible: modelData.hidden > 0
+                             ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                    visible: <id>.modelData.hidden > 0
+                             ^^^^^
+      You first have to give the element an idWarning: Panel.qml:1017:27: Unqualified access [unqualified]
+                    text: modelData.hidden + " more · →"
+                          ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                    text: <id>.modelData.hidden + " more · →"
+                          ^^^^^
+      You first have to give the element an idWarning: Panel.qml:1018:28: Unqualified access [unqualified]
+                    color: root.dim
+                           ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1019:34: Unqualified access [unqualified]
+                    font.family: root.fontFamily
+                                 ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1020:37: Unqualified access [unqualified]
+                    font.pixelSize: Style.font.caption
+                                    ^^^^^
+Info: Did you mean "style"?
+                    font.pixelSize: style.font.caption
+                                    ^^^^^
+Warning: Panel.qml:1027:34: Unqualified access [unqualified]
+                      onClicked: root.doneExpanded = true
+                                 ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1033:26: Unqualified access [unqualified]
+                  model: modelData.rows
+                         ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                  model: <id>.modelData.rows
+                         ^^^^^
+      You first have to give the element an idWarning: Panel.qml:1041:32: Unqualified access [unqualified]
+                    hasCursor: root.cursorActive && modelData.id === root.selectedId
+                               ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1041:70: Unqualified access [unqualified]
+                    hasCursor: root.cursorActive && modelData.id === root.selectedId
+                                                                     ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1042:48: Unqualified access [unqualified]
+                    emphasized: index === 0 && parent.modelData.title === "NEEDS YOU"
+                                               ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                    emphasized: index === 0 && <id>.parent.modelData.title === "NEEDS YOU"
+                                               ^^^^^
+      You first have to give the element an idWarning: Panel.qml:1043:32: Unqualified access [unqualified]
+                    stopArmed: root.armedStopId === modelData.id
+                               ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1044:31: Unqualified access [unqualified]
+                    stopping: root.stoppingIds[modelData.id] !== undefined
+                              ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1045:31: Unqualified access [unqualified]
+                    sendOpen: root.sendOpenId === modelData.id
+                              ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1046:31: Unqualified access [unqualified]
+                    busyText: root.busyById[modelData.id] || ""
+                              ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1047:35: Unqualified access [unqualified]
+                    actionResult: root.resultById[modelData.id] || null
+                                  ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1048:36: Unqualified access [unqualified]
+                    motionReduced: root.motionReduced
+                                   ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1049:33: Unqualified access [unqualified]
+                    foreground: root.foreground
+                                ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1050:29: Unqualified access [unqualified]
+                    accent: root.accentColor
+                            ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1051:34: Unqualified access [unqualified]
+                    urgentColor: root.urgentColor
+                                 ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1052:32: Unqualified access [unqualified]
+                    restColor: root.restColor
+                               ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1053:33: Unqualified access [unqualified]
+                    fontFamily: root.fontFamily
+                                ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1054:28: Unqualified access [unqualified]
+                    nowMs: root.nowMs
+                           ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1055:32: Unqualified access [unqualified]
+                    formatAge: root.formatDuration
+                               ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1057:45: Unqualified access [unqualified]
+                    onHasCursorChanged: if (hasCursor) root.ensureVisible(sessionRow)
+                                            ^^^^^^^^^
+Warning: Panel.qml:1057:56: Unqualified access [unqualified]
+                    onHasCursorChanged: if (hasCursor) root.ensureVisible(sessionRow)
+                                                       ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1058:54: Unqualified access [unqualified]
+                    onHoverRequested: function(id) { root.setCursor(id, false) }
+                                                     ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1059:53: Unqualified access [unqualified]
+                    onOpenRequested: function(id) { root.setCursor(id, false); root.openSession(id) }
+                                                    ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1059:80: Unqualified access [unqualified]
+                    onOpenRequested: function(id) { root.setCursor(id, false); root.openSession(id) }
+                                                                               ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1060:56: Unqualified access [unqualified]
+                    onReceiptRequested: function(id) { root.setCursor(id, false); root.openReceipt(id) }
+                                                       ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1060:83: Unqualified access [unqualified]
+                    onReceiptRequested: function(id) { root.setCursor(id, false); root.openReceipt(id) }
+                                                                                  ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1061:56: Unqualified access [unqualified]
+                    onPreviewRequested: function(id) { root.setCursor(id, false); root.focusPreview(id) }
+                                                       ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1061:83: Unqualified access [unqualified]
+                    onPreviewRequested: function(id) { root.setCursor(id, false); root.focusPreview(id) }
+                                                                                  ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1062:57: Unqualified access [unqualified]
+                    onSendOpenRequested: function(id) { root.setCursor(id, false); root.armedStopId = ""; root.sendOpenId = id }
+                                                        ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1062:84: Unqualified access [unqualified]
+                    onSendOpenRequested: function(id) { root.setCursor(id, false); root.armedStopId = ""; root.sendOpenId = id }
+                                                                                   ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1062:107: Unqualified access [unqualified]
+                    onSendOpenRequested: function(id) { root.setCursor(id, false); root.armedStopId = ""; root.sendOpenId = id }
+                                                                                                          ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1063:65: Unqualified access [unqualified]
+                    onSendSubmitRequested: function(id, text) { root.sendToSession(id, text); root.sendOpenId = "" }
+                                                                ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1063:95: Unqualified access [unqualified]
+                    onSendSubmitRequested: function(id, text) { root.sendToSession(id, text); root.sendOpenId = "" }
+                                                                                              ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1064:59: Unqualified access [unqualified]
+                    onSendCancelRequested: function(id) { root.sendOpenId = "" }
+                                                          ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1065:56: Unqualified access [unqualified]
+                    onStopArmRequested: function(id) { root.setCursor(id, false); root.sendOpenId = ""; root.armedStopId = id }
+                                                       ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1065:83: Unqualified access [unqualified]
+                    onStopArmRequested: function(id) { root.setCursor(id, false); root.sendOpenId = ""; root.armedStopId = id }
+                                                                                  ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1065:105: Unqualified access [unqualified]
+                    onStopArmRequested: function(id) { root.setCursor(id, false); root.sendOpenId = ""; root.armedStopId = id }
+                                                                                                        ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1066:60: Unqualified access [unqualified]
+                    onStopConfirmRequested: function(id) { root.stopSession(id); root.armedStopId = "" }
+                                                           ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1066:82: Unqualified access [unqualified]
+                    onStopConfirmRequested: function(id) { root.stopSession(id); root.armedStopId = "" }
+                                                                                 ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:1074:23: Unqualified access [unqualified]
+              height: Style.space(2)
+                      ^^^^^
+Warning: Panel.qml:1083:47: Unqualified access [unqualified]
+          height: legendText.implicitHeight + Style.space(12)
+                                              ^^^^^
+Warning: Panel.qml:1087:20: Unqualified access [unqualified]
+            width: parent.width
+                   ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+            width: outer.parent.width
+                   ^^^^^^
+Warning: Panel.qml:1086:26: Unqualified access [unqualified]
+            anchors.top: parent.top
+                         ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+            anchors.top: outer.parent.top
+                         ^^^^^^
+Warning: Panel.qml:1097:33: Unqualified access [unqualified]
+            anchors.leftMargin: Style.space(12)
+                                ^^^^^
+Info: Did you mean "style"?
+            anchors.leftMargin: style.space(12)
+                                ^^^^^
+Warning: Panel.qml:1098:34: Unqualified access [unqualified]
+            anchors.rightMargin: Style.space(12)
+                                 ^^^^^
+Info: Did you mean "style"?
+            anchors.rightMargin: style.space(12)
+                                 ^^^^^
+Warning: Panel.qml:1099:35: Unqualified access [unqualified]
+            anchors.bottomMargin: Style.space(2)
+                                  ^^^^^
+Info: Did you mean "style"?
+            anchors.bottomMargin: style.space(2)
+                                  ^^^^^
+Warning: Panel.qml:1103:29: Unqualified access [unqualified]
+            font.pixelSize: Style.font.caption
+                            ^^^^^
+Info: Did you mean "style"?
+            font.pixelSize: style.font.caption
+                            ^^^^^
+Warning: Session.qml:215:9: PanelToolTip was not found. Did you add all imports and dependencies? [import]
+        PanelToolTip {
+        ^^^^^^^^^^^^
+Warning: Session.qml:239:9: PanelToolTip was not found. Did you add all imports and dependencies? [import]
+        PanelToolTip {
+        ^^^^^^^^^^^^
+Warning: Session.qml:288:7: TextField was not found. Did you add all imports and dependencies? [import]
+      TextField {
+      ^^^^^^^^^
+Warning: Session.qml:299:7: Button was not found. Did you add all imports and dependencies? [import]
+      Button {
+      ^^^^^^
+Warning: Session.qml:316:7: Button was not found. Did you add all imports and dependencies? [import]
+      Button {
+      ^^^^^^
+Warning: Session.qml:325:7: Button was not found. Did you add all imports and dependencies? [import]
+      Button {
+      ^^^^^^
+Warning: Session.qml:335:7: Button was not found. Did you add all imports and dependencies? [import]
+      Button {
+      ^^^^^^
+Warning: Session.qml:344:7: Button was not found. Did you add all imports and dependencies? [import]
+      Button {
+      ^^^^^^
+Warning: Session.qml:357:3: PanelToolTip was not found. Did you add all imports and dependencies? [import]
+  PanelToolTip {
+  ^^^^^^^^^^^^
+Warning: Session.qml:23:1: CursorSurface was not found. Did you add all imports and dependencies? [import]
+CursorSurface {
+^^^^^^^^^^^^^
+Warning: Session.qml:35:31: Unqualified access [unqualified]
+  property color urgentColor: Color.urgent
+                              ^^^^^
+Warning: Session.qml:36:39: Unqualified access [unqualified]
+  property color restColor: Qt.darker(foreground, 1.5)
+                                      ^^^^^^^^^^
+Warning: Session.qml:37:31: Unqualified access [unqualified]
+  property string fontFamily: Style.font.family
+                              ^^^^^
+Warning: Session.qml:41:42: Unqualified access [unqualified]
+  readonly property color dim: Qt.darker(foreground, 1.3) // 4.89:1 on Tokyo Night; 1.55 failed WCAG AA
+                                         ^^^^^^^^^^
+Warning: Session.qml:111:33: Unqualified access [unqualified]
+    if (busyText !== "") return foreground
+                                ^^^^^^^^^^
+Warning: Session.qml:112:48: Unqualified access [unqualified]
+    if (actionResult) return actionResult.ok ? foreground : urgentColor
+                                               ^^^^^^^^^^
+Warning: Session.qml:115:60: Unqualified access [unqualified]
+    if (state === "orphaned" || state === "failed") return foreground
+                                                           ^^^^^^^^^^
+Warning: Session.qml:123:45: Unqualified access [unqualified]
+    ? urgentColor : (state === "orphaned" ? foreground : restColor)
+                                            ^^^^^^^^^^
+Warning: Session.qml:146:10: Unqualified access [unqualified]
+  width: parent ? parent.width : 0
+         ^^^^^^
+Warning: Session.qml:146:19: Unqualified access [unqualified]
+  width: parent ? parent.width : 0
+                  ^^^^^^
+Warning: Session.qml:147:47: Unqualified access [unqualified]
+  implicitHeight: mainColumn.implicitHeight + Style.space(14)
+                                              ^^^^^
+Warning: Session.qml:169:14: Unqualified access [unqualified]
+    spacing: Style.space(3)
+             ^^^^^
+Warning: Session.qml:167:25: Unqualified access [unqualified]
+    anchors.leftMargin: Style.space(12)
+                        ^^^^^
+Warning: Session.qml:168:26: Unqualified access [unqualified]
+    anchors.rightMargin: Style.space(12)
+                         ^^^^^
+Warning: Session.qml:192:42: Unqualified access [unqualified]
+        font.pixelSize: row.emphasized ? Style.font.subtitle : Style.font.body
+                                         ^^^^^
+Info: Did you mean "style"?
+        font.pixelSize: row.emphasized ? style.font.subtitle : Style.font.body
+                                         ^^^^^
+Warning: Session.qml:192:64: Unqualified access [unqualified]
+        font.pixelSize: row.emphasized ? Style.font.subtitle : Style.font.body
+                                                               ^^^^^
+Info: Did you mean "style"?
+        font.pixelSize: row.emphasized ? Style.font.subtitle : style.font.body
+                                                               ^^^^^
+Warning: Session.qml:196:29: Unqualified access [unqualified]
+        anchors.leftMargin: Style.space(8)
+                            ^^^^^
+Info: Did you mean "style"?
+        anchors.leftMargin: style.space(8)
+                            ^^^^^
+Warning: Session.qml:198:30: Unqualified access [unqualified]
+        anchors.rightMargin: Style.space(8)
+                             ^^^^^
+Info: Did you mean "style"?
+        anchors.rightMargin: style.space(8)
+                             ^^^^^
+Warning: Session.qml:211:30: Unqualified access [unqualified]
+        anchors.rightMargin: Style.space(6)
+                             ^^^^^
+Warning: Session.qml:228:42: Unqualified access [unqualified]
+        font.pixelSize: row.emphasized ? Style.font.bodySmall : Style.font.caption
+                                         ^^^^^
+Info: Did you mean "style"?
+        font.pixelSize: row.emphasized ? style.font.bodySmall : Style.font.caption
+                                         ^^^^^
+Warning: Session.qml:228:65: Unqualified access [unqualified]
+        font.pixelSize: row.emphasized ? Style.font.bodySmall : Style.font.caption
+                                                                ^^^^^
+Info: Did you mean "style"?
+        font.pixelSize: row.emphasized ? Style.font.bodySmall : style.font.caption
+                                                                ^^^^^
+Warning: Session.qml:259:25: Unqualified access [unqualified]
+        font.pixelSize: Style.font.caption
+                        ^^^^^
+Info: Did you mean "style"?
+        font.pixelSize: style.font.caption
+                        ^^^^^
+Warning: Session.qml:262:29: Unqualified access [unqualified]
+        anchors.leftMargin: Style.space(16)
+                            ^^^^^
+Info: Did you mean "style"?
+        anchors.leftMargin: style.space(16)
+                            ^^^^^
+Warning: Session.qml:264:30: Unqualified access [unqualified]
+        anchors.rightMargin: Style.space(8)
+                             ^^^^^
+Info: Did you mean "style"?
+        anchors.rightMargin: style.space(8)
+                             ^^^^^
+Warning: Session.qml:276:25: Unqualified access [unqualified]
+        font.pixelSize: Style.font.caption
+                        ^^^^^
+Info: Did you mean "style"?
+        font.pixelSize: style.font.caption
+                        ^^^^^
+Warning: Session.qml:286:16: Unqualified access [unqualified]
+      spacing: Style.space(6)
+               ^^^^^
+Warning: Session.qml:290:16: Unqualified access [unqualified]
+        width: parent.width - sendButton.width - Style.space(6)
+               ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+        width: mainColumn.parent.width - sendButton.width - Style.space(6)
+               ^^^^^^^^^^^
+Warning: Session.qml:290:50: Unqualified access [unqualified]
+        width: parent.width - sendButton.width - Style.space(6)
+                                                 ^^^^^
+Warning: Session.qml:296:56: Unqualified access [unqualified]
+        onAccepted: { row.sendSubmitRequested(row.sid, text); text = "" }
+                                                       ^^^^
+Warning: Session.qml:296:63: Unqualified access [unqualified]
+        onAccepted: { row.sendSubmitRequested(row.sid, text); text = "" }
+                                                              ^^^^
+Warning: Session.qml:312:16: Unqualified access [unqualified]
+      spacing: Style.space(8)
+               ^^^^^
+Warning: Session.qml:314:19: Unqualified access [unqualified]
+      topPadding: Style.space(4)
+                  ^^^^^
+Warning: Session.qml:322:19: Unqualified access [unqualified]
+        fontSize: Style.font.caption
+                  ^^^^^
+Warning: Session.qml:332:19: Unqualified access [unqualified]
+        fontSize: Style.font.caption
+                  ^^^^^
+Warning: Session.qml:341:19: Unqualified access [unqualified]
+        fontSize: Style.font.caption
+                  ^^^^^
+Warning: Session.qml:351:19: Unqualified access [unqualified]
+        fontSize: Style.font.caption
+                  ^^^^^

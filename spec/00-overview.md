@@ -19,7 +19,7 @@ Status: proposed, 2026-09-01. Slice 1. Read this first; each numbered file below
             |
    omarchy-agent-session-watch.service    (systemd user unit: events -> notifications, reconciler)
             |
-   praneet.agent-sessions shell plugin    (bar widget + panel, reads list --json and index.json)
+   io.github.mphaxise.keepalive shell plugin (Keepalive)    (bar widget + panel, reads list --json and index.json)
 ```
 
 Herdr keeps the process alive and reports what the agent is doing. Omarchy scripts own the session record, the mode, the lineage, the receipt, and the artifacts. The shell plugin renders the record. The watcher turns events into notifications and keeps records and panes reconciled.

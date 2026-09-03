@@ -1,0 +1,32 @@
+05:26:58Z plugins before: [('praneet.agent-sessions', True)]
+05:26:59Z retired /home/omarchy/.config/omarchy/plugins/praneet.agent-sessions to ~/Work/plugins-retired/
+05:26:59Z installed /home/omarchy/.config/omarchy/plugins/io.github.mphaxise.keepalive (LICENSE Panel.qml README.md Session.qml bin install.sh manifest.json preview.png scripts systemd tests uninstall.sh )
+05:26:59Z validate: ok
+05:27:03Z plugins after: [('io.github.mphaxise.keepalive', True)]
+  bindings: 39:o.bind("SUPER + CTRL + G", "Agent sessions", "omarchy-shell io.github.mphaxise.keepalive toggle")
+  bindings: 40:o.bind("SUPER + CTRL + SHIFT + G", "Agent that needs you", "omarchy-shell io.github.mphaxise.keepalive openMostUrgent")
+05:27:03Z hyprland reloaded
+05:27:10Z == qmllint
+05:27:10Z qmllint rc=255, 0 lines
+05:27:10Z == shell restart
+05:27:17Z our IPC target answers: io.github.mphaxise.keepalive refresh
+05:27:17Z == shell summon / hide
+05:27:19Z captured after summon
+05:27:20Z captured after hide
+05:27:20Z == our IPC: toggle open, Escape closes
+05:27:24Z captured toggle-open and escape-closed
+05:27:24Z == disable / enable
+05:27:27Z disabled: [('io.github.mphaxise.keepalive', False)]
+05:27:30Z enabled: [('io.github.mphaxise.keepalive', True)]
+05:27:30Z IPC answers after re-enable
+05:27:30Z == remove / re-add
+05:27:34Z after remove: []; dir exists: no
+05:27:38Z re-added: [('io.github.mphaxise.keepalive', True)]
+05:27:38Z IPC answers after re-add
+05:29:19Z sessions before 38 after 39
+05:29:19Z session: 01M1JVVX3MQ52DZVSATRVJSN27
+  client: org.omarchy.session.01M1JVBXTX2QCD0A9MQKYBQ0NZ
+  client: org.omarchy.session.01M1JVPEH1WC2TRKADQQGYSSHN
+  client: org.omarchy.session.01M1JVVX3MQ52DZVSATRVJSN27
+  file: started under the listing id
+05:29:45Z test session stopped

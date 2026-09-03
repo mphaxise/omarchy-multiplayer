@@ -6,7 +6,7 @@
 # README with the plugin id filled in. Also writes the submission issue body.
 #
 #   outbound/build-listing.sh [output-dir]                 default /tmp/omarchy-keepalive
-#   LISTING_ID=praneet.agent-sessions outbound/build-listing.sh   (the id the dev checkout still uses)
+#   LISTING_ID=<other id> outbound/build-listing.sh              (to build under a different id)
 #
 # The output directory is created fresh; an existing one is reused only when
 # this script built it (it leaves a marker), so a stray path is never emptied.
@@ -17,7 +17,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)
 out=${1:-/tmp/omarchy-keepalive}
-src_id=praneet.agent-sessions
+src_id=io.github.mphaxise.keepalive
 # The listing id: namespaced and lowercase as the marketplace prefers, and
 # permanent once listed (decided 2026-09-02, decisions.md).
 id=${LISTING_ID:-io.github.mphaxise.keepalive}

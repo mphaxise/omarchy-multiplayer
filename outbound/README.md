@@ -15,7 +15,7 @@ Everything here is a draft for Praneet to read. Nothing in this directory has be
 ## Decisions that are Praneet's
 
 1. **Target.** Marketplace listing, discussion post, both, or neither. PLAN.md says choose one; both are drafted so the choice is made on the texts.
-2. **Name and id: decided.** The plugin is Keepalive (Praneet, 2026-09-02, from five options). The listing id is `io.github.mphaxise.keepalive`, namespaced and lowercase as the marketplace prefers, permanent once listed. The dev checkout and the rig still run under `praneet.agent-sessions` (plugin directory, `omarchy-shell` IPC target, the rig's two keybindings); `build-listing.sh` substitutes the listing id into the manifest and `Panel.qml`. Before the listing is pushed, the rig should run one session under the listing id so what is tested is what ships. That rename touches `~/.config/hypr/bindings.lua` on the rig, so it waits for a go.
+2. **Name and id: decided and applied.** The plugin is Keepalive (Praneet, 2026-09-02, from five options). The id is `io.github.mphaxise.keepalive`, namespaced and lowercase as the marketplace prefers, permanent once listed. The dev checkout, the rig's plugin directory, its `omarchy-shell` IPC target, and the rig's two keybindings all carry it since 2026-09-02 22:27 (run 6).
 3. **Listing repository name.** The drafts say `mphaxise/omarchy-keepalive`, created by pushing the built directory. The development repository stays `mphaxise/omarchy-multiplayer`.
 4. **The five checklist statements** in `submission-issue.md`, each of which the marketplace asks the owner to confirm.
 5. **Which of the six upstream texts go**, and whether the aarch64 ones go to the image repository or the package repository.

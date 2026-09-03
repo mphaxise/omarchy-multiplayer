@@ -1,6 +1,6 @@
 # Omarchy Multiplayer: experiment plan
 
-Status: plan v2, 2026-09-01 (evening), revised after the research phase; v1 from the same morning is in git history. `decisions.md` carries the dated log. Progress as of 2026-09-02, late evening: Phases 0 to 4 done, slice 1 live on the rig; Phase 5 done as far as a script can take it (the review passes, three scenario runs, the closed-loop pass from the terminal and from the panel, and the experiment report are in `findings/`; the stopwatch trials were withdrawn, and the designer's own sitting at the panel waits for a person at the rig); Phase 6 drafting.
+Status: plan v2, 2026-09-01 (evening), revised after the research phase; v1 from the same morning is in git history. `decisions.md` carries the dated log. Progress as of 2026-09-02, late evening: Phases 0 to 4 done, slice 1 live on the rig; Phase 5 done as far as a script can take it (the review passes, three scenario runs, the closed-loop pass from the terminal and from the panel, and the experiment report are in `findings/`; the stopwatch trials were withdrawn, and the designer's own sitting at the panel waits for a person at the rig); Phase 6 in progress: the plugin is named, the drafts exist, the marketplace's guides are read and the plan revised against them; the rig checklist and the publishing steps are next.
 
 ## Bottom line
 
@@ -62,7 +62,7 @@ Each phase ends at a review point. Timeboxes are my working estimate.
 
 **Phase 5, evaluate (two days).** Run `/ux-review` and `/design-qa` against the live slice with the Omarchy-UX lenses, run the closed-loop pass (one designer, three iterations on a preview), and write the experiment report. Gate: every finding cites a capture, and the report separates measured outcomes from judgment calls.
 
-**Phase 6, outbound (one day).** Choose one: a listing on the community plugin marketplace (`omacom/omarchy-plugin-marketplace`, plugins.omarchy.org) with the scripts and the recording linked, or a discussion post on `omacom/omarchy` proposing the session model. Track the outcome in `findings/upstream-contributions.md`. Gate: I approve the exact text and target before it is posted.
+**Phase 6, outbound (one day; revised 2026-09-02 against plugins.omarchy.org's development and publishing guides, updated 13 and 20 Aug 2026).** The plugin ships as Keepalive, a listing on the community marketplace (`omacom/omarchy-plugin-marketplace`, plugins.omarchy.org), and the session model goes to `omacom/omarchy` as a discussion post; both texts are in `outbound/`. What the guides require, in order: a permanent namespaced id (`io.github.mphaxise.keepalive`), the manifest's eight required fields, a public GitHub repository with `manifest.json` at its root, a README with install and removal, a license, safe install and removal, an optional preview; `omarchy plugin validate` on the folder and `qmllint -I "$OMARCHY_PATH/shell"` on the QML; and their pre-share checklist on the rig: click, Escape, `omarchy-shell shell summon <id> '{}'` and `shell hide <id>`, disable, re-enable, shell restart, removal. Then the submission issue in its six-heading form, the marketplace's automated validation and security baseline, and a maintainer's `approved-and-verified`. Steps: (1) the rig runs the plugin under the listing id and passes the checklist; (2) `outbound/build-listing.sh` assembles the listing repository and it validates; (3) the repository `mphaxise/omarchy-keepalive` is created and pushed; (4) the submission issue is opened; (5) the discussion post goes up; (6) the outcome lands in `findings/upstream-contributions.md`, with the six upstream issue texts filed as I choose. Gate: steps 3, 4, and 5 each publish, so I approve the exact text and target before each of them; steps 1, 2, and 6 need no approval.
 
 ## Repository layout
 
@@ -112,7 +112,7 @@ Automation on the rig is keyboard-only over synthetic input; ssh from the Mac si
 2. Whether slice 1 includes the Mac watching the VM's sessions read-only (Herdr `--remote` makes this cheap to try).
 3. Whether the x86-64 cloud rig gets set up before Phase 2 or only if Herdr is absent on aarch64.
 4. Which harness pairs with Claude Code in the scenario: Codex, if its CLI is present in the VM, otherwise OpenCode.
-5. The plugin's release id (`praneet.agent-sessions` during the experiment).
+5. The plugin's release id: decided 2026-09-02, `io.github.mphaxise.keepalive`, name Keepalive.
 
 ## Next actions
 
@@ -122,4 +122,4 @@ Items 1 to 4 of the original list are done (2026-09-01 and 2026-09-02); runs 1 a
 2. One session created through `omarchy-agent --pick` with the picker on screen, which closes signal 5's flag.
 3. The closed-loop sitting (`spec/09-closed-loop-surfaces.md` section 8): Praneet as the designer, three rounds of feedback typed into the panel's Send field while looking at the preview. The surfaces are built and verified from a script (runs 3 and 4, `findings/closed-loop.md`); the sitting is the part no script can do.
 4. Omarchy itself on the rig: `omarchy-update` on the aarch64 image updates packages only, because `/usr/share/omarchy` is a root-owned checkout no package owns and the dev-checkout path exits for that location; the port's own `omarchy` 4.0.1-2 package is the intended path. Decide whether to install it (root, replaces the tree) before Phase 6, and file the gap with the port maintainer.
-5. Phase 6: the drafts are in `outbound/` (listing package, submission text, discussion post, six upstream issue texts); the target, the plugin id, and every text are Praneet's to approve before anything is created or posted.
+5. Phase 6, as revised above: the rig checklist under the listing id, the build, then the three publishing steps on my word. The drafts are in `outbound/`.

@@ -1,0 +1,677 @@
+Warning: BarWidget.qml:4:1: Warnings occurred while importing module "qs.Commons": [import]
+import qs.Commons
+^^^^^^
+---
+Warning: 4:1: Failed to import qs.Commons. Are your import paths set up properly? [import]
+---
+
+Warning: BarWidget.qml:5:1: Warnings occurred while importing module "qs.Ui": [import]
+import qs.Ui
+^^^^^^
+---
+Warning: 5:1: Failed to import qs.Ui. Are your import paths set up properly? [import]
+---
+
+Warning: BarWidget.qml:171:9: OpticalGlyph was not found. Did you add all imports and dependencies? [import]
+        OpticalGlyph {
+        ^^^^^^^^^^^^
+Warning: BarWidget.qml:13:1: BarWidget is part of an inheritance cycle: BarWidget -> BarWidget [inheritance-cycle]
+BarWidget {
+^^^^^^^^^
+Warning: BarWidget.qml:146:3: WidgetButton was not found. Did you add all imports and dependencies? [import]
+  WidgetButton {
+  ^^^^^^^^^^^^
+Warning: BarWidget.qml:148:5: unknown grouped property scope anchors. [unqualified]
+    anchors.fill: parent
+    ^^^^^^^
+Warning: BarWidget.qml:13:1: Type BarWidget is used but it is not resolved [unresolved-type]
+BarWidget {
+^^^^^^^^^
+Warning: BarWidget.qml:148:5: Type anchors is used but it is not resolved [unresolved-type]
+    anchors.fill: parent
+    ^^^^^^^
+Warning: BarWidget.qml:168:7: Component is missing required property modelData from OpticalGlyph [required]
+      Repeater {
+      ^^^^^^^^
+Warning: BarWidget.qml:164:5: Component is missing required property modelData from OpticalGlyph [required]
+    Column {
+    ^^^^^^
+Warning: BarWidget.qml:146:3: Component is missing required property modelData from OpticalGlyph [required]
+  WidgetButton {
+  ^^^^^^^^^^^^
+Warning: BarWidget.qml:171:9: Component is missing required property modelData from OpticalGlyph [required]
+        OpticalGlyph {
+        ^^^^^^^^^^^^
+Warning: BarWidget.qml:19:46: Unqualified access [unqualified]
+  readonly property string configuredFormat: vertical
+                                             ^^^^^^^^
+Warning: BarWidget.qml:20:7: Unqualified access [unqualified]
+    ? setting("verticalFormat", "HH\n—\nmm")
+      ^^^^^^^
+Warning: BarWidget.qml:21:7: Unqualified access [unqualified]
+    : setting("format", "dddd HH:mm")
+      ^^^^^^^
+Warning: BarWidget.qml:22:49: Unqualified access [unqualified]
+  readonly property string configuredAltFormat: vertical
+                                                ^^^^^^^^
+Warning: BarWidget.qml:23:7: Unqualified access [unqualified]
+    ? setting("verticalFormatAlt", "dd\nMMM\n'W'ww\n''yy")
+      ^^^^^^^
+Warning: BarWidget.qml:24:7: Unqualified access [unqualified]
+    : setting("formatAlt", "d MMMM 'W'ww yyyy")
+      ^^^^^^^
+Warning: BarWidget.qml:26:117: Unqualified access [unqualified]
+  readonly property var formatRing: Model.clockFormatRing(configuredFormat, configuredAltFormat, Model.clockFormats(vertical))
+                                                                                                                    ^^^^^^^^
+Warning: BarWidget.qml:40:46: Member "refresh" not found on type "QObject" [missing-property]
+    if (panelLoader.item && panelLoader.item.refresh) panelLoader.item.refresh()
+                                             ^^^^^^^
+Warning: BarWidget.qml:40:72: Member "refresh" not found on type "QObject" [missing-property]
+    if (panelLoader.item && panelLoader.item.refresh) panelLoader.item.refresh()
+                                                                       ^^^^^^^
+Warning: BarWidget.qml:50:11: Unqualified access [unqualified]
+    entry[vertical ? "verticalFormat" : "format"] = next
+          ^^^^^^^^
+Warning: BarWidget.qml:66:70: Member "opened" not found on type "QObject" [missing-property]
+  readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
+                                                                     ^^^^^^
+Warning: BarWidget.qml:69:44: Member "open" not found on type "QObject" [missing-property]
+    if (panelLoader.item) panelLoader.item.open()
+                                           ^^^^
+Warning: BarWidget.qml:73:44: Member "close" not found on type "QObject" [missing-property]
+    if (panelLoader.item) panelLoader.item.close()
+                                           ^^^^^
+Warning: BarWidget.qml:77:44: Member "toggle" not found on type "QObject" [missing-property]
+    if (panelLoader.item) panelLoader.item.toggle()
+                                           ^^^^^^
+Warning: BarWidget.qml:81:44: Member "toggleWeekStart" not found on type "QObject" [missing-property]
+    if (panelLoader.item) panelLoader.item.toggleWeekStart()
+                                           ^^^^^^^^^^^^^^^
+Warning: BarWidget.qml:90:61: Unqualified access [unqualified]
+  readonly property real openPanelIndicatorHeight: Math.max(Style.space(10), Math.round(Style.bar.iconSlot * 0.55))
+                                                            ^^^^^
+Warning: BarWidget.qml:90:89: Unqualified access [unqualified]
+  readonly property real openPanelIndicatorHeight: Math.max(Style.space(10), Math.round(Style.bar.iconSlot * 0.55))
+                                                                                        ^^^^^
+Warning: BarWidget.qml:95:83: Member "popoutSwitchClosing" not found on type "QObject" [missing-property]
+  readonly property bool popoutSwitchClosing: panelLoader.item ? panelLoader.item.popoutSwitchClosing === true : false
+                                                                                  ^^^^^^^^^^^^^^^^^^^
+Warning: BarWidget.qml:98:44: Member "closeForPopoutSwitch" not found on type "QObject" [missing-property]
+    if (panelLoader.item) panelLoader.item.closeForPopoutSwitch()
+                                           ^^^^^^^^^^^^^^^^^^^^
+Warning: BarWidget.qml:152:71: Unqualified access [unqualified]
+    hasVisualContent: root.vertical ? root.verticalLines.length > 0 : text !== ""
+                                                                      ^^^^
+Warning: BarWidget.qml:153:62: Unqualified access [unqualified]
+    fixedHeight: root.vertical ? root.verticalLines.length * Style.bar.iconSlot : -1
+                                                             ^^^^^
+Warning: BarWidget.qml:148:19: Unqualified access [unqualified]
+    anchors.fill: parent
+                  ^^^^^^
+Warning: BarWidget.qml:174:19: Unqualified access [unqualified]
+          height: Style.bar.iconSlot
+                  ^^^^^
+Warning: Panel.qml:337:15: PanelToolTip was not found. Did you add all imports and dependencies? [import]
+              PanelToolTip {
+              ^^^^^^^^^^^^
+Warning: Panel.qml:379:17: TextField was not found. Did you add all imports and dependencies? [import]
+                TextField {
+                ^^^^^^^^^
+Warning: Panel.qml:402:17: TextField was not found. Did you add all imports and dependencies? [import]
+                TextField {
+                ^^^^^^^^^
+Warning: Panel.qml:530:17: PanelToolTip was not found. Did you add all imports and dependencies? [import]
+                PanelToolTip {
+                ^^^^^^^^^^^^
+Warning: Panel.qml:599:19: PanelToolTip was not found. Did you add all imports and dependencies? [import]
+                  PanelToolTip {
+                  ^^^^^^^^^^^^
+Warning: Panel.qml:731:15: PanelActionButton was not found. Did you add all imports and dependencies? [import]
+              PanelActionButton {
+              ^^^^^^^^^^^^^^^^^
+Warning: Panel.qml:744:15: PanelActionButton was not found. Did you add all imports and dependencies? [import]
+              PanelActionButton {
+              ^^^^^^^^^^^^^^^^^
+Warning: Panel.qml:247:5: PanelKeyCatcher was not found. Did you add all imports and dependencies? [import]
+    PanelKeyCatcher {
+    ^^^^^^^^^^^^^^^
+Warning: Panel.qml:236:3: KeyboardPanel was not found. Did you add all imports and dependencies? [import]
+  KeyboardPanel {
+  ^^^^^^^^^^^^^
+Warning: Panel.qml:17:1: Panel is part of an inheritance cycle: Panel -> Panel [inheritance-cycle]
+Panel {
+^^^^^
+Warning: Panel.qml:249:7: unknown grouped property scope anchors. [unqualified]
+      anchors.fill: parent
+      ^^^^^^^
+Warning: Panel.qml:382:19: unknown grouped property scope anchors. [unqualified]
+                  anchors.verticalCenter: parent.verticalCenter
+                  ^^^^^^^
+Warning: Panel.qml:385:19: unknown grouped property scope font. [unqualified]
+                  font.family: root.contentFontFamily
+                  ^^^^
+Warning: Panel.qml:405:19: unknown grouped property scope anchors. [unqualified]
+                  anchors.verticalCenter: parent.verticalCenter
+                  ^^^^^^^
+Warning: Panel.qml:408:19: unknown grouped property scope font. [unqualified]
+                  font.family: root.contentFontFamily
+                  ^^^^
+Warning: Panel.qml:734:17: unknown grouped property scope anchors. [unqualified]
+                anchors.left: parent.left
+                ^^^^^^^
+Warning: Panel.qml:745:17: unknown grouped property scope anchors. [unqualified]
+                anchors.right: parent.right
+                ^^^^^^^
+Warning: Panel.qml:17:1: Type Panel is used but it is not resolved [unresolved-type]
+Panel {
+^^^^^
+Warning: Panel.qml:249:7: Type anchors is used but it is not resolved [unresolved-type]
+      anchors.fill: parent
+      ^^^^^^^
+Warning: Panel.qml:382:19: Type anchors is used but it is not resolved [unresolved-type]
+                  anchors.verticalCenter: parent.verticalCenter
+                  ^^^^^^^
+Warning: Panel.qml:385:19: Type font is used but it is not resolved [unresolved-type]
+                  font.family: root.contentFontFamily
+                  ^^^^
+Warning: Panel.qml:405:19: Type anchors is used but it is not resolved [unresolved-type]
+                  anchors.verticalCenter: parent.verticalCenter
+                  ^^^^^^^
+Warning: Panel.qml:408:19: Type font is used but it is not resolved [unresolved-type]
+                  font.family: root.contentFontFamily
+                  ^^^^
+Warning: Panel.qml:734:17: Type anchors is used but it is not resolved [unresolved-type]
+                anchors.left: parent.left
+                ^^^^^^^
+Warning: Panel.qml:745:17: Type anchors is used but it is not resolved [unresolved-type]
+                anchors.right: parent.right
+                ^^^^^^^
+Warning: Panel.qml:55:57: Unqualified access [unqualified]
+  readonly property int birthYear: Model.parseBirthYear(setting("birthYear", 0), today.getFullYear())
+                                                        ^^^^^^^
+Warning: Panel.qml:57:67: Unqualified access [unqualified]
+  readonly property int lifeExpectancy: Model.parseLifeExpectancy(setting("lifeExpectancy", 0))
+                                                                  ^^^^^^^
+Warning: Panel.qml:66:62: Unqualified access [unqualified]
+  readonly property int weekStart: Model.normalizedWeekStart(setting("weekStartDay", null), Qt.locale().firstDayOfWeek)
+                                                             ^^^^^^^
+Warning: Panel.qml:78:46: Unqualified access [unqualified]
+  readonly property color contentForeground: bar ? bar.foreground : Color.foreground
+                                             ^^^
+Warning: Panel.qml:78:52: Unqualified access [unqualified]
+  readonly property color contentForeground: bar ? bar.foreground : Color.foreground
+                                                   ^^^
+Warning: Panel.qml:78:69: Unqualified access [unqualified]
+  readonly property color contentForeground: bar ? bar.foreground : Color.foreground
+                                                                    ^^^^^
+Warning: Panel.qml:79:47: Unqualified access [unqualified]
+  readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
+                                              ^^^
+Warning: Panel.qml:79:53: Unqualified access [unqualified]
+  readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
+                                                    ^^^
+Warning: Panel.qml:79:70: Unqualified access [unqualified]
+  readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
+                                                                     ^^^^^
+Warning: Panel.qml:81:36: Unqualified access [unqualified]
+  readonly property int cellWidth: Style.space(52)
+                                   ^^^^^
+Warning: Panel.qml:82:37: Unqualified access [unqualified]
+  readonly property int cellHeight: Style.space(34)
+                                    ^^^^^
+Warning: Panel.qml:83:38: Unqualified access [unqualified]
+  readonly property int cellSpacing: Style.space(2)
+                                     ^^^^^
+Warning: Panel.qml:84:42: Unqualified access [unqualified]
+  readonly property int weekColumnWidth: Style.space(32)
+                                         ^^^^^
+Warning: Panel.qml:85:38: Unqualified access [unqualified]
+  readonly property int gutterWidth: Style.space(14)
+                                     ^^^^^
+Warning: Panel.qml:244:44: Unqualified access [unqualified]
+    contentWidth: panel.fittedContentWidth(Style.space(560))
+                                           ^^^^^
+Warning: Panel.qml:249:21: Unqualified access [unqualified]
+      anchors.fill: parent
+                    ^^^^^^
+Warning: Panel.qml:282:20: Unqualified access [unqualified]
+          spacing: Style.space(8)
+                   ^^^^^
+Warning: Panel.qml:294:24: Unqualified access [unqualified]
+              spacing: Style.space(22)
+                       ^^^^^
+Warning: Panel.qml:303:21: Unqualified access [unqualified]
+                  ? Style.hoverStateColor(root.contentForeground, Color.accent)
+                    ^^^^^
+Info: Did you mean "style"?
+                  ? style.hoverStateColor(root.contentForeground, Color.accent)
+                    ^^^^^
+Warning: Panel.qml:303:67: Unqualified access [unqualified]
+                  ? Style.hoverStateColor(root.contentForeground, Color.accent)
+                                                                  ^^^^^
+Info: Did you mean "color"?
+                  ? Style.hoverStateColor(root.contentForeground, color.accent)
+                                                                  ^^^^^
+Warning: Panel.qml:318:21: Unqualified access [unqualified]
+                  ? Style.hoverStateColor(root.contentForeground, Color.accent)
+                    ^^^^^
+Info: Did you mean "style"?
+                  ? style.hoverStateColor(root.contentForeground, Color.accent)
+                    ^^^^^
+Warning: Panel.qml:318:67: Unqualified access [unqualified]
+                  ? Style.hoverStateColor(root.contentForeground, Color.accent)
+                                                                  ^^^^^
+Info: Did you mean "color"?
+                  ? Style.hoverStateColor(root.contentForeground, color.accent)
+                                                                  ^^^^^
+Warning: Panel.qml:354:18: Unqualified access [unqualified]
+              y: Style.space(6)
+                 ^^^^^
+Warning: Panel.qml:357:58: Unqualified access [unqualified]
+              height: Math.max(yearLabel.implicitHeight, Style.space(10))
+                                                         ^^^^^
+Warning: Panel.qml:368:26: Unqualified access [unqualified]
+                spacing: Style.space(10)
+                         ^^^^^
+Warning: Panel.qml:375:35: Unqualified access [unqualified]
+                  font.pixelSize: Style.font.bodySmall
+                                  ^^^^^
+Info: Did you mean "style"?
+                  font.pixelSize: style.font.bodySmall
+                                  ^^^^^
+Warning: Panel.qml:381:26: Unqualified access [unqualified]
+                  width: Style.space(70)
+                         ^^^^^
+Warning: Panel.qml:382:43: Unqualified access [unqualified]
+                  anchors.verticalCenter: parent.verticalCenter
+                                          ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                  anchors.verticalCenter: calendarScroll.parent.verticalCenter
+                                          ^^^^^^^^^^^^^^^
+Warning: Panel.qml:394:32: Unqualified access [unqualified]
+                  leftPadding: Style.space(6)
+                               ^^^^^
+Info: Did you mean "style"?
+                  leftPadding: style.space(6)
+                               ^^^^^
+Warning: Panel.qml:398:35: Unqualified access [unqualified]
+                  font.pixelSize: Style.font.bodySmall
+                                  ^^^^^
+Info: Did you mean "style"?
+                  font.pixelSize: style.font.bodySmall
+                                  ^^^^^
+Warning: Panel.qml:404:26: Unqualified access [unqualified]
+                  width: Style.space(60)
+                         ^^^^^
+Warning: Panel.qml:405:43: Unqualified access [unqualified]
+                  anchors.verticalCenter: parent.verticalCenter
+                                          ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                  anchors.verticalCenter: calendarScroll.parent.verticalCenter
+                                          ^^^^^^^^^^^^^^^
+Warning: Panel.qml:424:33: Unqualified access [unqualified]
+                font.pixelSize: Style.font.bodySmall
+                                ^^^^^
+Info: Did you mean "style"?
+                font.pixelSize: style.font.bodySmall
+                                ^^^^^
+Warning: Panel.qml:437:33: Unqualified access [unqualified]
+                font.pixelSize: Style.font.bodySmall
+                                ^^^^^
+Info: Did you mean "style"?
+                font.pixelSize: style.font.bodySmall
+                                ^^^^^
+Warning: Panel.qml:448:25: Unqualified access [unqualified]
+                height: Style.space(6)
+                        ^^^^^
+Warning: Panel.qml:449:25: Unqualified access [unqualified]
+                radius: Style.cornerRadius > 0 ? height / 2 : 0
+                        ^^^^^
+Warning: Panel.qml:445:37: Unqualified access [unqualified]
+                anchors.leftMargin: Style.space(12)
+                                    ^^^^^
+Warning: Panel.qml:446:38: Unqualified access [unqualified]
+                anchors.rightMargin: Style.space(12)
+                                     ^^^^^
+Warning: Panel.qml:456:26: Unqualified access [unqualified]
+                  color: Style.selectedStateColor(root.contentForeground, Color.accent)
+                         ^^^^^
+Warning: Panel.qml:456:75: Unqualified access [unqualified]
+                  color: Style.selectedStateColor(root.contentForeground, Color.accent)
+                                                                          ^^^^^
+Info: Did you mean "color"?
+                  color: Style.selectedStateColor(root.contentForeground, color.accent)
+                                                                          ^^^^^
+Warning: Panel.qml:476:58: Unqualified access [unqualified]
+              height: Math.max(lifeLabel.implicitHeight, Style.space(10))
+                                                         ^^^^^
+Warning: Panel.qml:485:33: Unqualified access [unqualified]
+                font.pixelSize: Style.font.bodySmall
+                                ^^^^^
+Info: Did you mean "style"?
+                font.pixelSize: style.font.bodySmall
+                                ^^^^^
+Warning: Panel.qml:497:33: Unqualified access [unqualified]
+                font.pixelSize: Style.font.bodySmall
+                                ^^^^^
+Info: Did you mean "style"?
+                font.pixelSize: style.font.bodySmall
+                                ^^^^^
+Warning: Panel.qml:506:25: Unqualified access [unqualified]
+                height: Style.space(6)
+                        ^^^^^
+Warning: Panel.qml:507:25: Unqualified access [unqualified]
+                radius: Style.cornerRadius > 0 ? height / 2 : 0
+                        ^^^^^
+Warning: Panel.qml:503:37: Unqualified access [unqualified]
+                anchors.leftMargin: Style.space(12)
+                                    ^^^^^
+Warning: Panel.qml:504:38: Unqualified access [unqualified]
+                anchors.rightMargin: Style.space(12)
+                                     ^^^^^
+Warning: Panel.qml:514:26: Unqualified access [unqualified]
+                  color: Style.selectedStateColor(root.contentForeground, Color.accent)
+                         ^^^^^
+Warning: Panel.qml:514:75: Unqualified access [unqualified]
+                  color: Style.selectedStateColor(root.contentForeground, Color.accent)
+                                                                          ^^^^^
+Info: Did you mean "color"?
+                  color: Style.selectedStateColor(root.contentForeground, color.accent)
+                                                                          ^^^^^
+Warning: Panel.qml:559:18: Unqualified access [unqualified]
+              y: Style.space(18)
+                 ^^^^^
+Warning: Panel.qml:561:24: Unqualified access [unqualified]
+              spacing: Style.space(3)
+                       ^^^^^
+Warning: Panel.qml:573:27: Unqualified access [unqualified]
+                  height: Style.space(16)
+                          ^^^^^
+Warning: Panel.qml:574:27: Unqualified access [unqualified]
+                  radius: Style.cornerRadius
+                          ^^^^^
+Warning: Panel.qml:576:23: Unqualified access [unqualified]
+                    ? Style.hoverFillFor(root.contentForeground, Color.accent)
+                      ^^^^^
+Warning: Panel.qml:576:66: Unqualified access [unqualified]
+                    ? Style.hoverFillFor(root.contentForeground, Color.accent)
+                                                                 ^^^^^
+Info: Did you mean "color"?
+                    ? Style.hoverFillFor(root.contentForeground, color.accent)
+                                                                 ^^^^^
+Warning: Panel.qml:583:25: Unqualified access [unqualified]
+                      ? Style.hoverStateColor(root.contentForeground, Color.accent)
+                        ^^^^^
+Info: Did you mean "style"?
+                      ? style.hoverStateColor(root.contentForeground, Color.accent)
+                        ^^^^^
+Warning: Panel.qml:583:71: Unqualified access [unqualified]
+                      ? Style.hoverStateColor(root.contentForeground, Color.accent)
+                                                                      ^^^^^
+Info: Did you mean "color"?
+                      ? Style.hoverStateColor(root.contentForeground, color.accent)
+                                                                      ^^^^^
+Warning: Panel.qml:586:37: Unqualified access [unqualified]
+                    font.pixelSize: Style.font.caption
+                                    ^^^^^
+Info: Did you mean "style"?
+                    font.pixelSize: style.font.caption
+                                    ^^^^^
+Warning: Panel.qml:608:27: Unqualified access [unqualified]
+                  height: Style.space(16)
+                          ^^^^^
+Warning: Panel.qml:617:28: Unqualified access [unqualified]
+                    width: root.cellWidth
+                           ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:618:29: Unqualified access [unqualified]
+                    height: Style.space(16)
+                            ^^^^^
+Info: Did you mean "style"?
+                    height: style.space(16)
+                            ^^^^^
+Warning: Panel.qml:621:27: Unqualified access [unqualified]
+                    text: root.weekdayLabel(modelData)
+                          ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:622:38: Unqualified access [unqualified]
+                    color: Qt.darker(root.contentForeground, 1.5)
+                                     ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:623:34: Unqualified access [unqualified]
+                    font.family: root.contentFontFamily
+                                 ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:624:37: Unqualified access [unqualified]
+                    font.pixelSize: Style.font.caption
+                                    ^^^^^
+Info: Did you mean "style"?
+                    font.pixelSize: style.font.caption
+                                    ^^^^^
+Warning: Panel.qml:636:28: Unqualified access [unqualified]
+                  spacing: root.cellSpacing
+                           ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:640:28: Unqualified access [unqualified]
+                    width: root.weekColumnWidth
+                           ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:641:29: Unqualified access [unqualified]
+                    height: root.cellHeight
+                            ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:644:27: Unqualified access [unqualified]
+                    text: modelData.week
+                          ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                    text: <id>.modelData.week
+                          ^^^^^
+      You first have to give the element an idWarning: Panel.qml:645:38: Unqualified access [unqualified]
+                    color: Qt.darker(root.contentForeground, 1.9)
+                                     ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:646:34: Unqualified access [unqualified]
+                    font.family: root.contentFontFamily
+                                 ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:647:37: Unqualified access [unqualified]
+                    font.pixelSize: Style.font.caption
+                                    ^^^^^
+Info: Did you mean "style"?
+                    font.pixelSize: style.font.caption
+                                    ^^^^^
+Warning: Panel.qml:651:28: Unqualified access [unqualified]
+                    width: root.gutterWidth
+                           ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:652:29: Unqualified access [unqualified]
+                    height: root.cellHeight
+                            ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:656:28: Unqualified access [unqualified]
+                    model: modelData.days
+                           ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                    model: <id>.modelData.days
+                           ^^^^^
+      You first have to give the element an idWarning: Panel.qml:661:30: Unqualified access [unqualified]
+                      width: root.cellWidth
+                             ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:662:31: Unqualified access [unqualified]
+                      height: root.cellHeight
+                              ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:663:31: Unqualified access [unqualified]
+                      radius: Style.cornerRadius
+                              ^^^^^
+Warning: Panel.qml:667:55: Unqualified access [unqualified]
+                      border.width: modelData.today ? Style.spacing.hairline : 0
+                                                      ^^^^^
+Warning: Panel.qml:668:37: Unqualified access [unqualified]
+                      border.color: Style.normalBorderFor(root.contentForeground, Color.accent)
+                                    ^^^^^
+Warning: Panel.qml:668:59: Unqualified access [unqualified]
+                      border.color: Style.normalBorderFor(root.contentForeground, Color.accent)
+                                                          ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:668:83: Unqualified access [unqualified]
+                      border.color: Style.normalBorderFor(root.contentForeground, Color.accent)
+                                                                                  ^^^^^
+Info: Did you mean "color"?
+                      border.color: Style.normalBorderFor(root.contentForeground, color.accent)
+                                                                                  ^^^^^
+Warning: Panel.qml:673:31: Unqualified access [unqualified]
+                        text: modelData.day
+                              ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                        text: <id>.modelData.day
+                              ^^^^^
+      You first have to give the element an idWarning: Panel.qml:674:32: Unqualified access [unqualified]
+                        color: modelData.inMonth
+                               ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                        color: <id>.modelData.inMonth
+                               ^^^^^
+      You first have to give the element an idWarning: Panel.qml:675:30: Unqualified access [unqualified]
+                          ? (modelData.weekend ? Qt.darker(root.contentForeground, 1.45) : root.contentForeground)
+                             ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                          ? (<id>.modelData.weekend ? Qt.darker(root.contentForeground, 1.45) : root.contentForeground)
+                             ^^^^^
+      You first have to give the element an idWarning: Panel.qml:675:60: Unqualified access [unqualified]
+                          ? (modelData.weekend ? Qt.darker(root.contentForeground, 1.45) : root.contentForeground)
+                                                           ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:675:92: Unqualified access [unqualified]
+                          ? (modelData.weekend ? Qt.darker(root.contentForeground, 1.45) : root.contentForeground)
+                                                                                           ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:676:39: Unqualified access [unqualified]
+                          : Qt.darker(root.contentForeground, 2.2)
+                                      ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:677:38: Unqualified access [unqualified]
+                        font.family: root.contentFontFamily
+                                     ^^^^
+Info: Set "pragma ComponentBehavior: Bound" in order to use IDs from outer components in nested components.
+pragma ComponentBehavior: Bound
+import QtQuick
+Warning: Panel.qml:678:41: Unqualified access [unqualified]
+                        font.pixelSize: Style.font.body
+                                        ^^^^^
+Info: Did you mean "style"?
+                        font.pixelSize: style.font.body
+                                        ^^^^^
+Warning: Panel.qml:679:36: Unqualified access [unqualified]
+                        font.bold: modelData.today
+                                   ^^^^^^^^^
+Info: modelData is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                        font.bold: <id>.modelData.today
+                                   ^^^^^
+      You first have to give the element an idWarning: Panel.qml:692:22: Unqualified access [unqualified]
+              width: Style.spacing.hairline
+                     ^^^^^
+Warning: Panel.qml:713:51: Unqualified access [unqualified]
+              height: monthLabel.implicitHeight + Style.space(10)
+                                                  ^^^^^
+Warning: Panel.qml:722:24: Unqualified access [unqualified]
+                width: Style.space(130)
+                       ^^^^^
+Info: Did you mean "style"?
+                width: style.space(130)
+                       ^^^^^
+Warning: Panel.qml:727:33: Unqualified access [unqualified]
+                font.pixelSize: Style.font.body
+                                ^^^^^
+Info: Did you mean "style"?
+                font.pixelSize: style.font.body
+                                ^^^^^
+Warning: Panel.qml:734:31: Unqualified access [unqualified]
+                anchors.left: parent.left
+                              ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                anchors.left: calendarScroll.parent.left
+                              ^^^^^^^^^^^^^^^
+Warning: Panel.qml:735:38: Unqualified access [unqualified]
+                anchors.leftMargin: -Style.space(8)
+                                     ^^^^^
+Warning: Panel.qml:736:41: Unqualified access [unqualified]
+                anchors.verticalCenter: parent.verticalCenter
+                                        ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                anchors.verticalCenter: calendarScroll.parent.verticalCenter
+                                        ^^^^^^^^^^^^^^^
+Warning: Panel.qml:745:32: Unqualified access [unqualified]
+                anchors.right: parent.right
+                               ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                anchors.right: calendarScroll.parent.right
+                               ^^^^^^^^^^^^^^^
+Warning: Panel.qml:746:39: Unqualified access [unqualified]
+                anchors.rightMargin: -Style.space(8)
+                                      ^^^^^
+Warning: Panel.qml:747:41: Unqualified access [unqualified]
+                anchors.verticalCenter: parent.verticalCenter
+                                        ^^^^^^
+Info: parent is a member of a parent element.
+      You can qualify the access with its id to avoid this warning.
+
+                anchors.verticalCenter: calendarScroll.parent.verticalCenter
+                                        ^^^^^^^^^^^^^^^

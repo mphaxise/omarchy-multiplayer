@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "id": "praneet.agent-sessions",
+  "id": "io.github.mphaxise.keepalive",
   "name": "Keepalive",
   "version": "0.1.0",
   "author": "Praneet Koppula",

@@ -1,6 +1,6 @@
 # Keepalive
 
-Coding agents that stay running on your Omarchy desktop. Close the terminal, reboot, come back later. The session is still there.
+Coding agents that stay running on your Omarchy desktop. Close the terminal and the agent keeps working. Reboot, and the session comes back as orphaned; press Enter and the agent picks up its own transcript where it left off.
 
 Each session shows up in the Omarchy bar. The panel tells you who needs an answer, who is working, and what finished today. When an agent needs you, you get a notification. When a session ends, you get a receipt: the branch, the commits, the diff, the files it made, and your verdict.
 
@@ -16,7 +16,9 @@ Herdr, Omarchy's agent runtime, keeps the agent process alive. This plugin keeps
 
 **Twenty commands.** All start with `omarchy-agent-session-`. The main ones are `new`, `list`, `open`, `send`, `stop`, `done`, `receipt`, and `show`. The rest handle names, goals, modes, previews, captures, and artifacts.
 
-**Notifications.** "api-refactor needs you" when the agent asks a question or a permission. "api-refactor finished" when it is done; click it to see the receipt. "api-refactor stopped unexpectedly" when Herdr loses the process; click it to revive.
+**Notifications.** "api-refactor needs you" when the agent asks a question or a permission. "api-refactor finished" when it is done; click it to see the receipt. "api-refactor stopped unexpectedly" when Herdr loses the process or the machine rebooted; click it to revive.
+
+**Revive.** An orphaned session revives with Enter: the agent starts again with `--resume` on its saved transcript, in the same worktree, with the same goal. Proven with Claude Code on the rig. Whatever tool call the agent was in the middle of is lost; the conversation is kept.
 
 **Permission modes.** Personal: the agent runs without asking. Shared: the agent asks before it acts. Restricted: read-only tools. The plugin checks the launch command before it runs. Only Personal can skip prompts.
 
@@ -59,7 +61,7 @@ omarchy-agent-session-receipt api-refactor
 omarchy-agent-session-show api-refactor --loop  # goal, captures, instructions, commits, verdict, in order
 ```
 
-`omarchy-shell @PLUGIN_ID@ open|close|toggle|refresh|openMostUrgent` controls the panel from a script or a keybinding.
+`omarchy-shell @PLUGIN_ID@ open|close|toggle|refresh|openMostUrgent` controls the panel from a script or a keybinding. `omarchy bar move @PLUGIN_ID@ --section left|center|right` moves the widget.
 
 ## Remove
 
@@ -90,6 +92,10 @@ That is the full list. It writes nothing to `/usr`, your project files, or Omarc
 
 This plugin is the installable part of [omarchy-multiplayer](https://github.com/mphaxise/omarchy-multiplayer). That repo has the specs, the test runs with screenshots, and the decision log. Run the tests with `python3 -m unittest discover -s tests`: 121 tests, standard library only.
 
+## Credits
+
+The panel follows the structure of Omarchy's built-in `agents` plugin and the `stevequinn/omarchy-hermes-sessions` plugin. The shell components (`Panel`, `KeyboardPanel`, `PanelKeyCatcher`, `CursorSurface`, `Button`, `TextField`) are Omarchy's own, used through `qs.Ui`.
+
 ## License
 
-MIT. It depends on Herdr (MIT), the Omarchy shell, Python 3, grim, and hyprctl. It downloads nothing.
+MIT. It depends on Herdr (MIT), the Omarchy shell (MIT), Python 3, grim, and hyprctl. It downloads nothing.
