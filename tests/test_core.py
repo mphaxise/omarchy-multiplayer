@@ -1811,8 +1811,9 @@ class TestWatchers(TestLanes):
             watch = [q for q in parent["queue"] if q.get("delivery") == "watch"]
             self.assertEqual(len(watch), 1)
             self.assertEqual(watch[0]["origin_session"], lane_id)
-            # runtime.bound, starting -> working, then the two artifacts: four events, one notice.
-            self.assertEqual(watch[0]["count"], 4)
+            # runtime.bound and starting -> working are noise to a watcher (run 9);
+            # the two artifacts are one coalesced notice.
+            self.assertEqual(watch[0]["count"], 2)
             self.assertIn("artifact second", watch[0]["text"])
             # Delivery on reconcile, when the parent is idle: one prompt, cursor advanced, queue clear.
             lane = self.store.try_load(lane_id)

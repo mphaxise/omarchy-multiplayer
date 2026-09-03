@@ -100,6 +100,12 @@ MODE_RANK = {"personal": 0, "shared": 1, "restricted": 2}
 # instruction on each watcher, coalesced until it is delivered; instruction
 # traffic itself never wakes a watcher, which keeps watching from echoing.
 WATCH_SILENT_TYPES = {"instruction.queued", "instruction.delivered", "instruction.dropped", "receipt.written"}
+# What a watcher is told about. Run 9 (2026-09-03): every runtime.bound and
+# working/idle flip on a lane became a marked instruction to the session's
+# own agent, and each one started a turn there. A watcher hears about the
+# states that need a person or end the work, artifacts, merges, and endings.
+WATCH_MATERIAL_STATES = {"blocked", "waiting", "failed", "done", "stopped", "orphaned"}
+WATCH_MATERIAL_TYPES = {"artifact.added", "lane.merged", "child.completed", "session.ended", "goal.set"}
 EVENTS_WARN_AT = 50000
 
 # The state machine table from 01-session-model.md. ANY is the "any live
@@ -1040,7 +1046,7 @@ class SessionStore:
             # days long at most; one this size is a runaway, and the record
             # says so once instead of quietly growing.
             eprint(f"session {session_id}: events.jsonl reached {seq} rows; this session should end")
-        if event_type not in WATCH_SILENT_TYPES:
+        if watch_material(event):
             notify_watchers(self, session_id, event)
         return event
 
@@ -1886,6 +1892,15 @@ def cmd_new(args, ctx):
 # Watchers (06-event-driven-state, pattern 06)
 # --------------------------------------------------------------------------
 
+def watch_material(event):
+    t = event.get("type")
+    if t in WATCH_SILENT_TYPES:
+        return False
+    if t == "status.changed":
+        return (event.get("data") or {}).get("to") in WATCH_MATERIAL_STATES
+    return t in WATCH_MATERIAL_TYPES
+
+
 def add_watcher(store, watched, watcher_id):
     """`watcher_id` follows `watched` from its current last event on."""
     watchers = watched.get("watchers") or []
@@ -1942,10 +1957,10 @@ def notify_watchers(store, watched_id, event):
         if pending is not None:
             pending["seq_to"] = event["seq"]
             pending["count"] = int(pending.get("count") or 1) + 1
-            pending["text"] = f"{watched['name']}: {summary} ({pending['count']} events since seq {pending['seq_from']})"
+            pending["text"] = f"{summary} ({pending['count']} events since seq {pending['seq_from']})"
             store.save_session(watcher)
             continue
-        instr = new_instruction(f"{watched['name']}: {summary}", agent_actor(watched_id, label=watched["name"]),
+        instr = new_instruction(summary, agent_actor(watched_id, label=watched["name"]),
                                 delivery="watch", origin_session=watched_id)
         instr["seq_from"] = int(w.get("cursor") or 0)
         instr["seq_to"] = event["seq"]

@@ -76,7 +76,11 @@ CursorSurface {
   readonly property bool needsAttention: session ? session.needs_attention === true : false
   // 11-agent-lanes.md: the session's lanes, and the lane that needs you
   // when the session's own agent does not (folded in by Panel.foldLanes).
-  readonly property var lanes: session && Array.isArray(session.lanes) ? session.lanes : []
+  // A delegate's `session` comes through the model as a QVariantMap, so a
+  // nested array arrives as a QVariantList: it has a length and iterates,
+  // and Array.isArray says false (rig, run 9, 2026-09-03: lane lines never
+  // showed). Test length, never isArray, on anything read from `session`.
+  readonly property var lanes: session && session.lanes && session.lanes.length !== undefined ? session.lanes : []
   readonly property bool hasLanes: lanes.length > 0
   readonly property var attentionLane: session && session.attention_lane ? session.attention_lane : null
   readonly property bool laneNeedsYou: !needsAttention && attentionLane !== null

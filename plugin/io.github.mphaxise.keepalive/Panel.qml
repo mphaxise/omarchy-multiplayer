@@ -771,7 +771,7 @@ Panel {
     var parts = ["↑↓ move", "⏎ open", "s send", "x stop", "n new"]
     var cur = root.selectedSession
     var curLive = cur && cur.status && !root.sessionEnded(cur) && cur.status.state !== "orphaned"
-    if (cur && Array.isArray(cur.lanes) && cur.lanes.length > 0) parts.push("l lane")
+    if (cur && Array.isArray(cur.lanes) && cur.lanes.length > 0) parts.push("w lane")
     else if (curLive) parts.push("a add")
     if (cur && cur.preview && cur.preview.value) parts.push("p preview")
     if (root.doneHiddenCount > 0) parts.push("→ more")
@@ -873,8 +873,10 @@ Panel {
           root.openReceipt(le ? le.id : s.id)
         } else if (t === "p" || t === "P") {
           if (s.preview && s.preview.value) root.focusPreview(s.id)
-        } else if (t === "l" || t === "L") {
-          root.walkLane(s)                                   // 11-agent-lanes.md
+        } else if (t === "w" || t === "W") {
+          // 11-agent-lanes.md. `w`, because PanelKeyCatcher takes h, j, k,
+          // and l as arrows before onTextKey sees them (run 9, 2026-09-03).
+          root.walkLane(s)
         } else if (t === "a" || t === "A") {
           if (ended || s.status.state === "orphaned") return
           root.armedStopId = ""

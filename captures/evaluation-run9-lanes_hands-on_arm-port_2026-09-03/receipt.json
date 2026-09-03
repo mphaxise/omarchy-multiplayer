@@ -1,0 +1,135 @@
+{
+  "session_id": "01M1KYR0DHERHW43NG8GGMG7VH",
+  "name": "lanes-page",
+  "agent": {
+    "kind": "claude",
+    "harness_session_ref": "b55e83cc-c9a2-4a15-90e3-0ef93abfc92b",
+    "version": null
+  },
+  "owner": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "created_by": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "started_at": "2026-09-03T15:38:35Z",
+  "ended_at": "2026-09-03T15:44:13Z",
+  "duration_s": 338,
+  "end_state": "done",
+  "end_reason": "verdict:kept",
+  "started_with": {
+    "command": "omarchy-agent-session-core new --agent claude --mode personal --name lanes-page --base session/loop-hello --goal 'hello.html gains a footer and a test file, from two agents\nREADME.md stays untouched\nBoth lanes land on the session branch' --cwd /home/omarchy/Work/spike-repo",
+    "cwd": "/home/omarchy/Work/spike-repo",
+    "env_summary": {
+      "shell": "/bin/bash",
+      "term": null
+    }
+  },
+  "goal": {
+    "text": "hello.html gains a footer and a test file, from two agents\nREADME.md stays untouched\nBoth lanes land on the session branch",
+    "set_by": {
+      "kind": "human",
+      "id": "omarchy@omarchy",
+      "label": "omarchy"
+    },
+    "set_at": "2026-09-03T15:38:35Z"
+  },
+  "workspace": {
+    "repo_root": "/home/omarchy/Work/spike-repo",
+    "worktree_path": "/home/omarchy/.herdr/worktrees/lanes-page",
+    "branch": "session/lanes-page",
+    "base_branch": "session/loop-hello",
+    "created_by_session": true,
+    "worktree_removed": false,
+    "worktree_removed_reason": "committed but not pushed to any remote and not merged into base_branch"
+  },
+  "commits": [
+    {
+      "sha": "59164e79aac4eb10e30c21942d16cb84a70b5f0f",
+      "subject": "tests for the page",
+      "author": "spike"
+    },
+    {
+      "sha": "f7d9519cdb54b9afcb2a60fec127968a0be9c55e",
+      "subject": "readme from main",
+      "author": "main"
+    }
+  ],
+  "diff_stat": {
+    "files": 2,
+    "insertions": 8,
+    "deletions": 1
+  },
+  "dirty": false,
+  "unpushed": true,
+  "artifacts": [
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1KYR0DHERHW43NG8GGMG7VH/artifacts/01M1KZ2AE671TZPD06QV9KWE4M-verdict.txt",
+      "label": "verdict",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T15:44:13Z",
+      "kind": "note",
+      "source": "typed",
+      "state": "proposed"
+    }
+  ],
+  "instructions": {
+    "delivered": 15,
+    "dropped": 0,
+    "authors": [
+      "agent:01M1KYRS8J6JNJ31N8X383BP2F",
+      "agent:01M1KZ00424AEHBJTRES5D7FYF",
+      "human:omarchy@omarchy"
+    ]
+  },
+  "approvals": {
+    "requested": 0,
+    "approved": 0,
+    "denied": 0
+  },
+  "children": [
+    {
+      "id": "01M1KZ00424AEHBJTRES5D7FYF",
+      "end_state": "stopped"
+    },
+    {
+      "id": "01M1KYRS8J6JNJ31N8X383BP2F",
+      "end_state": "done"
+    }
+  ],
+  "lanes": [
+    {
+      "lane": "claude",
+      "id": "01M1KYRS8J6JNJ31N8X383BP2F",
+      "kind": "claude",
+      "task": "Add a file tests.md that lists three checks for hello.html: heading present, date present, footer present. Commit with the message: tests for the page. Do nothing else.",
+      "end_state": "done",
+      "detail": "kept",
+      "merged_commits": [
+        "59164e79aac4eb10e30c21942d16cb84a70b5f0f"
+      ],
+      "range": "f7d9519..bd1baac"
+    },
+    {
+      "lane": "copy",
+      "id": "01M1KZ00424AEHBJTRES5D7FYF",
+      "kind": "claude",
+      "task": "Replace the first line of README.md with: Hello page, lane copy. Commit with the message: readme from the lane. Do nothing else.",
+      "end_state": "stopped",
+      "detail": "stopped",
+      "merged_commits": [],
+      "range": null
+    }
+  ],
+  "lane": null,
+  "harness_session_ref": "b55e83cc-c9a2-4a15-90e3-0ef93abfc92b",
+  "state_version": 52
+}

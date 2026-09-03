@@ -66,7 +66,7 @@ A lane inherits the session's mode and may be stricter, never looser: a Personal
 
 ## The panel
 
-A session row with lanes gains one line per lane under the goal: dot, lane name, agent kind, state, the task elided. `l` walks the cursor through a session's lanes so Enter, `s`, `x`, and `p` act on a lane; the legend shows "l lane" only when the cursor row has lanes. `a` on a live session opens a field, "Add an agent: <kind> <task>", with the default agent prefilled, in the same place the `n` field opens. The hero counts lanes that need you across sessions, and needs-you ranking names the lane. A session with lanes stays one row until the cursor is on it, so signal 1's first row is unchanged.
+A session row with lanes gains one line per lane under the goal: dot, lane name, agent kind, state, the task elided. `w` walks the cursor through a session's lanes so Enter, `s`, `x`, and `p` act on a lane; the legend shows "w lane" only when the cursor row has lanes (`l` is an arrow key in the shell's key catcher). `a` on a live session opens a field, "Add an agent: <kind> <task>", with the default agent prefilled, in the same place the `n` field opens. The hero counts lanes that need you across sessions, and needs-you ranking names the lane. A session with lanes stays one row until the cursor is on it, so signal 1's first row is unchanged.
 
 ## Success signals
 

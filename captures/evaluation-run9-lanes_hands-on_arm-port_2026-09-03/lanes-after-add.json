@@ -1,0 +1,34 @@
+{
+  "session": "01M1KYR0DHERHW43NG8GGMG7VH",
+  "name": "lanes-page",
+  "lanes": [
+    {
+      "lane": "main",
+      "id": "01M1KYR0DHERHW43NG8GGMG7VH",
+      "kind": "claude",
+      "state": "working",
+      "since": "2026-09-03T15:39:02Z",
+      "detail": null,
+      "task": "hello.html gains a footer and a test file, from two agents",
+      "mode": "personal",
+      "branch": "session/lanes-page",
+      "worktree": "/home/omarchy/.herdr/worktrees/lanes-page",
+      "needs_attention": false,
+      "resumable": true
+    },
+    {
+      "lane": "claude",
+      "id": "01M1KYRS8J6JNJ31N8X383BP2F",
+      "kind": "claude",
+      "state": "working",
+      "since": "2026-09-03T15:39:05Z",
+      "detail": null,
+      "task": "Add a file tests.md that lists three checks for hello.html: heading present, date present, footer present. Commit with t",
+      "mode": "personal",
+      "branch": "session/lanes-page--claude",
+      "worktree": "/home/omarchy/.herdr/worktrees/lanes-page--claude",
+      "needs_attention": false,
+      "resumable": true
+    }
+  ]
+}
