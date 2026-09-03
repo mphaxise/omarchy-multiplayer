@@ -248,7 +248,8 @@ class TestListJsonShape(CoreTestCase):
         self.assertEqual(
             set(entry.keys()),
             {"id", "name", "agent", "status", "owner", "workspace", "needs_attention", "children", "state_version",
-             "goal", "mode", "resumable", "created_by", "project", "preview", "loop", "lane", "lanes"},
+             "goal", "mode", "resumable", "created_by", "project", "preview", "loop", "lane", "lanes",
+             "visibility", "suggestions", "presence"},
         )
         self.assertEqual(set(entry["agent"].keys()), {"kind"})
         self.assertEqual(set(entry["status"].keys()), {"state", "since", "source", "detail"})
@@ -1913,3 +1914,154 @@ class TestArtifactLinksAndStates(CoreTestCase):
         self.assertIn("https://www.figma.com/file/abc/frame   frame   live", out)
         rc, out, err = self.run_cli(["artifact-mark", sid, "nothing-here", "--state", "live"])
         self.assertEqual(rc, 3)
+
+
+# --------------------------------------------------------------------------
+# 12-two-people.md: a second identity, visibility, access, suggestions, presence
+# --------------------------------------------------------------------------
+
+class TestTwoPeople(CoreTestCase):
+    def as_actor(self, actor):
+        """Run the next commands as another human actor (the proxy for a
+        second person: OMARCHY_ACTOR, or an ssh client host)."""
+        os.environ["OMARCHY_ACTOR"] = actor
+
+    def as_me(self):
+        os.environ.pop("OMARCHY_ACTOR", None)
+
+    def tearDown(self):
+        self.as_me()
+        super().tearDown()
+
+    def test_the_second_identity_comes_from_the_env_or_the_ssh_client(self):
+        self.as_me()
+        me = core.current_human_actor()
+        self.as_actor("human:sam@mac")
+        other = core.current_human_actor()
+        self.assertEqual(other["id"], "sam@mac")
+        self.assertEqual(other["label"], "sam")
+        self.assertFalse(core.same_actor(me, other))
+        self.as_me()
+        os.environ["SSH_CONNECTION"] = "192.0.2.10 51234 192.0.2.2 22"
+        try:
+            over_ssh = core.current_human_actor()
+            self.assertTrue(over_ssh["id"].endswith("@192.0.2.10") or "@" in over_ssh["id"])
+            self.assertNotEqual(over_ssh["id"], me["id"])
+        finally:
+            os.environ.pop("SSH_CONNECTION", None)
+
+    def test_a_draft_is_visible_to_its_creator_and_to_those_granted_access_only(self):
+        self.start_fake_herdr()
+        sid = make_bare_session(self.store, "draft-page", runtime=None, state="idle")
+        rc, out, err = self.run_cli(["visibility", sid, "draft"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.store.try_load(sid)["visibility"], "draft")
+        self.as_actor("human:sam@mac")
+        rc, out, err = self.run_cli(["list", "--json"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual([e["id"] for e in json.loads(out)["sessions"]], [])
+        rc, out, err = self.run_cli(["list", "--json", "--all"])
+        self.assertEqual([e["id"] for e in json.loads(out)["sessions"]], [sid])
+        rc, out, err = self.run_cli(["visibility", sid, "shared"])   # sam is not the owner
+        self.assertEqual(rc, 5)
+        self.as_me()
+        rc, out, err = self.run_cli(["grant", sid, "--to", "sam@mac", "--level", "view"])
+        self.assertEqual(rc, 0, err)
+        self.as_actor("human:sam@mac")
+        rc, out, err = self.run_cli(["list", "--json"])
+        self.assertEqual([e["id"] for e in json.loads(out)["sessions"]], [sid])
+        types = [e["type"] for e in self.store.read_events(sid)]
+        self.assertIn("session.visibility_changed", types)
+        self.assertIn("access.granted", types)
+
+    def test_a_suggestion_waits_for_the_owner_and_runs_with_its_author_when_accepted(self):
+        self.start_fake_herdr()
+        self.fake_herdr.set_result("agent.list", {"agents": [{"name": "any", "agent_status": "idle", "interactive_ready": True}]})
+        self.fake_herdr.set_result("agent.prompt", {"agent": {"agent_status": "working"}})
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1", "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
+        sid = make_bare_session(self.store, "shared-page", runtime=runtime, state="idle")
+        rc, out, err = self.run_cli(["grant", sid, "--to", "sam@mac", "--level", "suggest"])
+        self.assertEqual(rc, 0, err)
+        self.as_actor("human:sam@mac")
+        rc, out, err = self.run_cli(["send", sid, "Make the footer italic"])          # contribute is needed
+        self.assertEqual(rc, 5)
+        before = len(self.fake_herdr.calls("agent.prompt"))
+        rc, out, err = self.run_cli(["send", sid, "Make the footer italic", "--suggest"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(len(self.fake_herdr.calls("agent.prompt")), before)   # nothing ran
+        session = self.store.try_load(sid)
+        self.assertEqual([q["delivery"] for q in session["queue"]], ["suggested"])
+        rc, out, err = self.run_cli(["list", "--json"])
+        entry = [e for e in json.loads(out)["sessions"] if e["id"] == sid][0]
+        self.assertEqual(entry["suggestions"][0]["text"], "Make the footer italic")
+        self.assertEqual(entry["suggestions"][0]["author"]["id"], "sam@mac")
+        rc, out, err = self.run_cli(["accept", sid])                                     # sam cannot accept
+        self.assertEqual(rc, 5)
+        self.as_me()
+        rc, out, err = self.run_cli(["accept", sid])
+        self.assertEqual(rc, 0, err)
+        prompts = self.fake_herdr.calls("agent.prompt")[before:]
+        self.assertTrue(any("Make the footer italic" in p.get("text", "") for p in prompts))
+        events = self.store.read_events(sid)
+        accepted = [e for e in events if e["type"] == "suggestion.accepted"]
+        self.assertEqual(accepted[0]["actor"]["id"], core.current_human_actor()["id"])
+        self.assertEqual(accepted[0]["data"]["author"]["id"], "sam@mac")
+        delivered = [e for e in events if e["type"] == "instruction.delivered"]
+        self.assertEqual(delivered[-1]["actor"]["id"], "sam@mac")                       # the instruction keeps its author
+        self.assertEqual(self.store.try_load(sid)["queue"], [])
+
+    def test_dismiss_records_who_said_no(self):
+        self.start_fake_herdr()
+        sid = make_bare_session(self.store, "shared-page", runtime=None, state="idle")
+        self.run_cli(["grant", sid, "--to", "sam@mac", "--level", "suggest"])
+        self.as_actor("human:sam@mac")
+        rc, out, err = self.run_cli(["send", sid, "Drop the date line", "--suggest"])
+        self.assertEqual(rc, 0, err)
+        self.as_me()
+        rc, out, err = self.run_cli(["accept", sid, "--dismiss"])
+        self.assertEqual(rc, 0, err)
+        events = self.store.read_events(sid)
+        self.assertEqual(events[-1]["type"], "suggestion.dismissed")
+        self.assertEqual(self.store.try_load(sid)["queue"], [])
+
+    def test_assign_moves_responsibility_and_changes_no_access(self):
+        self.start_fake_herdr()
+        sid = make_bare_session(self.store, "handover", runtime=None, state="idle")
+        self.as_actor("human:sam@mac")
+        rc, out, err = self.run_cli(["stop", sid])          # sam may not stop it
+        self.assertEqual(rc, 5)
+        self.as_me()
+        rc, out, err = self.run_cli(["assign", sid, "human:sam@mac"])
+        self.assertEqual(rc, 0, err)
+        session = self.store.try_load(sid)
+        self.assertEqual(session["owner"]["actor"]["id"], "sam@mac")
+        self.assertEqual(session["access"], [])            # nothing granted, nothing revoked
+        self.as_actor("human:sam@mac")
+        rc, out, err = self.run_cli(["stop", sid])          # the owner may
+        self.assertEqual(rc, 0, err)
+        self.as_me()
+        rc, out, err = self.run_cli(["visibility", sid, "draft"])   # the creator keeps own
+        self.assertEqual(rc, 0, err)
+
+    def test_presence_lives_in_the_runtime_dir_and_never_in_the_record(self):
+        self.start_fake_herdr()
+        runtime_dir = pathlib.Path(tempfile.mkdtemp(prefix="omarchy-xdg-"))
+        os.environ["XDG_RUNTIME_DIR"] = str(runtime_dir)
+        try:
+            sid = make_bare_session(self.store, "watched-page", runtime=None, state="idle")
+            rc, out, err = self.run_cli(["presence", sid, "--here"])
+            self.assertEqual(rc, 0, err)
+            self.as_actor("human:sam@mac")
+            rc, out, err = self.run_cli(["presence", sid, "--here"])
+            self.assertEqual(rc, 0, err)
+            self.assertEqual(len(out.strip().splitlines()), 2)
+            rc, out, err = self.run_cli(["list", "--json"])
+            entry = [e for e in json.loads(out)["sessions"] if e["id"] == sid][0]
+            self.assertEqual(len(entry["presence"]), 2)
+            self.assertNotIn("presence", self.store.try_load(sid))
+            self.assertNotIn("presence", self.store.session_json_path(sid).read_text())
+            rc, out, err = self.run_cli(["presence", sid, "--leave"])
+            self.assertEqual(len(out.strip().splitlines()), 1)
+        finally:
+            os.environ.pop("XDG_RUNTIME_DIR", None)
+            shutil.rmtree(runtime_dir, ignore_errors=True)

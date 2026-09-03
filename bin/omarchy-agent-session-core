@@ -86,7 +86,16 @@ EVENT_TYPES = (
     "approval.requested", "approval.resolved", "artifact.added",
     "receipt.written", "session.ended",
     "lane.added", "lane.merged", "artifact.updated",
+    "session.visibility_changed", "access.granted", "access.revoked",
+    "suggestion.accepted", "suggestion.dismissed",
 )
+
+# 12-two-people.md: who may see and act on a session. `owner` stays who is
+# responsible; `access` is who may act at all and how much. The creator
+# and the owner hold `own` without an entry.
+VISIBILITIES = ("private", "draft", "shared")
+ACCESS_LEVELS = ("view", "suggest", "contribute", "own")
+ACCESS_RANK = {level: i for i, level in enumerate(ACCESS_LEVELS)}
 
 # 11-agent-lanes.md: a lane is one agent with one task inside a session,
 # recorded as a child session with spawn_reason "lane". The session's own
@@ -270,13 +279,35 @@ ACTOR_KINDS = ("human", "agent", "system")
 
 
 def current_human_actor():
+    """human:<user>@<host>, unverified and machine-local (08-identity-and-
+    attribution.md). Slice 3's second identity space, in proxy form:
+    OMARCHY_ACTOR names the actor outright, and a command that arrives over
+    ssh reports the client host instead of this one, so the same OS user
+    driving the rig from another machine is a distinguishable actor. The
+    trust boundary is unchanged: anyone on this machine can set either."""
+    override = os.environ.get("OMARCHY_ACTOR")
+    if override:
+        with contextlib.suppress(UsageError):
+            actor = parse_actor_string(override if ":" in override else f"human:{override}")
+            if actor["kind"] == "human":
+                return actor
     user = os.environ.get("USER") or os.environ.get("LOGNAME")
     if not user:
         with contextlib.suppress(Exception):
             user = getpass.getuser()
     user = user or "unknown"
     host = socket.gethostname().split(".")[0] or "localhost"
+    ssh = os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_CLIENT")
+    if ssh:
+        client = ssh.split()[0]
+        with contextlib.suppress(Exception):
+            client = socket.gethostbyaddr(client)[0].split(".")[0] or client
+        host = client
     return {"kind": "human", "id": f"{user}@{host}", "label": user}
+
+
+def same_actor(a, b):
+    return bool(a) and bool(b) and a.get("kind") == b.get("kind") and a.get("id") == b.get("id")
 
 
 def system_actor():
@@ -1509,6 +1540,7 @@ def new_session_record(session_id, name, created_by, owner, mode, agent_kind, wo
         "lineage": {"parent_id": parent_id, "children": [], "spawn_reason": spawn_reason},
         "goal": {"text": goal_text, "set_by": created_by, "set_at": now} if goal_text else None,
         "queue": [], "state_version": 0, "labels": [], "preview": None,
+        "visibility": "shared", "access": [],
         "started_with": {"command": command, "cwd": cwd, "env_summary": summarize_env()},
     }
 
@@ -1554,6 +1586,7 @@ def build_parser():
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("list")
+    p.add_argument("--all", action="store_true", help="include drafts and private sessions you were not given access to")
     p.add_argument("--state", choices=STATES)
     p.add_argument("--mine", action="store_true")
     p.add_argument("--json", action="store_true")
@@ -1578,6 +1611,26 @@ def build_parser():
     p.add_argument("--direction", default="right", choices=["right", "down"], help="where the lane's pane splits from the session's")
     p.add_argument("--json", action="store_true")
 
+    p = sub.add_parser("visibility", help="private, draft, or shared (12-two-people.md)")
+    add_id_arg(p)
+    p.add_argument("visibility", choices=list(VISIBILITIES))
+
+    p = sub.add_parser("grant", help="give another actor view, suggest, contribute, or own access; --revoke takes it away")
+    add_id_arg(p)
+    p.add_argument("--to", required=True, help="human:<user>@<host>, or <user>@<host>")
+    p.add_argument("--level", choices=list(ACCESS_LEVELS), default="suggest")
+    p.add_argument("--revoke", action="store_true")
+
+    p = sub.add_parser("accept", help="accept (or --dismiss) a suggestion waiting on the session")
+    add_id_arg(p)
+    p.add_argument("suggestion", nargs="?", help="an instruction id, 'oldest' (default), or 'latest'")
+    p.add_argument("--dismiss", action="store_true")
+
+    p = sub.add_parser("presence", help="who has the session open right now; --here and --leave mark yourself")
+    add_id_arg(p)
+    p.add_argument("--here", action="store_true")
+    p.add_argument("--leave", action="store_true")
+
     p = sub.add_parser("artifact-mark", help="relabel an artifact proposed or live (05-receipts-and-artifacts.md)")
     add_id_arg(p)
     p.add_argument("artifact", help="label, path, or id prefix")
@@ -1596,6 +1649,7 @@ def build_parser():
     add_id_arg(p)
     p.add_argument("text")
     p.add_argument("--lane", help="one lane; without it a session with lanes fans out to every live lane")
+    p.add_argument("--suggest", action="store_true", help="queue it for the owner to accept or dismiss (12-two-people.md)")
     p.add_argument("--from", dest="from_session")
     p.add_argument("--about", dest="about_artifact")
     p.add_argument("--with-capture", action="store_true",
@@ -1738,6 +1792,10 @@ def session_list_entry(s):
         "lane": ({"name": s["lane"]["name"], "parent_id": s["lane"]["parent_id"], "parent_name": s["lane"].get("parent_name")}
                  if is_lane(s) else None),
         "lanes": [],
+        # 12-two-people.md
+        "visibility": session_visibility(s),
+        "suggestions": [{"id": q["id"], "author": q.get("author"), "text": q.get("text"), "queued_at": q.get("queued_at")} for q in pending_suggestions(s)],
+        "presence": read_presence(s["id"]),
     }
 
 
@@ -1885,6 +1943,160 @@ def cmd_new(args, ctx):
         print(json.dumps(record, indent=2))
     else:
         print(session_id)
+    return EXIT_OK
+
+
+# --------------------------------------------------------------------------
+# Two people (12-two-people.md): visibility, access, suggestions, presence
+# --------------------------------------------------------------------------
+
+def session_visibility(session):
+    return session.get("visibility") or "shared"
+
+
+def access_level_of(session, actor):
+    """The actor's level on the session: own for the creator and the owner,
+    the granted level otherwise, view when the session is shared, None when
+    the actor may not see it at all."""
+    if same_actor(session.get("created_by"), actor) or same_actor((session.get("owner") or {}).get("actor"), actor):
+        return "own"
+    for grant in session.get("access") or []:
+        if same_actor(grant.get("actor"), actor):
+            return grant.get("level")
+    if session_visibility(session) == "shared":
+        return "view"
+    return None
+
+
+def can_see(session, actor):
+    return access_level_of(session, actor) is not None
+
+
+def require_access(session, actor, level):
+    have = access_level_of(session, actor)
+    if have is None or ACCESS_RANK[have] < ACCESS_RANK[level]:
+        raise ConflictError(f"{actor_to_string(actor)} has {have or 'no'} access to '{session['name']}'; {level} is needed")
+    return have
+
+
+def cmd_visibility(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    actor = current_human_actor()
+    require_access(session, actor, "own")
+    old = session_visibility(session)
+    if args.visibility == old:
+        print(f"{session['name']}: {old}")
+        return EXIT_OK
+    ev = ctx.store.append_event(session["id"], "session.visibility_changed", actor, {"from": old, "to": args.visibility})
+    session["visibility"] = args.visibility
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    print(f"{session['name']}: {old} -> {args.visibility}")
+    return EXIT_OK
+
+
+def cmd_grant(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    actor = current_human_actor()
+    require_access(session, actor, "own")
+    target = parse_actor_string(args.to if ":" in args.to else f"human:{args.to}")
+    access = [g for g in (session.get("access") or []) if not same_actor(g.get("actor"), target)]
+    if args.revoke:
+        ev = ctx.store.append_event(session["id"], "access.revoked", actor, {"actor": target})
+        print(f"{actor_to_string(target)}: access revoked on {session['name']}")
+    else:
+        access.append({"actor": target, "level": args.level, "granted_by": actor, "granted_at": now_rfc3339()})
+        ev = ctx.store.append_event(session["id"], "access.granted", actor, {"actor": target, "level": args.level})
+        print(f"{actor_to_string(target)}: {args.level} on {session['name']}")
+    session["access"] = access
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    return EXIT_OK
+
+
+def pending_suggestions(session):
+    return [q for q in session.get("queue") or [] if q.get("delivery") == "suggested"]
+
+
+def cmd_accept(args, ctx):
+    """The owner accepts a suggestion: it becomes a steer instruction from
+    its author, delivered now, with the acceptance recorded as its own
+    attributed event."""
+    session = ctx.store.load(args.id_or_name)
+    actor = current_human_actor()
+    require_access(session, actor, "own")
+    pending = pending_suggestions(session)
+    if not pending:
+        raise NotFoundError(f"no suggestions waiting on '{session['name']}'")
+    chosen = pending[0] if args.suggestion in (None, "", "latest", "oldest") else next((q for q in pending if q["id"] == args.suggestion), None)
+    if args.suggestion == "latest":
+        chosen = pending[-1]
+    if chosen is None:
+        raise NotFoundError(f"no suggestion '{args.suggestion}' on '{session['name']}'")
+    if args.dismiss:
+        ev = ctx.store.append_event(session["id"], "suggestion.dismissed", actor,
+                                     {"instruction_id": chosen["id"], "author": chosen["author"], "text": chosen["text"]})
+        session["queue"] = [q for q in session["queue"] if q["id"] != chosen["id"]]
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+        print(f"dismissed: {chosen['text']}")
+        return EXIT_OK
+    ev = ctx.store.append_event(session["id"], "suggestion.accepted", actor,
+                                 {"instruction_id": chosen["id"], "author": chosen["author"], "text": chosen["text"]})
+    session["queue"] = [q for q in session["queue"] if q["id"] != chosen["id"]]
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    send_args = argparse.Namespace(id_or_name=session["id"], text=chosen["text"], from_session=None, about_artifact=chosen.get("about_artifact"),
+                                   wait=False, until=[], timeout=None, lane=None, with_capture=False, suggest=False,
+                                   author_override=chosen["author"], accepted_by=actor)
+    return cmd_send(send_args, ctx)
+
+
+PRESENCE_TTL_S = 600
+
+
+def presence_dir(session_id):
+    base = os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()
+    return pathlib.Path(base) / "omarchy-sessions" / "presence" / session_id
+
+
+def touch_presence(session_id, actor):
+    """Presence lives in the runtime directory only: who has a terminal or
+    a panel on the session right now. Never written to the record, gone
+    with the session's runtime dir (08-identity-and-attribution.md)."""
+    with contextlib.suppress(OSError):
+        d = presence_dir(session_id)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / actor_to_string(actor).replace("/", "_")).write_text(now_rfc3339() + "\n", encoding="utf-8")
+
+
+def leave_presence(session_id, actor):
+    with contextlib.suppress(OSError):
+        (presence_dir(session_id) / actor_to_string(actor).replace("/", "_")).unlink()
+
+
+def read_presence(session_id):
+    out = []
+    d = presence_dir(session_id)
+    if not d.exists():
+        return out
+    now = time.time()
+    for f in sorted(d.iterdir()):
+        with contextlib.suppress(OSError):
+            if now - f.stat().st_mtime <= PRESENCE_TTL_S:
+                out.append(f.name)
+    return out
+
+
+def cmd_presence(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    actor = current_human_actor()
+    if args.leave:
+        leave_presence(session["id"], actor)
+    elif args.here:
+        touch_presence(session["id"], actor)
+    for who in read_presence(session["id"]):
+        print(who)
     return EXIT_OK
 
 
@@ -2295,6 +2507,11 @@ def cmd_list(args, ctx):
         me = current_human_actor()
         sessions = [s for s in sessions if s["owner"]["actor"].get("id") == me["id"]]
     sessions.sort(key=lambda s: s["created_at"])
+    # 12-two-people.md: a draft or private session shows only to those
+    # with access; --all overrides for the person at the machine.
+    me = current_human_actor()
+    if not getattr(args, "all", False):
+        sessions = [s for s in sessions if can_see(s, me)]
     everything = ctx.store.list_sessions()
     entries = attach_lane_entries([session_list_entry(s) for s in sessions], everything)
     if args.json:
@@ -2464,6 +2681,8 @@ def cmd_open(args, ctx):
     if getattr(args, "lane", None):
         session = resolve_lane(ctx.store, session, args.lane)
     actor = current_human_actor()
+    require_access(session, actor, "contribute")
+    touch_presence(session["id"], actor)
     state = session["status"]["state"]
     runtime = session.get("runtime")
 
@@ -2561,6 +2780,20 @@ def wait_interactive_ready(herdr, alias, timeout_s=30.0, step_s=0.5):
 
 def cmd_send(args, ctx):
     session = ctx.store.load(args.id_or_name)
+    me = current_human_actor()
+    if getattr(args, "suggest", False):
+        # 12-two-people.md: a suggestion sits until the owner accepts or
+        # dismisses it; it never runs on its own.
+        require_access(session, me, "suggest")
+        instr = new_instruction(args.text, me, delivery="suggested", about_artifact=args.about_artifact)
+        ev = ctx.store.append_event(session["id"], "instruction.queued", me, instr)
+        session["queue"].append(instr)
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+        print(instr["id"])
+        return EXIT_OK
+    if not args.from_session and not getattr(args, "author_override", None):
+        require_access(session, me, "contribute")
     lane = getattr(args, "lane", None)
     if lane:
         return _send_one(resolve_lane(ctx.store, session, lane), args, ctx)
@@ -2600,12 +2833,17 @@ def _send_one(session, args, ctx):
         origin_name = origin["name"] if origin else args.from_session
         author = agent_actor(args.from_session, label=origin_name)
         delivered_text = format_marked_instruction(args.from_session, origin_name, args.text)
+    elif getattr(args, "author_override", None):
+        author = args.author_override          # an accepted suggestion keeps its author
+        delivered_text = args.text
     else:
         author = current_human_actor()
         delivered_text = args.text
 
     instr = new_instruction(args.text, author, delivery="steer",
                              origin_session=args.from_session, about_artifact=args.about_artifact)
+    if getattr(args, "accepted_by", None):
+        instr["accepted_by"] = args.accepted_by
     ev = ctx.store.append_event(session["id"], "instruction.queued", author, instr)
     session["queue"].append(instr)
     session["state_version"] = ev["seq"]
@@ -2742,6 +2980,7 @@ def _stop_one(session_id, store, herdr, actor, reason):
 def cmd_stop(args, ctx):
     session = ctx.store.load(args.id_or_name)
     actor = current_human_actor()
+    require_access(session, actor, "own")
     reason = args.reason or "stopped"
     if getattr(args, "lane", None):
         _stop_one(resolve_lane(ctx.store, session, args.lane)["id"], ctx.store, ctx.herdr, actor, reason)
@@ -2771,8 +3010,9 @@ def cmd_rename(args, ctx):
 
 def cmd_assign(args, ctx):
     session = ctx.store.load(args.id_or_name)
-    new_owner = parse_actor_string(args.owner_actor)
+    new_owner = parse_actor_string(args.owner_actor if ":" in args.owner_actor else f"human:{args.owner_actor}")
     actor = current_human_actor()
+    require_access(session, actor, "own")
     old_owner = session["owner"]["actor"]
     ev = ctx.store.append_event(session["id"], "owner.assigned", actor, {"from": old_owner, "to": new_owner})
     session["owner"] = {"actor": new_owner, "assigned_at": ev["ts"], "assigned_by": actor}
@@ -3072,6 +3312,7 @@ def cmd_mode(args, ctx):
 def cmd_done(args, ctx):
     session = ctx.store.load(args.id_or_name)
     actor = current_human_actor()
+    require_access(session, actor, "own")
     if getattr(args, "lane", None):
         session = resolve_lane(ctx.store, session, args.lane)
     if session["status"]["state"] in TERMINAL_STATES:
@@ -3531,6 +3772,7 @@ COMMAND_HANDLERS = {
     "artifact-add": cmd_artifact_add, "preview": cmd_preview, "mode": cmd_mode,
     "done": cmd_done, "reconcile": cmd_reconcile,
     "add": cmd_add, "lanes": cmd_lanes, "subscribe": cmd_subscribe, "artifact-mark": cmd_artifact_mark,
+    "visibility": cmd_visibility, "grant": cmd_grant, "accept": cmd_accept, "presence": cmd_presence,
 }
 
 

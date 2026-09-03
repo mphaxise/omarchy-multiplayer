@@ -215,6 +215,16 @@ class TestCopyAndClickTargets(WatchTestCase):
         sent = self.notifier.sent[-1]
         self.assertEqual(sent["headline"], "api-refactor · tests needs you")
 
+    def test_a_session_owned_by_someone_else_says_so_in_the_body(self):
+        watcher = self.make_watcher()
+        write_session(self.tmpdir, "o1", "handover", agent={"kind": "claude"},
+                      owner={"actor": {"kind": "human", "id": "sam@mac", "label": "sam"}},
+                      goal={"text": "Refactor the API layer"})
+        append_event(self.tmpdir, "o1", 1, "status.changed", {"from": "working", "to": "blocked"})
+        watcher.scan_once(now=self.clock())
+        sent = self.notifier.sent[-1]
+        self.assertIn("owned by sam", sent["description"])
+
     def test_blocked_reads_the_same_as_waiting(self):
         # Herdr reports a question and a permission prompt both as `blocked`,
         # so the title must not guess which; the two stay distinct kinds
