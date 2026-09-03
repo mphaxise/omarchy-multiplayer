@@ -7,7 +7,7 @@ Everything here is a draft for Praneet to read. Nothing in this directory has be
 | `listing/README.md` | The README of the public listing repository: what the plugin does, requirements, install, use, remove, what it writes, known issues, license. `@PLUGIN_ID@` is filled in by the build. |
 | `listing/install.sh`, `listing/uninstall.sh` | Link the commands into `~/.local/bin`, install and enable the two user units; undo exactly that. Neither needs root, downloads anything, or replaces a file it did not create. |
 | `listing/preview.png` | The marketplace preview: a crop of the needs-you capture from the rig (`captures/screenshots/sessions-panel-needs-you-goal-mode_…_live.jpg`). |
-| `build-listing.sh` | Assembles the listing repository from this checkout into a directory (default `/tmp/omarchy-agent-sessions`), runs `omarchy plugin validate` when it can, and writes `submission-issue-body.md`. `LISTING_ID=…` sets the plugin id. |
+| `build-listing.sh` | Assembles the listing repository from this checkout into a directory (default `/tmp/omarchy-keepalive`), runs `omarchy plugin validate` when it can, and writes `submission-issue-body.md`. `LISTING_ID=…` sets the plugin id. |
 | `submission-issue.md` | The marketplace submission in their exact six-heading form, with the five checklist statements laid out for confirmation and the `gh issue create` command for when it is approved. |
 | `discussion-post.md` | A discussion post for `omacom/omarchy` proposing the session model and asking whether it belongs upstream or stays a plugin. |
 | `upstream-candidates.md` | Six issue texts, one per finding in `findings/upstream-contributions.md`, each with its target. |
@@ -15,8 +15,8 @@ Everything here is a draft for Praneet to read. Nothing in this directory has be
 ## Decisions that are Praneet's
 
 1. **Target.** Marketplace listing, discussion post, both, or neither. PLAN.md says choose one; both are drafted so the choice is made on the texts.
-2. **Plugin id.** The build is `praneet.agent-sessions`: the plugin directory, `omarchy-shell` IPC target, and the rig's keybindings all use it. The marketplace prefers a namespaced id such as `io.github.mphaxise.agent-sessions` and makes ids permanent once listed. `build-listing.sh` applies either; changing the built id afterwards means renaming the plugin directory and the bindings on every machine that has it.
-3. **Listing repository name.** The drafts say `mphaxise/omarchy-agent-sessions`, created by pushing the built directory. The development repository stays `mphaxise/omarchy-multiplayer`.
+2. **Name and id: decided.** The plugin is Keepalive (Praneet, 2026-09-02, from five options). The listing id is `io.github.mphaxise.keepalive`, namespaced and lowercase as the marketplace prefers, permanent once listed. The dev checkout and the rig still run under `praneet.agent-sessions` (plugin directory, `omarchy-shell` IPC target, the rig's two keybindings); `build-listing.sh` substitutes the listing id into the manifest and `Panel.qml`. Before the listing is pushed, the rig should run one session under the listing id so what is tested is what ships. That rename touches `~/.config/hypr/bindings.lua` on the rig, so it waits for a go.
+3. **Listing repository name.** The drafts say `mphaxise/omarchy-keepalive`, created by pushing the built directory. The development repository stays `mphaxise/omarchy-multiplayer`.
 4. **The five checklist statements** in `submission-issue.md`, each of which the marketplace asks the owner to confirm.
 5. **Which of the six upstream texts go**, and whether the aarch64 ones go to the image repository or the package repository.
 

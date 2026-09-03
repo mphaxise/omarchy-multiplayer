@@ -1,5 +1,5 @@
 #!/bin/bash
-# Agent Sessions for Omarchy: link the commands into ~/.local/bin and install
+# Keepalive for Omarchy: link the commands into ~/.local/bin and install
 # the two user units. Run after `omarchy plugin add`, and again after
 # `omarchy plugin update`. Nothing here needs root, downloads anything, or
 # replaces a file this script did not create.
@@ -86,11 +86,11 @@ say "enabled ${units[*]}"
 
 cat <<EOF
 
-Done. The bar widget is enabled by 'omarchy plugin enable $plugin_id' (or --enable on add).
+Done. The Keepalive widget is enabled by 'omarchy plugin enable $plugin_id' (or --enable on add).
 
 Optional keybindings, yours to add to ~/.config/hypr/bindings.lua:
 
-  o.bind("SUPER + CTRL + G", "Agent sessions", "omarchy-shell $plugin_id toggle")
+  o.bind("SUPER + CTRL + G", "Keepalive", "omarchy-shell $plugin_id toggle")
   o.bind("SUPER + CTRL + SHIFT + G", "Agent that needs you", "omarchy-shell $plugin_id openMostUrgent")
 
 First session:

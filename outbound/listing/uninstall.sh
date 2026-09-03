@@ -1,5 +1,5 @@
 #!/bin/bash
-# Agent Sessions for Omarchy: undo install.sh. Stops and removes the two user
+# Keepalive for Omarchy: undo install.sh. Stops and removes the two user
 # units and the command links that point into this plugin, and leaves your
 # session records alone. Then remove the plugin itself:
 #

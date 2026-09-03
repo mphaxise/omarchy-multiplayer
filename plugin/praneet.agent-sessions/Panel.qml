@@ -4,7 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// Agent Sessions bar widget for Omarchy.
+// Keepalive: the agent sessions bar widget for Omarchy.
 //
 // Shows every durable omarchy-agent-session record: who needs you, what got
 // orphaned, who is working, what finished today. Structure follows
@@ -58,6 +58,8 @@ Panel {
   readonly property int maxRows: Math.max(5, Number(setting("maxRows", 20)))
   readonly property int doneRowsCollapsed: Math.max(0, Number(setting("doneRowsCollapsed", 2)))
   readonly property bool motionReduced: String(setting("motion", "full")) === "reduced"
+  readonly property string newSessionDir: String(setting("newSessionDir", "~/Work"))
+  readonly property string newSessionMode: String(setting("newSessionMode", "personal"))
 
   // ------------------------------------------------------------ selection
   //
@@ -71,6 +73,8 @@ Panel {
   property string selectedId: ""
   property string armedStopId: ""
   property string sendOpenId: ""
+  property bool newOpen: false      // the New session field under the hero
+  property bool openNewNext: false  // right click on the icon: open with the field ready
   property bool doneExpanded: false
 
   readonly property int selectedIndex: {
@@ -124,6 +128,8 @@ Panel {
     cursorActive = true
     armedStopId = ""
     sendOpenId = ""
+    newOpen = openNewNext
+    openNewNext = false
     nowMs = Date.now()
     if (visibleRows.length > 0) selectedId = visibleRows[0].id
     refresh()
@@ -380,7 +386,7 @@ Panel {
     } else if (root.orphanedRows.length > 0) {
       base = root.herdrDown ? "Herdr is not running · Enter revives" : "Enter revives"
     } else if (root.allSessions.length === 0) {
-      base = "Super+Shift+Ctrl+A starts one"
+      base = "n starts one"
     } else {
       var parts = []
       if (root.workingCount > 0) parts.push(root.workingCount + " working")
@@ -428,6 +434,8 @@ Panel {
     if (code === 3) return "session not found"
     if (code === 4) return "Herdr is not running"
     if (code === 5) return "the session's state forbids it"
+    if (code === 6) return "no default agent · omarchy default agent <name>"
+    if (code === 7) return "directory not found · " + root.newSessionDir
     return "exit " + code
   }
 
@@ -469,6 +477,11 @@ Panel {
     } else if (kind === "preview") {
       if (code === 0) { root.close(); return }
       root.setResult(sid, "no preview to show · " + root.reason(code), false)
+    } else if (kind === "new") {
+      // The session's terminal is open by now (new-session.sh runs `open`);
+      // the panel gets out of its way and the row appears on the next poll.
+      if (code === 0) { root.newOpen = false; root.refresh(); root.close(); return }
+      root.setResult("new", "couldn't start · " + root.reason(code), false)
     } else if (kind === "stop") {
       if (code === 0) return                     // the spinner runs until the record reports stopped
       var next = Object.assign({}, root.stoppingIds); delete next[sid]; root.stoppingIds = next
@@ -563,9 +576,19 @@ Panel {
     root.close()
   }
 
-  function newSession() {
-    if (root.bar) root.bar.run("omarchy-agent-session-new --pick")
-    root.close()
+  // New session from the panel: `n`, or the starter row under the hero,
+  // opens a field; Enter runs scripts/new-session.sh, which picks the
+  // default agent, creates the session in newSessionDir with the text as
+  // the first prompt, and opens its terminal.
+  function openNew() {
+    root.armedStopId = ""
+    root.sendOpenId = ""
+    root.newOpen = true
+  }
+
+  function startSession(text) {
+    var t = String(text || "").trim()
+    root.runAction("new", "new", [scriptPath("new-session.sh"), t, root.newSessionDir, root.newSessionMode], "starting…")
   }
 
   // Middle click and the IPC function: the session that most recently
@@ -607,7 +630,10 @@ Panel {
     active: true
     activeColor: root.barGlyphColor
     onPressed: function(buttonCode) {
-      if (buttonCode === Qt.RightButton) root.newSession()
+      if (buttonCode === Qt.RightButton) {                 // right click: straight to the New field
+        if (root.opened) root.openNew()
+        else { root.openNewNext = true; root.open() }
+      }
       else if (buttonCode === Qt.MiddleButton) root.openMostUrgent()
       else root.toggle()
     }
@@ -647,16 +673,17 @@ Panel {
     }
     // Fits 400 px at the default font; `r` (receipt) works on every row
     // and the ended rows' own button says so, so it stays off the legend.
-    var parts = ["↑↓ move", "⏎ open", "s send", "x stop"]
+    if (root.newOpen) return "⏎ starts it in " + root.newSessionDir + " · esc cancels"
+    // Priority order, six entries at most: that is what fits 400 px at the
+    // default font (run 4, 2026-09-03). "→ more" also sits on the Done
+    // today header, and esc closes every panel, so they give way first.
+    var parts = ["↑↓ move", "⏎ open", "s send", "x stop", "n new"]
     var cur = root.selectedSession
     if (cur && cur.preview && cur.preview.value) parts.push("p preview")
     if (root.doneHiddenCount > 0) parts.push("→ more")
     else if (root.doneExpanded) parts.push("← fewer")
-    // Six entries fill the 400 px line; with a preview on the cursor row
-    // and a collapsed Done section, esc (every panel's close key) is the
-    // one that gives way rather than eliding "→ more" (run 4, 2026-09-03).
-    if (parts.length < 6) parts.push("esc")
-    return parts.join(" · ")
+    parts.push("esc")
+    return parts.slice(0, 6).join(" · ")
   }
 
   // Scroll the cursor row into view. Rows change height as the cursor
@@ -689,7 +716,7 @@ Panel {
       anchors.fill: parent
 
       onMoveRequested: function(dx, dy) {
-        if (root.sendOpenId !== "") return           // the field owns its keys
+        if (root.sendOpenId !== "" || root.newOpen) return   // a field owns its keys
         if (dx !== 0) {
           if (dx > 0 && root.doneHiddenCount > 0) root.doneExpanded = true
           else if (dx < 0 && root.doneExpanded) root.doneExpanded = false
@@ -698,7 +725,7 @@ Panel {
         if (dy !== 0) root.moveCursor(dy)
       }
       onActivateRequested: {
-        if (root.sendOpenId !== "") return
+        if (root.sendOpenId !== "" || root.newOpen) return
         var s = root.selectedSession
         if (!s) return
         var ended = s.status && (s.status.state === "done" || s.status.state === "failed" || s.status.state === "stopped")
@@ -706,7 +733,7 @@ Panel {
       }
       onDeleteRequested: {
         // PanelKeyCatcher routes `x` here, never to onTextKey.
-        if (root.sendOpenId !== "") return
+        if (root.sendOpenId !== "" || root.newOpen) return
         var s = root.selectedSession
         if (!s) return
         var ended = s.status && (s.status.state === "done" || s.status.state === "failed" || s.status.state === "stopped")
@@ -717,12 +744,14 @@ Panel {
       onCloseRequested: {
         // Esc clears an open Send field or an armed Stop first, and closes
         // the panel on the press after that.
+        if (root.newOpen) { root.newOpen = false; return }
         if (root.sendOpenId !== "") { root.sendOpenId = ""; return }
         if (root.armedStopId !== "") { root.armedStopId = ""; return }
         root.close()
       }
       onTextKey: function(t) {
-        if (root.sendOpenId !== "") return
+        if (root.sendOpenId !== "" || root.newOpen) return
+        if (t === "n" || t === "N") { root.openNew(); return }
         var s = root.selectedSession
         if (!s) return
         var ended = s.status && (s.status.state === "done" || s.status.state === "failed" || s.status.state === "stopped")
@@ -791,6 +820,91 @@ Panel {
               }
             }
 
+            // ---------- New session: the starter row ----------
+            //
+            // One row under the hero. At rest it names the key and the
+            // directory; `n`, a click, or the empty state's button turn it
+            // into a field. Enter starts the session and opens its
+            // terminal; the result of a failed start shows beneath.
+            BorderSurface {
+              id: starter
+              visible: !root.hasErrorRow
+              width: parent.width
+              implicitHeight: starterColumn.implicitHeight + Style.space(16)
+              color: root.newOpen ? root.alpha(root.accentColor, 0.06)
+                : (starterHover.containsMouse ? root.alpha(root.foreground, 0.08) : "transparent")
+              borderSpec: Border.flat(root.alpha(root.newOpen ? root.accentColor : root.foreground, root.newOpen ? 0.45 : 0.18), 1)
+              radius: Style.cornerRadius
+
+              MouseArea {
+                id: starterHover
+                anchors.fill: parent
+                hoverEnabled: true
+                enabled: !root.newOpen
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.openNew()
+              }
+
+              Column {
+                id: starterColumn
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Style.space(12)
+                anchors.rightMargin: Style.space(12)
+                spacing: Style.space(6)
+
+                Text {
+                  visible: !root.newOpen
+                  width: parent.width
+                  textFormat: Text.PlainText
+                  text: "n  New session in " + root.newSessionDir + "…"
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  elide: Text.ElideRight
+                }
+
+                Row {
+                  visible: root.newOpen
+                  width: parent.width
+                  spacing: Style.space(6)
+
+                  TextField {
+                    id: newField
+                    width: parent.width - startButton.width - Style.space(6)
+                    placeholderText: "What should the agent do? Enter starts it…"
+                    focus: root.newOpen
+                    foreground: root.foreground
+                    accent: root.accentColor
+                    onAccepted: { root.startSession(text); text = "" }
+                    Keys.onEscapePressed: root.newOpen = false
+                  }
+                  Button {
+                    id: startButton
+                    text: "Start"
+                    bordered: true
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    onClicked: { root.startSession(newField.text); newField.text = "" }
+                  }
+                }
+
+                Text {
+                  visible: text !== ""
+                  width: parent.width
+                  textFormat: Text.PlainText
+                  text: root.busyById["new"] ? root.busyById["new"]
+                    : (root.resultById["new"] ? root.resultById["new"].text : "")
+                  color: root.busyById["new"] ? root.dim
+                    : (root.resultById["new"] && !root.resultById["new"].ok ? root.urgentColor : root.dim)
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  wrapMode: Text.WordWrap
+                }
+              }
+            }
+
             // ---------- Herdr is not running ----------
             BorderSurface {
               visible: root.herdrDown && !root.hasErrorRow
@@ -850,21 +964,12 @@ Panel {
 
               Text {
                 width: parent.width
-                text: root.snapshot ? "No sessions yet." : "Checking for sessions…"
+                text: root.snapshot ? "No sessions yet. Press n, or click above, to start one." : "Checking for sessions…"
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
-              }
-
-              Button {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: "New session"
-                bordered: true
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                onClicked: root.newSession()
               }
             }
 

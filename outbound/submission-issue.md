@@ -7,7 +7,7 @@ Before this can be submitted, in order: the listing repository exists and is pub
 ## Title
 
 ```
-[Plugin]: Agent Sessions
+[Plugin]: Keepalive
 ```
 
 ## Body
@@ -15,7 +15,7 @@ Before this can be submitted, in order: the listing repository exists and is pub
 ```markdown
 ### Repository URL
 
-https://github.com/mphaxise/omarchy-agent-sessions
+https://github.com/mphaxise/omarchy-keepalive
 
 ### Category
 
@@ -31,7 +31,7 @@ _No response_
 
 ### Maintainer notes
 
-Durable, named coding-agent sessions on top of Herdr, with a bar widget and panel, notifications, receipts, and permission modes. `omarchy plugin add` installs the widget; the repository's `install.sh` then links the commands into `~/.local/bin/` and installs two user units (a Herdr server keepalive and the notifier), and `uninstall.sh` removes exactly those. Nothing runs as root, nothing is downloaded at install or run time, and the plugin changes no Omarchy configuration. Tested on Omarchy Quattro `0b3f1b7` on the community aarch64 port with Claude Code; other agents are untested live. Tests: `python3 -m unittest discover -s tests`.
+Keepalive keeps coding agents running on the desktop as named sessions on top of Herdr. It adds a bar widget and panel, notifications, receipts, and permission modes. `omarchy plugin add` installs the widget. The repo's `install.sh` links the commands into `~/.local/bin/` and installs two user units: one keeps the Herdr server running, one sends notifications. `uninstall.sh` removes exactly those. Nothing runs as root. Nothing is downloaded at install or run time. The plugin changes no Omarchy configuration. Tested on Omarchy Quattro `0b3f1b7` on the community aarch64 port with Claude Code. Other agents are untested live. Tests: `python3 -m unittest discover -s tests`.
 
 ### Submission checklist
 
@@ -55,7 +55,7 @@ Durable, named coding-agent sessions on top of Herdr, with a bar widget and pane
 ```bash
 gh issue create \
   --repo omacom/omarchy-plugin-marketplace \
-  --title "[Plugin]: Agent Sessions" \
+  --title "[Plugin]: Keepalive" \
   --body-file outbound/submission-issue-body.md
 ```
 

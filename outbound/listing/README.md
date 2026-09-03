@@ -1,42 +1,50 @@
-# Agent Sessions for Omarchy
+# Keepalive
 
-Durable, named coding-agent sessions in the Omarchy bar. Each session survives its terminal window closing and a reboot, shows its state in a panel (who needs you, who is working, what finished today, what got orphaned), reaches you as a notification when it needs an answer, and leaves a receipt when it ends: the branch, the commits, the diff, the artifacts, the verdict.
+Coding agents that stay running on your Omarchy desktop. Close the terminal, reboot, come back later. The session is still there.
 
-![The Agent Sessions panel with one session that needs an answer](preview.png)
+Each session shows up in the Omarchy bar. The panel tells you who needs an answer, who is working, and what finished today. When an agent needs you, you get a notification. When a session ends, you get a receipt: the branch, the commits, the diff, the files it made, and your verdict.
 
-Herdr, Omarchy's agent runtime, keeps the agent process alive. This plugin keeps the record: a directory per session under `~/.local/state/omarchy/sessions/` with an append-only event log, so every surface reads the same facts.
+![The Keepalive panel with one session that needs an answer](preview.png)
+
+Herdr, Omarchy's agent runtime, keeps the agent process alive. This plugin keeps the record. Every session has a folder under `~/.local/state/omarchy/sessions/` with a log of everything that happened. The bar, the commands, and the notifications all read from that folder.
 
 ## What you get
 
-A bar widget: a robot glyph that turns urgent with a badge when a session needs you, and a panel behind it with keyboard control (arrows, Enter to open or answer, `s` to send an instruction, `x` twice to stop, `r` for the receipt, `p` to focus a session's preview).
+**A bar widget.** A robot icon. It turns red with a badge when a session needs you.
 
-Twenty commands, all `omarchy-agent-session-<verb>`: `new`, `list`, `show`, `open`, `send`, `stop`, `done`, `rename`, `assign`, `goal`, `mode`, `preview`, `capture`, `artifact-add`, `log`, `receipt`, `reconcile`, `watch`, plus the `omarchy-agent-session` dispatcher and the Python core. `omarchy-agent-session-new --agent claude --goal "..."` creates a session on a git worktree and starts the agent in Herdr; `open` attaches a terminal; `send` delivers an instruction, with `--with-capture` to attach a capture of the session's preview window.
+**A panel you can drive from the keyboard.** Arrows move. Enter opens the session, or answers it. `s` sends an instruction. `x` twice stops it. `r` shows the receipt. `p` focuses the session's preview window. `n` starts a new session: type what the agent should do, press Enter, and a terminal opens on it.
 
-A watcher (a user unit) that turns state changes into Omarchy notifications: "<name> needs you" when the agent asks a question or a permission, a low-urgency "finished" whose click opens the receipt, and "stopped unexpectedly" with a revive path when Herdr loses the process.
+**Twenty commands.** All start with `omarchy-agent-session-`. The main ones are `new`, `list`, `open`, `send`, `stop`, `done`, `receipt`, and `show`. The rest handle names, goals, modes, previews, captures, and artifacts.
 
-Three permission modes, enforced before exec: Personal (the agent's own no-prompt mode), Shared (the agent asks before acting), Restricted (read-only tools). No session launches with a bypass flag outside Personal.
+**Notifications.** "api-refactor needs you" when the agent asks a question or a permission. "api-refactor finished" when it is done; click it to see the receipt. "api-refactor stopped unexpectedly" when Herdr loses the process; click it to revive.
+
+**Permission modes.** Personal: the agent runs without asking. Shared: the agent asks before it acts. Restricted: read-only tools. The plugin checks the launch command before it runs. Only Personal can skip prompts.
 
 ## Requirements
 
-Omarchy Quattro (4.0.x). Tested on the community aarch64 UTM port at `0b3f1b7`; x86 is untested. Herdr (installed with Omarchy), `python3` 3.11 or later, `grim` and `hyprctl` (both in Omarchy) for captures and preview focus, and a coding agent Omarchy knows. Claude Code is the agent every test ran with. Codex, OpenCode, and the others have permission-mode tables and no live run yet.
+- Omarchy Quattro (4.0.x). I tested on the community aarch64 UTM port at commit `0b3f1b7`. I have not tested on x86.
+- Herdr. Omarchy installs it.
+- Python 3.11 or later.
+- `grim` and `hyprctl`, for screen captures and window focus. Both come with Omarchy.
+- A coding agent. I tested with Claude Code. Codex, OpenCode, and the others have permission tables and no live run yet.
 
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/mphaxise/omarchy-agent-sessions --enable
+omarchy plugin add https://github.com/mphaxise/omarchy-keepalive --enable
 ~/.config/omarchy/plugins/@PLUGIN_ID@/install.sh
 ```
 
-`omarchy plugin add` clones this repository into `~/.config/omarchy/plugins/@PLUGIN_ID@/` and, with `--enable`, places the widget in the bar (right section by default). `install.sh` then links the commands into `~/.local/bin/` and installs two user units: `omarchy-agent-session-herdr.service`, which keeps the Herdr server running for the whole graphical session so sessions outlive every client window, and `omarchy-agent-session-watch.service`, the notifier. It refuses to overwrite a file it did not create and needs no root. Run it again after `omarchy plugin update`.
+The first command clones this repo into `~/.config/omarchy/plugins/@PLUGIN_ID@/` and puts the widget in the bar. The second links the commands into `~/.local/bin/` and installs two user units: one keeps the Herdr server running, one sends the notifications. It needs no root. It will not overwrite a file it did not create. Run it again after `omarchy plugin update`.
 
-Two keybindings are useful and optional; add them to `~/.config/hypr/bindings.lua` yourself:
+Keybindings are optional. Add these to `~/.config/hypr/bindings.lua` if you want them:
 
 ```lua
-o.bind("SUPER + CTRL + G", "Agent sessions", "omarchy-shell @PLUGIN_ID@ toggle")
+o.bind("SUPER + CTRL + G", "Keepalive", "omarchy-shell @PLUGIN_ID@ toggle")
 o.bind("SUPER + CTRL + SHIFT + G", "Agent that needs you", "omarchy-shell @PLUGIN_ID@ openMostUrgent")
 ```
 
-The plugin leaves Omarchy's own `omarchy-agent` keybinding alone. A version of `omarchy-agent` that creates a session and attaches a terminal sits in the development repository as a proposed change (`bin/upstream-proposed/omarchy-agent.proposed`); it shadows Omarchy's command, so it stays out of this plugin.
+The plugin leaves Omarchy's own `omarchy-agent` keybinding alone. I have a version of `omarchy-agent` that creates a session and opens a terminal. It replaces Omarchy's command, so it stays out of this plugin. It is in the development repo under `bin/upstream-proposed/`.
 
 ## Use
 
@@ -44,14 +52,14 @@ The plugin leaves Omarchy's own `omarchy-agent` keybinding alone. A version of `
 omarchy-agent-session-new --agent claude --mode personal --name api-refactor --goal "Split the router into modules"
 omarchy-agent-session-list
 omarchy-agent-session-send api-refactor "Keep the public API unchanged"
-omarchy-agent-session-open api-refactor          # attaches a terminal; focuses the preview if one is registered
+omarchy-agent-session-open api-refactor          # opens a terminal; focuses the preview if there is one
 omarchy-agent-session-preview api-refactor http://localhost:3000
 omarchy-agent-session-done api-refactor --verdict kept --note "Reviewed the diff, merged"
 omarchy-agent-session-receipt api-refactor
-omarchy-agent-session-show api-refactor --loop  # intent, captures, instructions, commits, verdict, in order
+omarchy-agent-session-show api-refactor --loop  # goal, captures, instructions, commits, verdict, in order
 ```
 
-`omarchy-shell @PLUGIN_ID@ open|close|toggle|refresh|openMostUrgent` drives the panel from anywhere.
+`omarchy-shell @PLUGIN_ID@ open|close|toggle|refresh|openMostUrgent` controls the panel from a script or a keybinding.
 
 ## Remove
 
@@ -60,20 +68,28 @@ omarchy-agent-session-show api-refactor --loop  # intent, captures, instructions
 omarchy plugin remove @PLUGIN_ID@
 ```
 
-`uninstall.sh` stops and removes the two units and the command links, and leaves your session records in `~/.local/state/omarchy/sessions/` because they are your work; delete that directory yourself if you want them gone. Sessions that are still running in Herdr keep running; stop them first with `omarchy-agent-session-stop` if you want a clean slate.
+The first command stops and removes the two units and the command links. It keeps your session records in `~/.local/state/omarchy/sessions/`. Delete that folder yourself if you want them gone. Running sessions keep running in Herdr. Stop them first with `omarchy-agent-session-stop` if you want a clean slate.
 
 ## What it writes
 
-Symlinks in `~/.local/bin/`; two unit files in `~/.config/systemd/user/`; session records under `~/.local/state/omarchy/sessions/`; git worktrees under Herdr's worktree directory (`~/.herdr/worktrees/` by default), one per session that asks for one, on a `session/<name>` branch. That is the whole list: it leaves `/usr`, your projects' own files, and Omarchy's configuration untouched.
+- Symlinks in `~/.local/bin/`
+- Two unit files in `~/.config/systemd/user/`
+- Session records in `~/.local/state/omarchy/sessions/`
+- Git worktrees in `~/.herdr/worktrees/`, one per session, each on a `session/<name>` branch
+
+That is the full list. It writes nothing to `/usr`, your project files, or Omarchy's config.
 
 ## Known issues
 
-A question and a permission prompt reach the panel as one state, because Herdr reports both as `blocked`; every surface says "needs you" for both. Previews registered as a URL open in a Chromium app window and are found by its window class; previews registered as an app id are untested. On the aarch64 image every Claude Code launch raises the locked-keyring prompt, which is the image's doing. After the plugin's files change, the shell's hot reload can leave the widget on old code; `omarchy-restart-shell` makes the change real.
+- A question and a permission prompt look the same. Herdr reports both as `blocked`, so the panel says "needs you" for both.
+- Previews given as a URL open in a Chromium app window. Previews given as an app id are untested.
+- On the aarch64 image, every Claude Code launch opens the keyring password prompt. That comes from the image.
+- After you edit the plugin's files, the shell's hot reload can keep running the old code. `omarchy-restart-shell` fixes it.
 
-## Source, specs, evidence
+## Source
 
-The plugin is the shippable part of [omarchy-multiplayer](https://github.com/mphaxise/omarchy-multiplayer), which holds the specs, the evaluation runs with their captures, and the decisions log. Tests: `python3 -m unittest discover -s tests` (121, standard library only).
+This plugin is the installable part of [omarchy-multiplayer](https://github.com/mphaxise/omarchy-multiplayer). That repo has the specs, the test runs with screenshots, and the decision log. Run the tests with `python3 -m unittest discover -s tests`: 121 tests, standard library only.
 
 ## License
 
-MIT. External dependencies: Herdr (MIT), the Omarchy shell and its Quickshell components, Python 3, grim, Hyprland's `hyprctl`. Nothing is downloaded at install or run time.
+MIT. It depends on Herdr (MIT), the Omarchy shell, Python 3, grim, and hyprctl. It downloads nothing.
