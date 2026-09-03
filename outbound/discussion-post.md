@@ -1,6 +1,6 @@
 # Discussion post draft: omacom/omarchy
 
-Target: GitHub Discussions on `omacom/omarchy`, in the category the maintainers use for ideas or show-and-tell (check the live list before posting). Status: draft, 2026-09-02. Praneet approves the exact text and the target before it is posted. The links assume both repos are public by then.
+Target: GitHub Discussions on `omacom/omarchy`, category **Show and tell** (the live categories on 2026-09-02: General, Ideas, Manual, Polls, Q&A, Show and tell, Suggestions, Support; Ideas is the alternative if the ask matters more than the build). Status: draft, 2026-09-02. Praneet approves the exact text and the target before it is posted. The links assume both repos are public by then.
 
 ---
 
