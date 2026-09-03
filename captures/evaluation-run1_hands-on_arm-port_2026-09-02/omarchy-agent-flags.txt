@@ -1,0 +1,5 @@
+62:  command=(agy --dangerously-skip-permissions)
+70:  # --yolo belongs to the interactive command only; `crush run` never prompts.
+74:    command=(crush --yolo)
+78:  command=(claude --permission-mode auto)
+82:  command=(grok --permission-mode bypassPermissions)

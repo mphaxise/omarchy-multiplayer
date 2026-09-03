@@ -1,0 +1,4 @@
+01M1JFE3TM4F6WCJ5TJH4BC93Y shell 131773 [(131922, 'claude --permission-mode auto')]
+01M1JFE8FXSRHD75S964HWWC7W shell 132516 [(132745, 'claude --permission-mode auto')]
+01M1JFP46JQCYQ6HAW7F9QKRT2 shell 139036 [(139128, 'claude --permission-mode auto')]
+01M1JFPZ4KGCDGZZM0PVEJEWBP shell 140732 [(140966, 'claude --permission-mode default')]

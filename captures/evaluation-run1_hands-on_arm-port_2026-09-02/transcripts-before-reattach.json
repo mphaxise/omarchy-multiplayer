@@ -1,0 +1,59 @@
+[
+ {
+  "id": "01M1JFE3TM4F6WCJ5TJH4BC93Y",
+  "name": "eval-a",
+  "state": "idle",
+  "ref": "b66f483a-6332-4539-87f1-f642e937a5d0",
+  "transcript": "/home/omarchy/.claude/projects/-home-omarchy--herdr-worktrees-eval-a/b66f483a-6332-4539-87f1-f642e937a5d0.jsonl",
+  "lines": 27,
+  "last": [
+   "assistant",
+   "Created `hello.html` with a one-line greeting and committed it as \"hello page\" (9fcab2e)."
+  ],
+  "mtime": 1788400325.5731483,
+  "pane": "wS:p1",
+  "at": "2026-09-03T02:00:30Z"
+ },
+ {
+  "id": "01M1JFE8FXSRHD75S964HWWC7W",
+  "name": "eval-b",
+  "state": "idle",
+  "ref": null,
+  "transcript": null,
+  "lines": 0,
+  "last": null,
+  "mtime": null,
+  "pane": "wT:p1",
+  "at": "2026-09-03T02:00:30Z"
+ },
+ {
+  "id": "01M1JFP46JQCYQ6HAW7F9QKRT2",
+  "name": "crash-134897",
+  "state": "idle",
+  "ref": "f2f7fc10-5714-49bc-bf9c-969f425af91d",
+  "transcript": "/home/omarchy/.claude/projects/-home-omarchy-Work/f2f7fc10-5714-49bc-bf9c-969f425af91d.jsonl",
+  "lines": 68,
+  "last": [
+   "assistant",
+   "## What happened\n\n**bash did not malfunction. It was explicitly instructed to segfault itself, and it complied.**\n\nThe command line settles it:\n\n```\nCommand Line: sh -c $'kill -SEGV $$'\n```\n\n`$$` is t"
+  ],
+  "mtime": 1788400652.8586795,
+  "pane": "wV:p1",
+  "at": "2026-09-03T02:00:30Z"
+ },
+ {
+  "id": "01M1JFPZ4KGCDGZZM0PVEJEWBP",
+  "name": "eval-shared",
+  "state": "blocked",
+  "ref": "47d93ef1-6c47-4240-8782-2a0735c2c0be",
+  "transcript": "/home/omarchy/.claude/projects/-home-omarchy--herdr-worktrees-eval-shared/47d93ef1-6c47-4240-8782-2a0735c2c0be.jsonl",
+  "lines": 12,
+  "last": [
+   "user",
+   "Create a file named shared-note.txt containing the word shared. Do nothing else."
+  ],
+  "mtime": 1788400605.3096578,
+  "pane": "wW:p1",
+  "at": "2026-09-03T02:00:30Z"
+ }
+]

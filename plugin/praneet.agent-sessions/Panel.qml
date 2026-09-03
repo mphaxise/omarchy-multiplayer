@@ -469,9 +469,6 @@ Panel {
       if (code === 0) return                     // the spinner runs until the record reports stopped
       var next = Object.assign({}, root.stoppingIds); delete next[sid]; root.stoppingIds = next
       root.setResult(sid, "stop failed · " + root.reason(code), false)
-    } else if (kind === "receipt") {
-      if (code === 0) { root.close(); return }
-      root.setResult(sid, "couldn't open the receipt · " + root.reason(code), false)
     }
     root.refresh()
   }
@@ -514,9 +511,12 @@ Panel {
 
   function openReceipt(id) {
     if (!id) return
-    root.runAction(id, "receipt",
-      ["omarchy-launch-tui", "--app-id=org.omarchy.session-receipt", "omarchy-agent-session-receipt", "--pager", String(id)],
-      "opening…")
+    // Detached on purpose: omarchy-launch-tui blocks until the terminal it
+    // launched exits (evaluation run 1, 2026-09-02), so a Process here
+    // would hold the panel open on "opening…" until the pager closed.
+    Quickshell.execDetached(["omarchy-launch-tui", "--app-id=org.omarchy.session-receipt",
+                             "omarchy-agent-session-receipt", "--pager", String(id)])
+    root.close()
   }
 
   function newSession() {

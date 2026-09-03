@@ -1,0 +1,2 @@
+01:52:21.847Z 2 'Process crashed: bash' 'Click to diagnose with AI'
+01:56:49.356Z 1 'eval-shared needs you' 'claude · Shared-mode write test · Click to open and answer'

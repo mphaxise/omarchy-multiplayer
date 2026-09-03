@@ -1,0 +1,8 @@
+== 01M1JFE3TM4F6WCJ5TJH4BC93Y
+['claude --permission-mode auto'] shell 131773
+== 01M1JFE8FXSRHD75S964HWWC7W
+['claude --permission-mode auto'] shell 132516
+== 01M1JFP46JQCYQ6HAW7F9QKRT2
+['claude --permission-mode auto'] shell 139036
+== 01M1JFPZ4KGCDGZZM0PVEJEWBP
+['claude --permission-mode default'] shell 140732

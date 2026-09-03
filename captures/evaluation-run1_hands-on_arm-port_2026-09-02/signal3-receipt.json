@@ -1,0 +1,80 @@
+{
+  "session_id": "01M1JFE3TM4F6WCJ5TJH4BC93Y",
+  "name": "eval-a",
+  "agent": {
+    "kind": "claude",
+    "harness_session_ref": "b66f483a-6332-4539-87f1-f642e937a5d0",
+    "version": null
+  },
+  "owner": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "created_by": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "started_at": "2026-09-03T01:51:48Z",
+  "ended_at": "2026-09-03T02:01:29Z",
+  "duration_s": 581,
+  "end_state": "stopped",
+  "end_reason": "evaluation step 14",
+  "started_with": {
+    "command": "omarchy-agent-session-core new --agent claude --mode personal --cwd /home/omarchy/Work/spike-repo --base main --name eval-a --goal 'Add a hello page' --prompt 'Create hello.html containing a one-line greeting and commit it with the message: hello page. Do nothing else.'",
+    "cwd": "/home/omarchy/Work/spike-repo",
+    "env_summary": {
+      "shell": "/bin/bash",
+      "term": null
+    }
+  },
+  "goal": {
+    "text": "Add a hello page",
+    "set_by": {
+      "kind": "human",
+      "id": "omarchy@omarchy",
+      "label": "omarchy"
+    },
+    "set_at": "2026-09-03T01:51:48Z"
+  },
+  "workspace": {
+    "repo_root": "/home/omarchy/Work/spike-repo",
+    "worktree_path": "/home/omarchy/.herdr/worktrees/eval-a",
+    "branch": "session/eval-a",
+    "base_branch": "main",
+    "created_by_session": true,
+    "worktree_removed": false,
+    "worktree_removed_reason": "committed but not pushed to any remote and not merged into base_branch"
+  },
+  "commits": [
+    {
+      "sha": "9fcab2eb8e340d863aaff35600ecda4757396cb1",
+      "subject": "hello page",
+      "author": "spike"
+    }
+  ],
+  "diff_stat": {
+    "files": 1,
+    "insertions": 1,
+    "deletions": 0
+  },
+  "dirty": false,
+  "unpushed": true,
+  "artifacts": [],
+  "instructions": {
+    "delivered": 1,
+    "dropped": 0,
+    "authors": [
+      "human:omarchy@omarchy"
+    ]
+  },
+  "approvals": {
+    "requested": 0,
+    "approved": 0,
+    "denied": 0
+  },
+  "children": [],
+  "harness_session_ref": "b66f483a-6332-4539-87f1-f642e937a5d0",
+  "state_version": 12
+}

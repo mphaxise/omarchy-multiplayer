@@ -1833,6 +1833,27 @@ RESUME_FLAGS = {
 }
 
 
+def wait_interactive_ready(herdr, alias, timeout_s=30.0, step_s=0.5):
+    """False only when Herdr's agent list keeps reporting the alias with
+    `interactive_ready` false until `timeout_s` runs out. An agent that is
+    absent from the list, or listed without the flag (older Herdr), is
+    left to `agent.prompt`, which fails loudly on its own; a Herdr error
+    while polling counts as not ready."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            agents = herdr.agent_list()
+        except (HerdrError, HerdrUnavailable):
+            agents = None
+        if agents is not None:
+            entry = next((a for a in agents if a.get("agent_id") == alias or a.get("name") == alias), None)
+            if entry is None or entry.get("interactive_ready") is not False:
+                return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(step_s)
+
+
 def cmd_send(args, ctx):
     session = ctx.store.load(args.id_or_name)
     if args.from_session:
@@ -1861,6 +1882,18 @@ def cmd_send(args, ctx):
     # wait for a classified state first, bounded, and ignore failures.
     with contextlib.suppress(HerdrError, HerdrUnavailable):
         ctx.herdr.call("agent.wait", {"target": alias, "until": ["idle", "blocked", "done", "working"], "timeout_ms": 15000}, timeout=20)
+    # Herdr says `idle` before the harness's input is ready to take text:
+    # evaluation run 1 (2026-09-02) delivered a prompt four seconds after
+    # creation, Claude never saw it, and the session sat idle with no work
+    # done. Herdr's agent list carries `interactive_ready` for exactly
+    # this; wait for it, bounded, before typing anything into the pane.
+    if not wait_interactive_ready(ctx.herdr, alias):
+        ev = ctx.store.append_event(session["id"], "instruction.dropped", author,
+                                     {"instruction_id": instr["id"], "reason": "agent_not_ready"})
+        session["queue"] = [q for q in session["queue"] if q["id"] != instr["id"]]
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+        raise ConflictError("instruction dropped: the harness never became ready for input")
     try:
         prompt_result = ctx.herdr.agent_prompt(alias=alias, text=delivered_text, wait=args.wait,
                                                until=args.until, timeout_ms=args.timeout) or {}

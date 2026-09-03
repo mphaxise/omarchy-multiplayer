@@ -495,6 +495,43 @@ class TestSendMarker(CoreTestCase):
         calls = self.fake_herdr.calls("agent.prompt")
         self.assertEqual(calls[0]["text"], "plain human text")
 
+    def test_send_waits_for_interactive_ready_before_prompting(self):
+        # Evaluation run 1 (2026-09-02): Herdr said idle before the harness
+        # took input, the prompt typed into nothing, the session sat idle.
+        self.start_fake_herdr()
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
+                   "tab_id": "t1", "pane_id": "p1", "agent_id": "not-yet-ready"}
+        target_id = make_bare_session(self.store, "not-yet-ready", runtime=runtime)
+        polls = {"n": 0}
+
+        def agent_list(params):
+            polls["n"] += 1
+            ready = polls["n"] >= 3
+            return {"agents": [{"name": "not-yet-ready", "agent": "claude", "pane_id": "p1",
+                                "agent_status": "idle", "interactive_ready": ready}]}
+
+        self.fake_herdr.set_result("agent.list", agent_list)
+        rc, out, err = self.run_cli(["send", target_id, "hello"])
+        self.assertEqual(rc, 0, err)
+        self.assertGreaterEqual(polls["n"], 3)
+        self.assertEqual(len(self.fake_herdr.calls("agent.prompt")), 1)
+
+    def test_send_drops_when_the_harness_never_becomes_ready(self):
+        self.start_fake_herdr()
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
+                   "tab_id": "t1", "pane_id": "p1", "agent_id": "never-ready"}
+        target_id = make_bare_session(self.store, "never-ready", runtime=runtime)
+        self.fake_herdr.set_result("agent.list", {"agents": [{"name": "never-ready", "agent": "claude", "pane_id": "p1",
+                                                              "agent_status": "idle", "interactive_ready": False}]})
+        original = core.wait_interactive_ready
+        with mock.patch.object(core, "wait_interactive_ready",
+                               lambda herdr, alias, **kw: original(herdr, alias, timeout_s=0.6, step_s=0.1)):
+            rc, out, err = self.run_cli(["send", target_id, "hello"])
+        self.assertEqual(rc, 5)
+        self.assertEqual(self.fake_herdr.calls("agent.prompt"), [])
+        dropped = [e for e in self.store.read_events(target_id) if e["type"] == "instruction.dropped"]
+        self.assertEqual(dropped[0]["data"]["reason"], "agent_not_ready")
+
     def test_send_to_unbound_session_stays_queued_no_herdr_call(self):
         # No fake Herdr server running at all.
         target_id = make_bare_session(self.store, "unbound-target", runtime=None, state="starting")

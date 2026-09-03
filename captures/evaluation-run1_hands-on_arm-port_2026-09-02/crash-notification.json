@@ -1,0 +1,1 @@
+{"id":1,"originalId":1,"app":"omarchy-action","appIcon":"","summary":"Process crashed: bash","body":"Click to diagnose with AI","image":"","glyph":"󱚡","execArgv":"[\"omarchy-agent-crash\",\"134897\",\"bash\",\"/usr/bin/bash\",\"SIGSEGV\"]","urgency":2,"expireTimeout":0,"timestamp":1788400341847}

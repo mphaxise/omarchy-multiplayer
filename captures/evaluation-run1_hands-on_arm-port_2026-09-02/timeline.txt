@@ -1,0 +1,36 @@
+step4 01:52:20
+newest-notification=/home/omarchy/.local/state/omarchy/notifications/1788400341847-1.json
+execArgv=["omarchy-agent-crash","134897","bash","/usr/bin/bash","SIGSEGV"]
+step5 01:52:32
+step5-retry 01:55:08
+step15-early 01:56:38
+event 2026-09-03T01:56:49Z blocked
+toast 01:56:49.356Z 'eval-shared needs you' 'claude · Shared-mode write test · Click to open and answer' urgency 1
+toast 01:52:21.847Z 'Process crashed: bash' 'Click to diagnose with AI' urgency 2
+toast 22:06:56.530Z 'create-a-file-named stopped unexpectedly' 'claude · Create hello.txt in the spike repo · Click to revive, same conversation' urgency 1
+toast 22:06:06.718Z 'reply-with-the-single stopped unexpectedly' 'claude · Click to revive, same conversation' urgency 2
+step8-panel-capture 01:57:24
+panel-closed 01:57:28
+step10-send 01:57:53
+send-rc=5
+step11-close-windows 01:58:46
+remaining session windows: ['org.omarchy.session.01M1JFE3TM4F6WCJ5TJH4BC93Y', 'org.omarchy.session.01M1JFE8FXSRHD75S964HWWC7W']
+remaining session windows: []
+windows-closed 01:59:18
+step12 01:59:26
+step13-reattach 02:00:30
+[('01M1JFE3TM4F6WCJ5TJH4BC93Y', 143509), ('01M1JFE8FXSRHD75S964HWWC7W', 143567), ('01M1JFP46JQCYQ6HAW7F9QKRT2', 143618)]
+step14-stop 02:01:28
+stop-rc=0
+receipt written at 02:01:30 vs stop issued 02:01:28
+{'end_state': 'stopped', 'end_reason': 'evaluation step 14', 'workspace': {'repo_root': '/home/omarchy/Work/spike-repo', 'worktree_path': '/home/omarchy/.herdr/worktrees/eval-a', 'branch': 'session/eval-a', 'base_branch': 'main', 'created_by_session': True, 'worktree_removed': False, 'worktree_removed_reason': 'committed but not pushed to any remote and not merged into base_branch'}, 'commits': [{'sha': '9fcab2eb8e340d863aaff35600ecda4757396cb1', 'subject': 'hello page', 'author': 'spike'}], 'diff_stat': {'files': 1, 'insertions': 1, 'deletions': 0}, 'dirty': False, 'unpushed': True}
+started_with.command: omarchy-agent-session-core new --agent claude --mode personal --cwd /home/omarchy/Work/spike-repo --base main --name eva
+missing keys: []
+open-receipt 02:01:32
+step16 02:04:25
+started_with: omarchy-agent-session-core new --agent claude --mode personal --cwd /home/omarchy/Work/spike-repo --no-worktree --name eval-personal --goal 'Explicit Personal-mode argv capture' --prompt 'Reply with the single word READY and nothing else.'
+pane: wX:p1
+argv: [['claude', '--permission-mode', 'auto']]
+shared started_with: omarchy-agent-session-core new --agent claude --mode shared --cwd /home/omarchy/Work/spike-repo --base main --name eval-shared --goal 'Shared-mode write test' --prompt 'Create a file named shared-note.txt containing the word shared. Do nothing else.'
+final-panel 02:05:14
+cleanup 02:05:44

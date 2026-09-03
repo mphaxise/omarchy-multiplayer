@@ -1,0 +1,836 @@
+{
+  "sessions": [
+    {
+      "id": "01M1HQA2AQWBRXFG4SZB6RS55Y",
+      "name": "rig-smoke",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T18:50:39Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 4,
+      "goal": "Answer one question and stop.",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HQAZTJ1PYF6KZC552BADQR",
+      "name": "rig-smoke-2",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T18:53:57Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 4,
+      "goal": "Answer one question and stop.",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HQH0WFJMN8KH8NGY4NHNR5",
+      "name": "rig-smoke-3",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T18:55:09Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 12,
+      "goal": "Answer one question and stop.",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HQK1W48RJ71EHVC1B4JGAT",
+      "name": "herdr-baseline-claude",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T19:09:36Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "system",
+        "id": "omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 8,
+      "goal": null,
+      "mode": "shared",
+      "resumable": false,
+      "created_by": {
+        "kind": "system",
+        "label": "omarchy"
+      },
+      "project": null
+    },
+    {
+      "id": "01M1HQQ0FG831EC2P63Z2N86JG",
+      "name": "wt-loop",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T18:57:18Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": "session/wt-loop"
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 10,
+      "goal": "Add a line to README.md and commit it.",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HQQTY8WQK3K3YYS5ZXYVPK",
+      "name": "wt-loop-2",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T18:58:47Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": "session/wt-loop-2"
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 8,
+      "goal": "Add a line to README.md and commit it.",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HQSWGRESVFBWZMJXTTM8CF",
+      "name": "readme-note",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T18:58:50Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": "session/readme-note"
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 6,
+      "goal": "Add a line to README.md and commit it.",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HQTXX8EE2HP53D5AEF5VGG",
+      "name": "readme-note-2",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T18:59:33Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": "session/readme-note-2"
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 9,
+      "goal": "Add a line to README.md and commit it.",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HQWC1B99XY8TDSDK3PJ5V6",
+      "name": "readme-note-3",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T19:00:26Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": "session/readme-note-3"
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 11,
+      "goal": "Add a line to README.md and commit it.",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HR00NWYV69ETNHKJC3EYHY",
+      "name": "approval-test",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T19:03:39Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 16,
+      "goal": "List the directory.",
+      "mode": "shared",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HR62234XNQ9628Y77MVDBQ",
+      "name": "panel-demo",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T19:09:35Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 10,
+      "goal": "Wait for instructions.",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HRBN7DKTGDQ4F9E0CWE0Y3",
+      "name": "needs-you",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T19:09:34Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 12,
+      "goal": "Create a file.",
+      "mode": "shared",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HS4SGG6HE12RFDCR62XEM9",
+      "name": "try-1",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T20:20:02Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 24,
+      "goal": "Wait for Praneet's instruction.",
+      "mode": "personal",
+      "resumable": true,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HV2G42PG4Z6WE88SA96FZP",
+      "name": "resume-test",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T19:56:39Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 20,
+      "goal": "Remember a code word.",
+      "mode": "personal",
+      "resumable": true,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HVJECXE4EM32G6HQRVV17Q",
+      "name": "claude-f6dqdn",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T20:20:05Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": "session/claude-f6dqdn"
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 8,
+      "goal": null,
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HVJWS111MT31DE1YKVA24S",
+      "name": "crash-17157",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T20:06:45Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": "session/crash-17157"
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 5,
+      "goal": "diagnose crash of sh (pid 17157)",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1HVPAKS9Y82KNXVPRFRG66W",
+      "name": "crash-17157",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T20:33:47Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 13,
+      "goal": "diagnose crash of sh (pid 17157)",
+      "mode": "personal",
+      "resumable": true,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "Work"
+    },
+    {
+      "id": "01M1HWATSPHKBG0XMZNCDH03AK",
+      "name": "claude-qf4rfj",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T20:33:36Z",
+        "source": "human",
+        "detail": "stopped"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 10,
+      "goal": null,
+      "mode": "personal",
+      "resumable": true,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "Work"
+    },
+    {
+      "id": "01M1J23HHZMH5M0X2ZYHME0WEH",
+      "name": "create-a-file-named",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T22:08:07Z",
+        "source": "human",
+        "detail": "test over"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 14,
+      "goal": "Create hello.txt in the spike repo",
+      "mode": "shared",
+      "resumable": true,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1J23P4MHKXW4NBZF4WZPR8M",
+      "name": "reply-with-the-single",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-02T22:08:08Z",
+        "source": "human",
+        "detail": "test over"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 11,
+      "goal": null,
+      "mode": "personal",
+      "resumable": true,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1J23TWGQS6MZRXGZ7XG11H5",
+      "name": "reply-with-the-single-2",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "done",
+        "since": "2026-09-02T22:05:38Z",
+        "source": "reconciler",
+        "detail": "harness exited; pane still open"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 11,
+      "goal": "Orphan test, will lose its pane",
+      "mode": "personal",
+      "resumable": true,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1JFE3TM4F6WCJ5TJH4BC93Y",
+      "name": "eval-a",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "stopped",
+        "since": "2026-09-03T02:01:29Z",
+        "source": "human",
+        "detail": "evaluation step 14"
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": "session/eval-a"
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 13,
+      "goal": "Add a hello page",
+      "mode": "personal",
+      "resumable": true,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1JFE8FXSRHD75S964HWWC7W",
+      "name": "eval-b",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "idle",
+        "since": "2026-09-03T01:51:57Z",
+        "source": "herdr-manifest",
+        "detail": null
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": "session/eval-b"
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 7,
+      "goal": "Note the evaluation run in the README",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1JFP46JQCYQ6HAW7F9QKRT2",
+      "name": "crash-134897",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "idle",
+        "since": "2026-09-03T01:57:33Z",
+        "source": "herdr-manifest",
+        "detail": null
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 9,
+      "goal": "diagnose crash of bash (pid 134897)",
+      "mode": "personal",
+      "resumable": true,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "Work"
+    },
+    {
+      "id": "01M1JFPZ4KGCDGZZM0PVEJEWBP",
+      "name": "eval-shared",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "blocked",
+        "since": "2026-09-03T01:56:49Z",
+        "source": "herdr-manifest",
+        "detail": null
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": "session/eval-shared"
+      },
+      "needs_attention": true,
+      "children": 0,
+      "state_version": 11,
+      "goal": "Shared-mode write test",
+      "mode": "shared",
+      "resumable": true,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    },
+    {
+      "id": "01M1JG58EWR1T6RDMR700T241E",
+      "name": "eval-personal",
+      "agent": {
+        "kind": "claude"
+      },
+      "status": {
+        "state": "idle",
+        "since": "2026-09-03T02:04:32Z",
+        "source": "herdr-manifest",
+        "detail": null
+      },
+      "owner": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "workspace": {
+        "branch": null
+      },
+      "needs_attention": false,
+      "children": 0,
+      "state_version": 8,
+      "goal": "Explicit Personal-mode argv capture",
+      "mode": "personal",
+      "resumable": false,
+      "created_by": {
+        "kind": "human",
+        "label": "omarchy"
+      },
+      "project": "spike-repo"
+    }
+  ]
+}

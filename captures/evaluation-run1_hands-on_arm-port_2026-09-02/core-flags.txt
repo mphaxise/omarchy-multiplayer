@@ -1,0 +1,12 @@
+8:record, event log, receipt, permission-mode table, and Herdr client live.
+14:04-permission-modes.md, 05-receipts-and-artifacts.md, 07-worktrees.md.
+317:# Permission modes (04-permission-modes.md): the harness flag table as data.
+320:#   kind: "flags" | "env" | "default" | "refuse" | "extra_file" | "extra_rule" | "none" | "inherits" | "unknown"
+342:        "personal": _cell("flags", ["--permission-mode", "auto"]),
+343:        "shared": _cell("flags", ["--permission-mode", "default"]),
+350:                                "--dangerously-bypass-approvals-and-sandbox (--yolo)."),
+355:        "personal": _cell("flags", ["--auto"]),
+363:        "shared": _cell("default"),
+368:        "shared": _cell("default"),
+378:        "personal": _cell("flags", ["--permission-mode", "bypassPermissions"]),
+379:        "shared": _cell("flags", ["--permission-mode", "default"]),

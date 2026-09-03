@@ -1,0 +1,4 @@
+eval-a idle personal /home/omarchy/.herdr/worktrees/eval-a session/eval-a wS:p1
+eval-b idle personal /home/omarchy/.herdr/worktrees/eval-b session/eval-b wT:p1
+crash-134897 idle personal /home/omarchy/Work None wV:p1
+eval-shared blocked shared /home/omarchy/.herdr/worktrees/eval-shared session/eval-shared wW:p1
