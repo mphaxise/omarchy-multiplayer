@@ -1,10 +1,10 @@
 # Experiment report: slice 1
 
-Status: draft of 2026-09-02 evening, hands-on, `live`. Build: commit 980d4f2 on the rig, Omarchy quattro at `0b3f1b7` (2026-08-29) on the unofficial aarch64 UTM port, Herdr 0.8.2, Claude Code 2.1.252, software rendering. This report separates what was measured from what I judge; the stopwatch trials for signal 1 and the closed-loop pass have not run, and the verdict below says so.
+Status: draft of 2026-09-02 evening, hands-on, `live`. Build: commit 980d4f2 on the rig, Omarchy quattro at `0b3f1b7` (2026-08-29) on the unofficial aarch64 UTM port, Herdr 0.8.2, Claude Code 2.1.252, software rendering. This report separates what was measured from what I judge; the closed-loop pass has not run, and the verdict below says so. Late-evening revision: the stopwatch protocol for signal 1 is withdrawn and the signal restated as a capture-verified criterion (`decisions.md`); the rig's package update bumped Claude Code to 2.1.259 and left Omarchy at `0b3f1b7`.
 
 ## Bottom line
 
-A durable session object plus a shell panel is live on Omarchy, and four of the five success signals hold on evidence gathered from the rig in one day: sessions survive every terminal closing and a reboot, receipts carry the work, state changes reach the desktop as notifications in under a second, and no session launches with a bypass flag outside Personal mode. The fifth, identifying the waiting session within five seconds, has its mechanism on screen and its measurement still owed. Under the plan's own rule the hypothesis is undecided until that measurement and a run driven from the panel's keys; on the evidence so far it is on track.
+A durable session object plus a shell panel is live on Omarchy, and four of the five success signals hold on evidence gathered from the rig in one day: sessions survive every terminal closing and a reboot, receipts carry the work, state changes reach the desktop as notifications in under a second, and no session launches with a bypass flag outside Personal mode. The fifth, that the waiting session is the first thing named on every surface, holds by capture: toast, badge, hero, and first row all pointed at the blocked session in run 1; I withdrew the five-second stopwatch version of it tonight, for the reason in `decisions.md`. Under the plan's rule as restated, the hypothesis is supported on this rig, with two conditions attached: the panel's keys had a quick pass by me and no recorded run, and the picker prompt has not been exercised.
 
 The day's larger yield is the defect list. Two review passes and two scenario runs found nineteen defects in a slice that passed every happy path; sixteen are fixed and tested, one belongs to Herdr, two are cosmetic and listed. Several of them were invisible without a capture or a log, the cursor that was never painted first among them. That is the closed-loop claim in practice: the surface got better because something looked at it with evidence in hand.
 
@@ -16,7 +16,7 @@ Seventeen commands (`omarchy-agent-session-new` through `reconcile`) over a Pyth
 
 | # | Signal | Measured | Where |
 |---|---|---|---|
-| 1 | Identify the waiting session within five seconds | Mechanism live: toast, urgent glyph with badge, hero naming the session, first row set larger with the state word in urgent. No stopwatch trial has run. | `signal-1-identify-waiting.md`, `signal1-panel-blocked-leads_…_live-run1_crop.png` |
+| 1 | The waiting session is the first thing named on every surface (restated; the five-second stopwatch is withdrawn) | Pass by capture: toast at 0.36 s, urgent glyph with badge of 1, hero naming the session, first row set larger with the state word in urgent. | `signal-1-identify-waiting.md`, `signal1-panel-blocked-leads_…_live-run1_crop.png` |
 | 2 | Closing every terminal kills zero sessions; reattach restores the transcript | Pass. Three windows closed by the compositor; every record kept its pane, zero `session.ended`, harness pids identical before, after, and after reattach, transcripts byte-identical. | `signal-2-survive-window-close.md`, `captures/evaluation-run1_…` |
 | 3 | A completed session shows a receipt | Pass. Every required field populated (worktree, `9fcab2e hello page`, diff stat, end state, start command), written 2 s after the stop. | `signal-3-receipt.md`, `signal3-receipt.json` |
 | 4 | States arrive as notifications, no polling | Pass. `blocked`, `done`, and `failed` each raised a toast 0.3 to 0.9 s after the event through the Herdr subscription, panel closed throughout; `waiting` cannot fire until Herdr tells a question from a permission prompt. | `signal-4-notifications.md`, runs 1 and 2 |
@@ -42,11 +42,11 @@ Herdr reports a question and a permission prompt as one state, so every surface 
 
 ## What this report cannot claim
 
-No five-second number. No verdict from the panel's own keys: the runs drove the commands the keys run, and my quick keyboard test at the rig confirmed the keys work without timing anything. No second harness: Codex is installed on the rig without a login, OpenCode is untested. No `waiting` state until the harness hook distinguishes it. No rendering or performance judgment, per the emulation rule. No closed-loop pass yet, so the audience claim in PLAN.md is untested.
+No five-second number, by decision. No recorded run from the panel's own keys: the runs drove the commands the keys run, and my quick keyboard test at the rig confirmed the keys work without recording which. No second harness: Codex is installed on the rig without a login, OpenCode is untested. No `waiting` state until the harness hook distinguishes it. No rendering or performance judgment, per the emulation rule. No closed-loop pass yet, so the audience claim in PLAN.md is untested.
 
 ## Next
 
-The three stopwatch trials and one session through the agent picker, which close the two flags. The closed-loop pass, one designer, three iterations on a live preview. A controlled Omarchy update before the marketplace listing: upstream moved at least fourteen commits past this rig in four days, and the files the plugin depends on are unchanged, so the risk is small and the update goes in as a deliberate step. Then Phase 6.
+One session through the agent picker, which closes signal 5's flag. The closed-loop pass, one designer, three iterations on a live preview. Omarchy itself: tonight's `omarchy-update` updated packages only, because the aarch64 image ships Omarchy as a root-owned checkout no package owns; the port's `omarchy` 4.0.1-2 package is the real path, and installing it is a deliberate, snapshotted step before the marketplace listing. Then Phase 6.
 
 ## Sources
 

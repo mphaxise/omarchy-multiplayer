@@ -71,3 +71,7 @@ Test sessions were stopped afterwards; `hello.txt` was never written. Remaining 
 ## Addendum, evening: runs 1 and 2, and the keyboard
 
 Two scenario runs over ssh (`findings/evaluation-run1-2026-09-02.md`, `findings/evaluation-run2-2026-09-02.md`) and, at about 19:50, a quick keyboard test by me at the rig: the panel's keys work on the restarted shell. Which keys I pressed is not recorded; the stopwatch trials and a full pass over Enter, `s`, `x`, Esc, the inline results, and the spinner are still owed.
+
+## Addendum, 20:30: the package update
+
+Praneet ran `omarchy-update` at 20:22 and rebooted. Nine Arch packages updated, Claude Code among them through the mise shim (2.1.252 to 2.1.259). Omarchy itself stayed at `0b3f1b7`: `/usr/share/omarchy` is a root-owned git checkout that no package owns (`pacman -Qo` finds no owner), and `omarchy-update-dev` exits without pulling when the path is `/usr/share/omarchy`; the port's `omarchy` 4.0.1-2 package sits uninstalled in the `omarchy-aarch64` repo. No migration ran, so the sshd hardening did not either. After the reboot: ssh with our key works, Herdr and the watcher are up, 109 tests pass on the rig, and the panel opened over IPC with the day's thirty sessions under Done today (`post-update-panel`, not kept). The stopwatch trials are withdrawn by Praneet's decision; `decisions.md` has the reason.

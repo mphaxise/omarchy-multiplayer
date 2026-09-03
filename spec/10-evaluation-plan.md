@@ -27,6 +27,8 @@ One run stages all five signals:
 
 ## Signal 1: identify the waiting session within five seconds
 
+Withdrawn 2026-09-02 evening: the stopwatch protocol below stays as written for the record, and the signal is restated in `PLAN.md` as a capture-verified criterion (toast, badge, hero, and first row all name the waiting session). Reason, in `decisions.md`: one person with a stopwatch on a software-rendered VM measures the VM as much as the panel, and the cue chain is what the design controls. Runs 1 and 2 hold the captures.
+
 Steps 4-9.
 
 - Method: stopwatch on the recording, from the OS notification (step 8) to correct visual identification (step 9); cross-check against the `status.changed` timestamp in `events.jsonl` for the true state-change instant.

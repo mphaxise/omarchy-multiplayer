@@ -30,7 +30,7 @@ Reading the launcher source, a second launch on Omarchy opens a second terminal 
 
 Hypothesis H1: on Omarchy, a durable session object plus a shell panel listing sessions makes concurrent agent work legible and controllable for one user. Success signals, measured on the rig with three sessions running (one Claude Code, one Codex or OpenCode, one crash diagnosis started from the notification path):
 
-1. From the panel, I can identify the session waiting on me within five seconds.
+1. From the panel, the session waiting on me is the first thing named: the toast, the badge, the hero, and the first row all point at it, verified by capture. (Restated 2026-09-02 evening: the original threshold, identification within five seconds on a stopwatch, is withdrawn; see `decisions.md`.)
 2. Closing every terminal window kills zero sessions; reattaching restores the live transcript.
 3. A completed session shows a receipt: workspace, branch, commits, diff summary, status, and the command that started it.
 4. The panel needs zero polling by me: completion and blocked states arrive as notifications.
@@ -116,11 +116,10 @@ Automation on the rig is keyboard-only over synthetic input; ssh from the Mac si
 
 ## Next actions
 
-Items 1 to 4 of the original list are done (2026-09-01 and 2026-09-02). As of 2026-09-02 evening:
+Items 1 to 4 of the original list are done (2026-09-01 and 2026-09-02); runs 1 and 2 of the scenario are in `findings/`; the keyboard path had a quick pass at the rig. As of 2026-09-02, late evening:
 
-1. Twenty minutes at the rig: the keyboard pass on the restarted shell (arrows, Enter, `s`, `x`, Esc, the inline results, the stop spinner), the three stopwatch trials for signal 1, and one session created through `omarchy-agent --pick` with the picker on screen, which closes signal 5's flag.
-2. Snapshot the VM as `dev-2026-09-02` before anything else lands; today's build and the rig wiring are only on the dev disk.
-3. Read `findings/evaluation-slice1-2026-09-02.md` and `findings/evaluation-run1-2026-09-02.md`, then push; five commits are local.
-4. Run 2 of the scenario with a session that finishes on its own (`done`) and one whose harness dies while working, to exercise the two notification rows run 1 never reached; a Codex login in the guest makes worktree B a second harness.
-5. The closed-loop pass (`spec/09-closed-loop-surfaces.md`), one designer, three iterations, on a live preview.
-6. Phase 6: the marketplace listing or the discussion post, text approved before it goes anywhere.
+1. Read `findings/experiment-report-slice1.md` and the run findings, then push; the commits are local.
+2. One session created through `omarchy-agent --pick` with the picker on screen, which closes signal 5's flag.
+3. The closed-loop pass (`spec/09-closed-loop-surfaces.md`), one designer, three iterations, on a live preview.
+4. Omarchy itself on the rig: `omarchy-update` on the aarch64 image updates packages only, because `/usr/share/omarchy` is a root-owned checkout no package owns and the dev-checkout path exits for that location; the port's own `omarchy` 4.0.1-2 package is the intended path. Decide whether to install it (root, replaces the tree) before Phase 6, and file the gap with the port maintainer.
+5. Phase 6: the marketplace listing or the discussion post, text approved before it goes anywhere.
