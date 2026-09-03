@@ -1,6 +1,6 @@
 # Omarchy Multiplayer: experiment plan
 
-Status: plan v2, 2026-09-01 (evening), revised after the research phase; v1 from the same morning is in git history. `decisions.md` carries the dated log. Progress as of 2026-09-02 evening: Phases 0 to 4 done, slice 1 live on the rig; Phase 5 half done (the review passes and an ssh-driven scenario run are in `findings/`; the stopwatch trials, the keyboard pass, and the closed-loop pass wait for a person at the rig); Phase 6 not started.
+Status: plan v2, 2026-09-01 (evening), revised after the research phase; v1 from the same morning is in git history. `decisions.md` carries the dated log. Progress as of 2026-09-02, late evening: Phases 0 to 4 done, slice 1 live on the rig; Phase 5 done as far as a script can take it (the review passes, three scenario runs, the closed-loop pass from the terminal and from the panel, and the experiment report are in `findings/`; the stopwatch trials were withdrawn, and the designer's own sitting at the panel waits for a person at the rig); Phase 6 drafting.
 
 ## Bottom line
 
@@ -120,6 +120,6 @@ Items 1 to 4 of the original list are done (2026-09-01 and 2026-09-02); runs 1 a
 
 1. Read `findings/experiment-report-slice1.md` and the run findings, then push; the commits are local.
 2. One session created through `omarchy-agent --pick` with the picker on screen, which closes signal 5's flag.
-3. The closed-loop pass (`spec/09-closed-loop-surfaces.md`), one designer, three iterations, on a live preview.
+3. The closed-loop sitting (`spec/09-closed-loop-surfaces.md` section 8): Praneet as the designer, three rounds of feedback typed into the panel's Send field while looking at the preview. The surfaces are built and verified from a script (runs 3 and 4, `findings/closed-loop.md`); the sitting is the part no script can do.
 4. Omarchy itself on the rig: `omarchy-update` on the aarch64 image updates packages only, because `/usr/share/omarchy` is a root-owned checkout no package owns and the dev-checkout path exits for that location; the port's own `omarchy` 4.0.1-2 package is the intended path. Decide whether to install it (root, replaces the tree) before Phase 6, and file the gap with the port maintainer.
 5. Phase 6: the marketplace listing or the discussion post, text approved before it goes anywhere.

@@ -49,6 +49,7 @@ CursorSurface {
   signal stopArmRequested(string id)
   signal stopConfirmRequested(string id)
   signal hoverRequested(string id)
+  signal previewRequested(string id)
 
   readonly property string sid: session ? String(session.id || "") : ""
   readonly property string sname: session && session.name ? String(session.name) : sid
@@ -63,6 +64,9 @@ CursorSurface {
   readonly property string mode: session && session.mode ? String(session.mode) : ""
   readonly property bool resumable: session ? session.resumable === true : false
   readonly property int childCount: session ? Number(session.children || 0) : 0
+  readonly property bool hasPreview: session && session.preview && session.preview.value ? true : false
+  readonly property int loopInstructions: session && session.loop ? Number(session.loop.instructions || 0) : 0
+  readonly property int loopCaptures: session && session.loop ? Number(session.loop.captures || 0) : 0
   readonly property bool needsAttention: session ? session.needs_attention === true : false
 
   readonly property bool isLive: state === "starting" || state === "working" || state === "idle"
@@ -119,8 +123,14 @@ CursorSurface {
     ? urgentColor : (state === "orphaned" ? foreground : restColor)
   readonly property bool dotHollow: state === "orphaned" || state === "failed"
 
-  readonly property string detailText: goal !== "" ? goal
-    : [project, branch].filter(function(t) { return t !== "" }).join(" · ")
+  readonly property string loopText: (loopInstructions > 0 || loopCaptures > 0)
+    ? (loopInstructions + " instruction" + (loopInstructions === 1 ? "" : "s") + ", " + loopCaptures + " capture" + (loopCaptures === 1 ? "" : "s"))
+    : ""
+  // The loop count leads so a long goal cannot elide it away
+  // (09-closed-loop-surfaces.md section 7).
+  readonly property string detailText: [loopText, goal !== "" ? goal
+    : [project, branch].filter(function(t) { return t !== "" }).join(" · ")]
+    .filter(function(t) { return t !== "" }).join(" · ")
 
   readonly property string openLabel: isOrphaned ? "⏎ Revive" : (isEnded ? "⏎ Receipt" : (needsAttention ? "⏎ Answer" : "⏎ Open"))
 
@@ -278,7 +288,8 @@ CursorSurface {
       TextField {
         id: sendField
         width: parent.width - sendButton.width - Style.space(6)
-        placeholderText: row.isOrphaned ? "Queue an instruction, delivered on revive…" : "Send an instruction…"
+        placeholderText: row.isOrphaned ? "Queue an instruction, delivered on revive…"
+          : (row.hasPreview ? "Feedback on the preview (a capture goes with it)…" : "Send an instruction…")
         focus: row.sendOpen
         foreground: row.foreground
         accent: row.accent
@@ -320,6 +331,15 @@ CursorSurface {
         fontFamily: row.fontFamily
         fontSize: Style.font.caption
         onClicked: row.sendOpenRequested(row.sid)
+      }
+      Button {
+        visible: row.hasPreview
+        text: "p Preview"
+        bordered: true
+        foreground: row.foreground
+        fontFamily: row.fontFamily
+        fontSize: Style.font.caption
+        onClicked: row.previewRequested(row.sid)
       }
       Button {
         visible: row.isLive || row.isOrphaned

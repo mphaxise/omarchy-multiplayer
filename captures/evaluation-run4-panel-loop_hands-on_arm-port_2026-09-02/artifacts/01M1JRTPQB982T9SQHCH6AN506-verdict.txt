@@ -1,0 +1,1 @@
+Footer sent from the panel's argv with a capture of the page; the instruction carries the capture it was about. Kept.

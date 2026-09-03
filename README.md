@@ -12,7 +12,7 @@ Slice 1 covers one user, many agents, one machine. Sessions are created, listed,
 
 ## Status
 
-Slice 1 is live on the ARM rig as of 2026-09-02: sessions survive window close and reboot, receipts are written, blocked and orphaned states arrive as notifications, and the bar widget and panel run as a user plugin. `findings/evaluation-slice1-2026-09-02.md` holds the `/ux-review` and `/design-qa` passes against that build, the fixes they forced, and the acceptance audit. Omarchy already ships Herdr as a durable agent runtime, so the session model sits on top of it; `findings/research-brief-2026-09-01.md` records what that changed. Next: the five-second identification trials at the keyboard, then the plugin marketplace listing.
+Slice 1 is live on the ARM rig as of 2026-09-02: sessions survive window close and reboot, receipts are written, blocked and orphaned states arrive as notifications, and the bar widget and panel run as a user plugin. `findings/evaluation-slice1-2026-09-02.md` holds the `/ux-review` and `/design-qa` passes against that build, the fixes they forced, and the acceptance audit. Omarchy already ships Herdr as a durable agent runtime, so the session model sits on top of it; `findings/research-brief-2026-09-01.md` records what that changed. `findings/closed-loop.md` holds the closed-loop pass: a goal, a registered preview, feedback sent with the capture it was about, from the terminal (run 3) and from the panel (run 4), commits, a verdict, and a loop view that shows every step. Next: Praneet's own sitting at the panel as the designer, then the plugin marketplace listing.
 
 ## Known issues
 
@@ -26,7 +26,7 @@ Slice 1 ships with these, each with its repro in `findings/evaluation-slice1-202
 
 ## Where to start reading
 
-`PLAN.md` for the question, the five success signals, and the phases. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log. `bin/`, `systemd/`, `plugin/`, and `tests/` hold the build; `python3 -m unittest discover -s tests` runs the 102 local tests, and `bin/README-core.md` lists the assumptions and what the rig confirmed.
+`PLAN.md` for the question, the five success signals, and the phases. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log. `bin/`, `systemd/`, `plugin/`, and `tests/` hold the build; `python3 -m unittest discover -s tests` runs the 121 local tests, and `bin/README-core.md` lists the assumptions and what the rig confirmed.
 
 ## Relationship to Omarchy-UX
 

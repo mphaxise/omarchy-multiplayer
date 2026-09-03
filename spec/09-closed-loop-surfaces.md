@@ -1,6 +1,6 @@
 # Closed-loop surfaces for product people
 
-Status: proposed, 2026-09-01. Slice 1 except where marked. Builds on `01-session-model.md` and `05-receipts-and-artifacts.md`.
+Status: proposed, 2026-09-01; sections 1 through 5 and 7 verified on the rig 2026-09-02 (runs 3 and 4, `findings/closed-loop.md`). Slice 1 except where marked. Builds on `01-session-model.md` and `05-receipts-and-artifacts.md`.
 
 A session that only a developer can drive is not the experiment. This file puts the closed-loop essay's loop directly into the command surface, so a designer who can look at a running product and describe what is wrong can run the whole thing: intent, working interface, situated feedback, implementation change, renewed observation, with the evidence, the approval gates, and the judgment all staying visible. Everything below is slice 1 unless marked otherwise.
 
@@ -40,6 +40,8 @@ A Figma link, a Paper link, or a `DESIGN.md` attaches the same way any artifact 
 
 A row with a registered preview gets one button, Preview, that focuses it without attaching the terminal. A row with no preview shows nothing extra to click. Every row's detail area gains one line, the loop count: `<n> instructions, <m> captures`, read straight off `events.jsonl`. It stays a detail, not a badge on the collapsed row, so it never competes with the status indicator success signal 1 depends on.
 
+Built 2026-09-02 as `03-sessions-panel.md` describes: the Preview button and `p` run `preview --focus`; the Send field on such a row runs `send --with-capture`, which takes the capture itself (`capture --preview`: the registered window's geometry through `grim`, the whole screen when the window is gone, because Omarchy's `capture screenshot` wants a person to pick a region) and ties the instruction to it, the panel closing first so the capture shows the preview rather than the panel; the loop count leads the row's second line rather than following the goal, so a long goal cannot elide it. Run 4 on the rig: two instructions typed into the panel's Send field, each delivered with the capture it was about, two commits, one verdict, every step in `show --loop` and the receipt.
+
 ## 8. The measurement (slice 1)
 
 The test is small and concrete: one designer runs one closed loop of three iterations against a real preview on the rig, a goal, three rounds of situated feedback each tied to a capture, three changes, one verdict, and both `session show --loop` and the final receipt show every step with no gap. Omarchy-UX evaluates agent-facing surfaces on usability, accessibility, and trust-and-handoff design. A closed-loop surface exists to keep responsibility and control legible while work passes between a person and an agent, so trust and handoff is the lens this measurement answers to.
@@ -50,7 +52,7 @@ No live sync with a design tool in slice 1: captures and links are static once a
 
 ## Verify on rig
 
-- Whether a non-terminal GUI window can be focused by app id with the same focus-not-duplicate behavior the launcher already gives TUI panes.
+- Whether a non-terminal GUI window can be focused by app id with the same focus-not-duplicate behavior the launcher already gives TUI panes. Answered 2026-09-02 for URL previews: `omarchy-launch-webapp` opens a Chromium app window whose class is `chrome-<host>__<path with / as _>-Default`; `preview --focus` finds it by that class through `hyprctl clients -j` and focuses it by address, launching it only when no window matches (run 4: "launched", then "focused"). App-id previews use the same lookup on the class; untested live.
 - Whether `session show --loop`, rendered live against a long-running session, stays fast enough to feel immediate.
 
 ## Sources

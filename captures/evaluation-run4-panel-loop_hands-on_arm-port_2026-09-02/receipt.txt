@@ -1,0 +1,31 @@
+Session    loop-panel2  01M1JRH5AEM72W57BEN5HWC18X
+Agent      claude   harness ref 910e87c3-8dd0-4e6c-92a6-9f396fa99165
+Owner      human:omarchy@omarchy   created by human:omarchy@omarchy
+Status     done   2026-09-03T04:30:45Z -> 2026-09-03T04:35:58Z, 313s
+Started    omarchy-agent-session-core new --agent claude --mode personal --name loop-panel2 --base session/loop-hello --goal 'hello.html gets a footer line, sent from the panel with a capture of the page
+README.md and everything else stay untouched
+The capture that travels with the instruction is the evidence' --cwd /home/omarchy/Work/spike-repo   cwd /home/omarchy/Work/spike-repo
+Goal       hello.html gets a footer line, sent from the panel with a capture of the page
+README.md and everything else stay untouched
+The capture that travels with the instruction is the evidence
+
+Workspace  repo /home/omarchy/Work/spike-repo   worktree /home/omarchy/.herdr/worktrees/loop-panel2   branch session/loop-panel2   base session/loop-hello
+Commits    2
+  07cf1c5  hello, footer from the panel
+  70307b5  hello, italic footer
+Diff       1 files changed, 1 insertions(+), 0 deletions(-)
+Dirty      False
+Unpushed   True
+
+Artifacts  5
+  01M1JRHWBASE0ZGP5J4JX0YAW3-before-footer.png   before-footer   2026-09-03T04:31:08Z   human:omarchy@omarchy
+  01M1JRJ4G4CS7R62B7GVAWNNJK-feedback-2.png   feedback-2   2026-09-03T04:31:16Z   human:omarchy@omarchy
+  01M1JRP12PC4Z5DN11KHK93G0A-after-footer.png   after-footer   2026-09-03T04:33:24Z   human:omarchy@omarchy
+  01M1JRPWC11MWWHMWMZ4ANPK8M-feedback-4.png   feedback-4   2026-09-03T04:33:52Z   human:omarchy@omarchy
+  01M1JRTPQB982T9SQHCH6AN506-verdict.txt   verdict   2026-09-03T04:35:57Z   human:omarchy@omarchy
+
+Instructions  2 delivered, 0 dropped, 1 author(s) (human:omarchy@omarchy)
+Approvals     0 requested, 0 approved, 0 denied
+Children      none
+
+Receipt    state_version 21

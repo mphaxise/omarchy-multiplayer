@@ -1,0 +1,136 @@
+{
+  "session_id": "01M1JRH5AEM72W57BEN5HWC18X",
+  "name": "loop-panel2",
+  "agent": {
+    "kind": "claude",
+    "harness_session_ref": "910e87c3-8dd0-4e6c-92a6-9f396fa99165",
+    "version": null
+  },
+  "owner": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "created_by": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "started_at": "2026-09-03T04:30:45Z",
+  "ended_at": "2026-09-03T04:35:58Z",
+  "duration_s": 313,
+  "end_state": "done",
+  "end_reason": "verdict:kept",
+  "started_with": {
+    "command": "omarchy-agent-session-core new --agent claude --mode personal --name loop-panel2 --base session/loop-hello --goal 'hello.html gets a footer line, sent from the panel with a capture of the page\nREADME.md and everything else stay untouched\nThe capture that travels with the instruction is the evidence' --cwd /home/omarchy/Work/spike-repo",
+    "cwd": "/home/omarchy/Work/spike-repo",
+    "env_summary": {
+      "shell": "/bin/bash",
+      "term": null
+    }
+  },
+  "goal": {
+    "text": "hello.html gets a footer line, sent from the panel with a capture of the page\nREADME.md and everything else stay untouched\nThe capture that travels with the instruction is the evidence",
+    "set_by": {
+      "kind": "human",
+      "id": "omarchy@omarchy",
+      "label": "omarchy"
+    },
+    "set_at": "2026-09-03T04:30:45Z"
+  },
+  "workspace": {
+    "repo_root": "/home/omarchy/Work/spike-repo",
+    "worktree_path": "/home/omarchy/.herdr/worktrees/loop-panel2",
+    "branch": "session/loop-panel2",
+    "base_branch": "session/loop-hello",
+    "created_by_session": true,
+    "worktree_removed": false,
+    "worktree_removed_reason": "committed but not pushed to any remote and not merged into base_branch"
+  },
+  "commits": [
+    {
+      "sha": "07cf1c577f52234d77bd744ce88f347e36403b66",
+      "subject": "hello, footer from the panel",
+      "author": "spike"
+    },
+    {
+      "sha": "70307b57c2745e27887c52e2c995215d390c087c",
+      "subject": "hello, italic footer",
+      "author": "spike"
+    }
+  ],
+  "diff_stat": {
+    "files": 1,
+    "insertions": 1,
+    "deletions": 0
+  },
+  "dirty": false,
+  "unpushed": true,
+  "artifacts": [
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JRH5AEM72W57BEN5HWC18X/artifacts/01M1JRHWBASE0ZGP5J4JX0YAW3-before-footer.png",
+      "label": "before-footer",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:31:08Z"
+    },
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JRH5AEM72W57BEN5HWC18X/artifacts/01M1JRJ4G4CS7R62B7GVAWNNJK-feedback-2.png",
+      "label": "feedback-2",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:31:16Z"
+    },
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JRH5AEM72W57BEN5HWC18X/artifacts/01M1JRP12PC4Z5DN11KHK93G0A-after-footer.png",
+      "label": "after-footer",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:33:24Z"
+    },
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JRH5AEM72W57BEN5HWC18X/artifacts/01M1JRPWC11MWWHMWMZ4ANPK8M-feedback-4.png",
+      "label": "feedback-4",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:33:52Z"
+    },
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JRH5AEM72W57BEN5HWC18X/artifacts/01M1JRTPQB982T9SQHCH6AN506-verdict.txt",
+      "label": "verdict",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:35:57Z"
+    }
+  ],
+  "instructions": {
+    "delivered": 2,
+    "dropped": 0,
+    "authors": [
+      "human:omarchy@omarchy"
+    ]
+  },
+  "approvals": {
+    "requested": 0,
+    "approved": 0,
+    "denied": 0
+  },
+  "children": [],
+  "harness_session_ref": "910e87c3-8dd0-4e6c-92a6-9f396fa99165",
+  "state_version": 21
+}

@@ -465,6 +465,10 @@ Panel {
       if (code === 0) root.setResult(sid, "sent", true)
       else if (code === 5) root.setResult(sid, "not delivered · open it and answer there", false)
       else root.setResult(sid, "not sent · " + root.reason(code), false)
+      if (code !== 0 && !root.opened) root.notifyUnseen(sid, root.resultById[sid].text)
+    } else if (kind === "preview") {
+      if (code === 0) { root.close(); return }
+      root.setResult(sid, "no preview to show · " + root.reason(code), false)
     } else if (kind === "stop") {
       if (code === 0) return                     // the spinner runs until the record reports stopped
       var next = Object.assign({}, root.stoppingIds); delete next[sid]; root.stoppingIds = next
@@ -487,7 +491,47 @@ Panel {
 
   function sendToSession(id, text) {
     if (!id || String(text || "").trim() === "") return
-    root.runAction(id, "send", ["omarchy-agent-session-send", String(id), String(text)], "sending…")
+    var s = root.sessionById(id)
+    var argv = ["omarchy-agent-session-send", String(id), String(text)]
+    // 09-closed-loop-surfaces.md section 3: feedback typed while looking
+    // at the preview travels with a capture of it. The capture has to show
+    // the preview and not this panel over it, so the panel closes first
+    // and the command starts once the surface is gone.
+    if (s && s.preview && s.preview.value) {
+      argv.push("--with-capture")
+      deferredAction.sid = String(id)
+      deferredAction.kind = "send"
+      deferredAction.argv = argv
+      deferredAction.busy = "capturing, sending…"
+      root.close()
+      deferredAction.restart()
+      return
+    }
+    root.runAction(id, "send", argv, "sending…")
+  }
+
+  Timer {
+    id: deferredAction
+    property string sid: ""
+    property string kind: ""
+    property var argv: []
+    property string busy: ""
+    interval: 400; repeat: false
+    onTriggered: root.runAction(sid, kind, argv, busy)
+  }
+
+  // A result nobody can see (the panel closed itself to take a capture)
+  // goes out as a toast instead, failures only; a delivered instruction
+  // shows on the row's loop count the next time the panel opens.
+  function notifyUnseen(id, text) {
+    var s = root.sessionById(id)
+    Quickshell.execDetached(["omarchy-notification-send", "--urgency", "normal", "--glyph", "󰚩",
+                             (s ? s.name : "agent session") + ": " + text])
+  }
+
+  function focusPreview(id) {
+    if (!id) return
+    root.runAction(id, "preview", ["omarchy-agent-session-preview", String(id), "--focus"], "")
   }
 
   function stopSession(id) {
@@ -604,9 +648,14 @@ Panel {
     // Fits 400 px at the default font; `r` (receipt) works on every row
     // and the ended rows' own button says so, so it stays off the legend.
     var parts = ["↑↓ move", "⏎ open", "s send", "x stop"]
+    var cur = root.selectedSession
+    if (cur && cur.preview && cur.preview.value) parts.push("p preview")
     if (root.doneHiddenCount > 0) parts.push("→ more")
     else if (root.doneExpanded) parts.push("← fewer")
-    parts.push("esc")
+    // Six entries fill the 400 px line; with a preview on the cursor row
+    // and a collapsed Done section, esc (every panel's close key) is the
+    // one that gives way rather than eliding "→ more" (run 4, 2026-09-03).
+    if (parts.length < 6) parts.push("esc")
     return parts.join(" · ")
   }
 
@@ -683,6 +732,8 @@ Panel {
           root.sendOpenId = s.id
         } else if (t === "r" || t === "R") {
           root.openReceipt(s.id)
+        } else if (t === "p" || t === "P") {
+          if (s.preview && s.preview.value) root.focusPreview(s.id)
         }
       }
 
@@ -895,6 +946,7 @@ Panel {
                     onHoverRequested: function(id) { root.setCursor(id, false) }
                     onOpenRequested: function(id) { root.setCursor(id, false); root.openSession(id) }
                     onReceiptRequested: function(id) { root.setCursor(id, false); root.openReceipt(id) }
+                    onPreviewRequested: function(id) { root.setCursor(id, false); root.focusPreview(id) }
                     onSendOpenRequested: function(id) { root.setCursor(id, false); root.armedStopId = ""; root.sendOpenId = id }
                     onSendSubmitRequested: function(id, text) { root.sendToSession(id, text); root.sendOpenId = "" }
                     onSendCancelRequested: function(id) { root.sendOpenId = "" }

@@ -34,6 +34,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
 
 # --------------------------------------------------------------------------
@@ -1476,6 +1477,8 @@ def build_parser():
     p.add_argument("text")
     p.add_argument("--from", dest="from_session")
     p.add_argument("--about", dest="about_artifact")
+    p.add_argument("--with-capture", action="store_true",
+                   help="capture the preview first and tie the instruction to it (09-closed-loop-surfaces.md)")
     p.add_argument("--wait", action="store_true")
     p.add_argument("--until", action="append", default=[])
     p.add_argument("--timeout", type=int)
@@ -1517,6 +1520,7 @@ def build_parser():
     add_id_arg(p)
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--screenshot", action="store_true")
+    g.add_argument("--preview", action="store_true", help="grab the registered preview window without asking (fullscreen when none)")
     g.add_argument("--file")
     g.add_argument("--url")
     p.add_argument("--label")
@@ -1529,7 +1533,8 @@ def build_parser():
 
     p = sub.add_parser("preview")
     add_id_arg(p)
-    p.add_argument("value")
+    p.add_argument("value", nargs="?")
+    p.add_argument("--focus", action="store_true", help="focus (or launch) the registered preview window")
 
     p = sub.add_parser("mode")
     add_id_arg(p)
@@ -1600,7 +1605,26 @@ def session_list_entry(s):
         "resumable": isinstance(ref, str) and bool(ref),
         "created_by": {"kind": created_by.get("kind"), "label": created_by.get("label")},
         "project": session_project(s),
+        # 09-closed-loop-surfaces.md section 7: the registered preview and
+        # the loop count ("<n> instructions, <m> captures").
+        "preview": s.get("preview"),
+        "loop": loop_counts(s),
     }
+
+
+def loop_counts(s):
+    """Instructions delivered and captures attached, from events.jsonl;
+    the store is reached through the session's own directory so this stays
+    usable from `list` without a context."""
+    try:
+        store = SessionStore(sessions_root())
+        events = store.read_events(s["id"])
+    except Exception:
+        return {"instructions": 0, "captures": 0}
+    instructions = sum(1 for e in events if e.get("type") == "instruction.delivered")
+    captures = sum(1 for e in events if e.get("type") == "artifact.added"
+                   and str((e.get("data") or {}).get("path", "")).lower().endswith((".png", ".jpg", ".jpeg", ".webp")))
+    return {"instructions": instructions, "captures": captures}
 
 
 def cmd_new(args, ctx):
@@ -1808,7 +1832,10 @@ def render_loop_text(store, session):
             return None
         return label_by_path.get(ref) or label_by_ulid.get(ref) or ref
 
-    rows = []  # (ts, sort_key, text)
+    # (ts, seq, text): within one second the record's own order wins, so
+    # the capture an instruction is about lists before the instruction
+    # (run 4, 2026-09-03); commits carry seq 0 and lead their second.
+    rows = []
     for e in events:
         t, d = e["type"], e.get("data") or {}
         ts = e["ts"]
@@ -1816,16 +1843,16 @@ def render_loop_text(store, session):
             about = about_label(d.get("about_artifact"))
             who = (e.get("actor") or {}).get("label") or (e.get("actor") or {}).get("id") or "?"
             text = (d.get("text") or "").strip().splitlines()[0] if d.get("text") else ""
-            rows.append((ts, 1, f"instruction  {who}: {text}" + (f"  [about: {about}]" if about else "")))
+            rows.append((ts, int(e.get("seq") or 0), f"instruction  {who}: {text}" + (f"  [about: {about}]" if about else "")))
         elif t == "instruction.dropped":
-            rows.append((ts, 2, f"dropped      {d.get('reason')}"))
+            rows.append((ts, int(e.get("seq") or 0), f"dropped      {d.get('reason')}"))
         elif t == "artifact.added":
-            rows.append((ts, 3, f"artifact     {d.get('label')}  {d.get('path')}"))
+            rows.append((ts, int(e.get("seq") or 0), f"artifact     {d.get('label')}  {d.get('path')}"))
         elif t == "status.changed":
             detail = f"  ({d.get('detail')})" if d.get("detail") else ""
-            rows.append((ts, 4, f"state        {d.get('from')} -> {d.get('to')}{detail}"))
+            rows.append((ts, int(e.get("seq") or 0), f"state        {d.get('from')} -> {d.get('to')}{detail}"))
         elif t == "session.ended":
-            rows.append((ts, 5, f"ended        {d.get('state')}  {d.get('reason')}"))
+            rows.append((ts, int(e.get("seq") or 0), f"ended        {d.get('state')}  {d.get('reason')}"))
     ws = session.get("workspace") or {}
     git_cwd = ws.get("worktree_path") if ws.get("worktree_path") and pathlib.Path(ws["worktree_path"]).exists() else ws.get("repo_root")
     if git_cwd and ws.get("base_branch") and ws.get("branch"):
@@ -1905,6 +1932,11 @@ def cmd_open(args, ctx):
                               "herdr", "agent", "attach", alias],
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              start_new_session=True)
+        # 09-closed-loop-surfaces.md section 2: the running product sits
+        # beside the conversation. Best effort; a missing compositor or
+        # browser costs nothing here.
+        with contextlib.suppress(Exception):
+            focus_preview(session)
     elif state != "orphaned":
         raise ConflictError(f"session {session['id']} has no runtime and is not orphaned; nothing to open")
     return EXIT_OK
@@ -1943,6 +1975,18 @@ def wait_interactive_ready(herdr, alias, timeout_s=30.0, step_s=0.5):
 
 def cmd_send(args, ctx):
     session = ctx.store.load(args.id_or_name)
+    if getattr(args, "with_capture", False) and not args.about_artifact:
+        # Situated feedback from the panel: grab the preview as it is right
+        # now and tie the instruction to that capture.
+        path, _hint = capture_preview_to_file(session)
+        actor0 = current_human_actor()
+        label = f"feedback-{loop_counts(session)['captures'] + 1}"
+        entry, _dest = add_artifact(ctx.store, session["id"], "capture", str(path), label, actor0)
+        ev = ctx.store.append_event(session["id"], "artifact.added", actor0,
+                                     {"path": entry["path"], "label": entry["label"], "added_by": actor0})
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+        args.about_artifact = entry["path"]
     if args.from_session:
         origin = ctx.store.try_load(args.from_session)
         origin_name = origin["name"] if origin else args.from_session
@@ -2224,6 +2268,10 @@ def cmd_capture(args, ctx):
     if args.screenshot:
         path, source_hint = do_screenshot_capture(session)
         entry, _dest = add_artifact(ctx.store, session["id"], "capture", str(path), args.label, actor)
+    elif getattr(args, "preview", False):
+        path, source_hint = capture_preview_to_file(session)
+        label = args.label or f"preview-{loop_counts(session)['captures'] + 1}"
+        entry, _dest = add_artifact(ctx.store, session["id"], "capture", str(path), label, actor)
     elif args.file:
         entry, _dest = add_artifact(ctx.store, session["id"], "file", args.file, args.label, actor)
     else:
@@ -2251,14 +2299,111 @@ def cmd_artifact_add(args, ctx):
 _URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://")
 
 
+def hypr_clients():
+    """Hyprland's window list, or [] when hyprctl is unavailable (tests,
+    ssh without the session environment)."""
+    try:
+        r = subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            return []
+        data = json.loads(r.stdout or "[]")
+        return data if isinstance(data, list) else []
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, OSError):
+        return []
+
+
+def preview_window_class(preview):
+    """The window class a registered preview shows up as. An app_id preview
+    is its own class. A url preview opened through omarchy-launch-webapp is
+    a Chromium --app window, whose class is "chrome-" + host + "__" + the
+    path without its leading slash, "/" turned into "_", + "-Default"
+    (observed on the rig, 2026-09-02: file:///home/omarchy/x/hello.html
+    became chrome-__home_omarchy_x_hello.html-Default; Omarchy's own web
+    apps read chrome-chatgpt.com__-Default)."""
+    if not preview:
+        return None
+    if preview.get("kind") == "app_id":
+        return preview.get("value")
+    value = preview.get("value") or ""
+    parsed = urllib.parse.urlsplit(value)
+    path = parsed.path[1:] if parsed.path.startswith("/") else parsed.path
+    return "chrome-" + parsed.netloc + "__" + path.replace("/", "_") + "-Default"
+
+
+def find_preview_window(preview):
+    cls = preview_window_class(preview)
+    if not cls:
+        return None
+    for c in hypr_clients():
+        if c.get("class") == cls or (c.get("class") or "").startswith(cls.rsplit("-Default", 1)[0]):
+            return c
+    return None
+
+
+def focus_preview(session, launch=True):
+    """Focus the registered preview window; launch it first when it is a url
+    with no window yet (09-closed-loop-surfaces.md section 2). Returns
+    "focused", "launched", or None when there is nothing to do."""
+    preview = session.get("preview")
+    if not preview:
+        return None
+    win = find_preview_window(preview)
+    if win is not None:
+        with contextlib.suppress(FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            subprocess.run(["hyprctl", "dispatch", f'hl.dsp.focus({{ window = "address:{win["address"]}" }})'],
+                           capture_output=True, text=True, timeout=5)
+        return "focused"
+    if launch and preview.get("kind") == "url":
+        with contextlib.suppress(FileNotFoundError, OSError):
+            subprocess.Popen(["omarchy-launch-webapp", preview["value"]],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        return "launched"
+    return None
+
+
+def capture_preview_to_file(session):
+    """A capture nobody has to click for: the registered preview window's
+    geometry when it is on screen, else the whole screen. Returns
+    (path, source_hint). `omarchy capture screenshot` wants a person to
+    pick a region, which makes it unusable from a script or the panel
+    (run 3, 2026-09-02)."""
+    scratch = pathlib.Path(tempfile.mkdtemp(prefix="omarchy-capture-"))
+    path = scratch / f"capture-{now_rfc3339().replace(':', '-')}.png"
+    win = find_preview_window(session.get("preview"))
+    argv = ["grim"]
+    hint = "monitor"
+    if win is not None:
+        at, size = win.get("at") or [0, 0], win.get("size") or [0, 0]
+        if size and size[0] > 0 and size[1] > 0:
+            argv += ["-g", f"{int(at[0])},{int(at[1])} {int(size[0])}x{int(size[1])}"]
+            hint = "preview"
+    argv.append(str(path))
+    try:
+        subprocess.run(argv, check=True, capture_output=True, text=True, timeout=15)
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        raise CaptureError(f"grim could not capture the screen: {e}") from e
+    if not path.exists():
+        raise CaptureError("grim produced no file")
+    return path, hint
+
+
 def cmd_preview(args, ctx):
     session = ctx.store.load(args.id_or_name)
-    kind = "url" if _URL_SCHEME_RE.match(args.value) else "app_id"
-    actor = current_human_actor()
-    ev = ctx.store.append_event(session["id"], "preview.set", actor, {"kind": kind, "value": args.value})
-    session["preview"] = {"kind": kind, "value": args.value}
-    session["state_version"] = ev["seq"]
-    ctx.store.save_session(session)
+    if args.value:
+        kind = "url" if _URL_SCHEME_RE.match(args.value) else "app_id"
+        actor = current_human_actor()
+        ev = ctx.store.append_event(session["id"], "preview.set", actor, {"kind": kind, "value": args.value})
+        session["preview"] = {"kind": kind, "value": args.value}
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+    if args.focus:
+        if not session.get("preview"):
+            raise ConflictError(f"session '{session['name']}' has no registered preview")
+        result = focus_preview(session)
+        print(result or "no preview window")
+    elif not args.value:
+        raise UsageError("preview needs a value to register, or --focus")
     return EXIT_OK
 
 

@@ -245,7 +245,7 @@ class TestListJsonShape(CoreTestCase):
         self.assertEqual(
             set(entry.keys()),
             {"id", "name", "agent", "status", "owner", "workspace", "needs_attention", "children", "state_version",
-             "goal", "mode", "resumable", "created_by", "project"},
+             "goal", "mode", "resumable", "created_by", "project", "preview", "loop"},
         )
         self.assertEqual(set(entry["agent"].keys()), {"kind"})
         self.assertEqual(set(entry["status"].keys()), {"state", "since", "source", "detail"})
@@ -720,8 +720,85 @@ class TestClosedLoop(TestReceiptComputation):
             self.assertIn("ended        done  verdict:kept", body)
             # Chronological: the intent block first, the ending last.
             self.assertTrue(lines[-1].endswith("verdict:kept") or "ended" in lines[-1] or "artifact" in lines[-1])
+            # Within one second the record's own order holds: the capture an
+            # instruction is about lists before the instruction (run 4).
+            idx_before = next(i for i, l in enumerate(lines) if "artifact     before" in l)
+            idx_instr = next(i for i, l in enumerate(lines) if "instruction  " in l)
+            self.assertLess(idx_before, idx_instr)
         finally:
             shutil.rmtree(repo, ignore_errors=True)
+
+
+class TestPreviewAndCaptureFromThePanel(CoreTestCase):
+    """09-closed-loop-surfaces.md sections 2, 3 and 7 as the panel needs
+    them: preview and loop counts on list entries, a capture nobody clicks
+    for, send --with-capture, preview --focus."""
+
+    def test_list_entry_carries_preview_and_loop_counts(self):
+        session_id = make_bare_session(self.store, "loopy", state="idle")
+        rc, out, err = self.run_cli(["preview", session_id, "file:///tmp/hello.html"])
+        self.assertEqual(rc, 0, err)
+        note = self.plain_dir / "seen.png"
+        note.write_bytes(b"\x89PNG\r\n\x1a\n")
+        rc, out, err = self.run_cli(["capture", session_id, "--file", str(note), "--label", "seen"])
+        self.assertEqual(rc, 0, err)
+        rc, out, err = self.run_cli(["list", "--json"])
+        entry = [e for e in json.loads(out)["sessions"] if e["id"] == session_id][0]
+        self.assertEqual(entry["preview"], {"kind": "url", "value": "file:///tmp/hello.html"})
+        self.assertEqual(entry["loop"], {"instructions": 0, "captures": 1})
+
+    def test_preview_window_class_for_a_webapp_url(self):
+        self.assertEqual(core.preview_window_class({"kind": "url", "value": "file:///home/omarchy/x/hello.html"}),
+                         "chrome-__home_omarchy_x_hello.html-Default")
+        self.assertEqual(core.preview_window_class({"kind": "app_id", "value": "org.example.app"}), "org.example.app")
+
+    def test_send_with_capture_attaches_a_capture_and_ties_the_instruction_to_it(self):
+        self.start_fake_herdr()
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
+                   "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
+        session_id = make_bare_session(self.store, "feedback", runtime=runtime, state="idle")
+        fake_png = self.plain_dir / "grab.png"
+
+        def fake_capture(session):
+            fake_png.write_bytes(b"\x89PNG\r\n\x1a\n")
+            return fake_png, "preview"
+
+        with mock.patch.object(core, "capture_preview_to_file", fake_capture):
+            rc, out, err = self.run_cli(["send", session_id, "make the heading bigger", "--with-capture"])
+        self.assertEqual(rc, 0, err)
+        events = self.store.read_events(session_id)
+        added = [e for e in events if e["type"] == "artifact.added"]
+        self.assertEqual(len(added), 1)
+        self.assertEqual(added[0]["data"]["label"], "feedback-1")
+        queued = [e for e in events if e["type"] == "instruction.queued"][0]
+        self.assertEqual(queued["data"]["about_artifact"], added[0]["data"]["path"])
+        self.assertEqual(self.fake_herdr.calls("agent.prompt")[0]["text"], "make the heading bigger")
+
+    def test_preview_focus_without_a_registered_preview_is_a_conflict(self):
+        session_id = make_bare_session(self.store, "no-preview", state="idle")
+        rc, out, err = self.run_cli(["preview", session_id, "--focus"])
+        self.assertEqual(rc, 5)
+
+    def test_capture_preview_falls_back_to_the_whole_screen_without_a_window(self):
+        session_id = make_bare_session(self.store, "no-window", state="idle")
+        calls = []
+
+        def fake_run(argv, *a, **kw):
+            calls.append(argv)
+            if argv[0] == "grim":
+                pathlib.Path(argv[-1]).write_bytes(b"\x89PNG\r\n\x1a\n")
+                return subprocess.CompletedProcess(argv, 0, "", "")
+            if argv[0] == "hyprctl":
+                return subprocess.CompletedProcess(argv, 0, "[]", "")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+
+        with mock.patch.object(core.subprocess, "run", side_effect=fake_run):
+            rc, out, err = self.run_cli(["capture", session_id, "--preview"])
+        self.assertEqual(rc, 0, err)
+        grim = [c for c in calls if c[0] == "grim"][0]
+        self.assertNotIn("-g", grim)  # whole screen: no geometry
+        self.assertTrue(out.strip().endswith(".png"))
+        self.assertIn("preview-1", out)
 
 
 class TestReceiptPager(CoreTestCase):
