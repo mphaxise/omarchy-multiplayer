@@ -1,0 +1,11 @@
+non-empty lines: 11
+   ▝▜██████▀  Opus 5 · Claude Max
+     ▝▝ ▝▝    ~/.herdr/worktrees/pause-page
+   ❯ Say hello in one line and nothing else.
+   ● Hello!
+   ✻ Churned for 1s · done 3:07 PM
+                                                                                                                 
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   ❯
+   ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
+     ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents                                                         

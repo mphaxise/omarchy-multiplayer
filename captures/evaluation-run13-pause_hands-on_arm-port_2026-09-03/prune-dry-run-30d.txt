@@ -1,0 +1,5 @@
+kept          herdr-baseline-claude        owned by someone else
+kept          shared-page                  owned by someone else
+kept          my-draft                     owned by someone else
+kept          restart-page                 owned by someone else
+nothing to prune (dry run)

@@ -1,0 +1,86 @@
+{
+  "session_id": "01M1MMZ9F8SZK4GWSXQXTZRAAS",
+  "name": "pause-page",
+  "agent": {
+    "kind": "claude",
+    "harness_session_ref": "eaebfe84-a7c9-4fc9-9a8c-866c08e88455",
+    "version": null
+  },
+  "owner": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "created_by": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "people": {
+    "access": [],
+    "assigned": [],
+    "suggestions": {
+      "made": 0,
+      "accepted": 0,
+      "dismissed": 0,
+      "waiting": 0,
+      "authors": []
+    },
+    "visibility": "shared"
+  },
+  "started_at": "2026-09-03T22:07:02Z",
+  "ended_at": null,
+  "duration_s": 18,
+  "end_state": null,
+  "end_reason": null,
+  "started_with": {
+    "command": "omarchy-agent-session-core new --agent claude --mode personal --name pause-page --base session/loop-hello --goal 'hello.html: pause and come back' --prompt 'Say hello in one line and nothing else.' --cwd /home/omarchy/Work/spike-repo",
+    "cwd": "/home/omarchy/Work/spike-repo",
+    "env_summary": {
+      "shell": "/bin/bash",
+      "term": null
+    }
+  },
+  "goal": {
+    "text": "hello.html: pause and come back",
+    "set_by": {
+      "kind": "human",
+      "id": "omarchy@omarchy",
+      "label": "omarchy"
+    },
+    "set_at": "2026-09-03T22:07:02Z"
+  },
+  "workspace": {
+    "repo_root": "/home/omarchy/Work/spike-repo",
+    "worktree_path": "/home/omarchy/.herdr/worktrees/pause-page",
+    "branch": "session/pause-page",
+    "base_branch": "session/loop-hello",
+    "created_by_session": true
+  },
+  "commits": [],
+  "diff_stat": {
+    "files": 0,
+    "insertions": 0,
+    "deletions": 0
+  },
+  "dirty": false,
+  "unpushed": true,
+  "artifacts": [],
+  "instructions": {
+    "delivered": 1,
+    "dropped": 0,
+    "authors": [
+      "human:omarchy@omarchy"
+    ]
+  },
+  "approvals": {
+    "requested": 0,
+    "approved": 0,
+    "denied": 0
+  },
+  "children": [],
+  "lanes": [],
+  "lane": null,
+  "harness_session_ref": "eaebfe84-a7c9-4fc9-9a8c-866c08e88455",
+  "state_version": 11
+}

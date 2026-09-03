@@ -1,0 +1,2 @@
+would delete  2026-09-02 11:50  rig-smoke                    stopped       3 KB  01M1HQA2AQWBRXFG4SZB6RS55Y
+would delete 1 session, 3 KB; add --yes to delete

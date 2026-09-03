@@ -1,0 +1,2 @@
+session 'pause-page' is idle; prune takes ended sessions only
+--older-than wants at least 1d; prune never takes today

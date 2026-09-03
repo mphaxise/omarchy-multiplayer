@@ -1,0 +1,25 @@
+22:07:02Z shell restarted, refresh probe rc=0
+22:07:06Z session: 01M1MMZ9F8SZK4GWSXQXTZRAAS
+22:07:10Z   pause-page: working · None · runtime bound
+22:07:13Z   pause-page: working · None · runtime bound
+22:07:16Z   pause-page: idle · None · runtime bound
+  herdr agents: 1 [('pause-page', 'done')]
+22:07:19Z captured panel-live-row (crop to the panel before committing)
+22:07:24Z captured panel-paused (crop to the panel before committing)
+22:07:25Z after z: pause-page is paused · paused · runtime none
+  herdr agents: 0 []
+22:07:25Z checkpoint receipt end_state: None
+22:07:25Z worktree /home/omarchy/.herdr/worktrees/pause-page present
+22:08:07Z   pause-page: working · unknown · runtime bound
+22:08:10Z   pause-page: idle · None · runtime bound
+22:08:10Z harness ref before eaebfe84… after eaebfe84… same
+  herdr agents: 1 [('pause-page', 'idle')]
+22:08:14Z captured panel-resumed (crop to the panel before committing)
+22:09:11Z prune --older-than 30d rc=0 (dry run)
+22:09:11Z prune --session rig-smoke rc=0 (dry run, nothing deleted)
+22:09:11Z prune --session pause-page (live) rc=5 (5 expected)
+22:09:11Z prune --older-than 2h rc=2 (2 expected)
+22:09:11Z records on disk: 53
+22:09:12Z stop rc=0: pause-page is stopped · stopped · runtime none
+  herdr agents: 0 []
+22:09:12Z done; evidence in /tmp/eval-run13

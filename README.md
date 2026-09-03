@@ -18,6 +18,8 @@ Slices 2 and 3 as of 2026-09-03: agent lanes (`spec/11-agent-lanes.md`) held all
 
 History, as of 2026-09-03 afternoon, merged from `slice-4/history` into `main`: the record keeps every session and nothing ages out (`spec/01-session-model.md`, Retention); the panel reads through a one-day window and says how many ended before it, `e` opens `history` (fourteen days by day), and a session a person stopped resumes its conversation on Enter (`findings/evaluation-run12-history-2026-09-03.md`). It came from Praneet's question after a VM start, where yesterday's agents were: the record had them, the panel hid them after a day, and `open` refused them.
 
+Pause, the same afternoon, merged from `slice-4/pause`: `paused` is a live session with no process, one press of `z`, a Paused section with no window, Enter to resume, and a reboot leaves it there; `prune` is the one deletion, explicit, ended sessions only, a dry run unless `--yes` (`findings/evaluation-run13-pause-2026-09-03.md`, 186 tests). Stop keeps its two presses and its Resume.
+
 ## Known issues
 
 Slice 1 ships with these, each with its repro in `findings/evaluation-slice1-2026-09-02.md`:
@@ -30,7 +32,7 @@ Slice 1 ships with these, each with its repro in `findings/evaluation-slice1-202
 
 ## Where to start reading
 
-`PLAN.md` for the question, the five success signals, and the phases. Keepalive, the installable plugin, is built from this repository by `outbound/build-listing.sh` and released by `outbound/release-keepalive.sh`; `main` ships, slice work branches. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log. `bin/`, `systemd/`, `plugin/`, and `tests/` hold the build; `python3 -m unittest discover -s tests` runs the 167 local tests, and `bin/README-core.md` lists the assumptions and what the rig confirmed.
+`PLAN.md` for the question, the five success signals, and the phases. Keepalive, the installable plugin, is built from this repository by `outbound/build-listing.sh` and released by `outbound/release-keepalive.sh`; `main` ships, slice work branches. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log. `bin/`, `systemd/`, `plugin/`, and `tests/` hold the build; `python3 -m unittest discover -s tests` runs the 186 local tests, and `bin/README-core.md` lists the assumptions and what the rig confirmed.
 
 ## Relationship to Omarchy-UX
 
