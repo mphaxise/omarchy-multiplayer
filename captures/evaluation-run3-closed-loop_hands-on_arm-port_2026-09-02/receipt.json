@@ -1,0 +1,176 @@
+{
+  "session_id": "01M1JPRVWBJNJHH882KD280RKV",
+  "name": "loop-hello",
+  "agent": {
+    "kind": "claude",
+    "harness_session_ref": "c3238fad-2833-4b29-a9cc-094840d5c4f1",
+    "version": null
+  },
+  "owner": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "created_by": {
+    "kind": "human",
+    "id": "omarchy@omarchy",
+    "label": "omarchy"
+  },
+  "started_at": "2026-09-03T04:00:00Z",
+  "ended_at": "2026-09-03T04:09:42Z",
+  "duration_s": 582,
+  "end_state": "done",
+  "end_reason": "verdict:kept",
+  "started_with": {
+    "command": "omarchy-agent-session-core new --agent claude --mode personal --cwd /home/omarchy/Work/spike-repo --base main --name loop-hello --goal 'hello.html greets the person by name, one screen, readable at a glance\nREADME.md and everything else in the repo stay untouched\nA capture of the page after each change; the page itself is the evidence' --prompt 'Create hello.html in this directory containing only the text: Hello. Commit it with the message: hello, first version. Do nothing else.'",
+    "cwd": "/home/omarchy/Work/spike-repo",
+    "env_summary": {
+      "shell": "/bin/bash",
+      "term": null
+    }
+  },
+  "goal": {
+    "text": "hello.html greets the person by name, one screen, readable at a glance\nREADME.md and everything else in the repo stay untouched\nA capture of the page after each change; the page itself is the evidence",
+    "set_by": {
+      "kind": "human",
+      "id": "omarchy@omarchy",
+      "label": "omarchy"
+    },
+    "set_at": "2026-09-03T04:00:00Z"
+  },
+  "workspace": {
+    "repo_root": "/home/omarchy/Work/spike-repo",
+    "worktree_path": "/home/omarchy/.herdr/worktrees/loop-hello",
+    "branch": "session/loop-hello",
+    "base_branch": "main",
+    "created_by_session": true,
+    "worktree_removed": false,
+    "worktree_removed_reason": "committed but not pushed to any remote and not merged into base_branch"
+  },
+  "commits": [
+    {
+      "sha": "a6e479608d21243b6dbdd02e89004ae7139424e4",
+      "subject": "hello, first version",
+      "author": "spike"
+    },
+    {
+      "sha": "b20c567e8fa81c05e1560941146772351f4410bc",
+      "subject": "hello, greet by name",
+      "author": "spike"
+    },
+    {
+      "sha": "b95c2a782595f3c14f951c9f457f7639bb83521c",
+      "subject": "hello, add the date",
+      "author": "spike"
+    },
+    {
+      "sha": "2cbf90d36ac95a3013aaac4e8369a9a72109f8b4",
+      "subject": "hello, heading and paragraph",
+      "author": "spike"
+    }
+  ],
+  "diff_stat": {
+    "files": 1,
+    "insertions": 11,
+    "deletions": 0
+  },
+  "dirty": false,
+  "unpushed": true,
+  "artifacts": [
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ0HEPWJDSRK4KRJSC8THT-iter1-before.png",
+      "label": "iter1-before",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:04:11Z"
+    },
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ5GD1SG0EJNRXZ8R1X1TR-iter1-after.png",
+      "label": "iter1-after",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:06:54Z"
+    },
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ8MGTYXRCM16T74FA5BNX-iteration-1-record-correction.txt",
+      "label": "iteration-1-record-correction",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:08:37Z"
+    },
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ8MVSSX7TZYRWSAAEVFYY-iter2-before.png",
+      "label": "iter2-before",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:08:37Z"
+    },
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ98F4VTK5KEKKP598DRZE-iter2-after.png",
+      "label": "iter2-after",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:08:57Z"
+    },
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ9ZJDC690WJST4Q9VSNRJ-iter3-before.png",
+      "label": "iter3-before",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:09:21Z"
+    },
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQAK4XYW52R3925J7AGNCM-iter3-after.png",
+      "label": "iter3-after",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:09:41Z"
+    },
+    {
+      "path": "/home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQAKBP5MQ1C79425B6P5XQ-verdict.txt",
+      "label": "verdict",
+      "added_by": {
+        "kind": "human",
+        "id": "omarchy@omarchy",
+        "label": "omarchy"
+      },
+      "added_at": "2026-09-03T04:09:41Z"
+    }
+  ],
+  "instructions": {
+    "delivered": 3,
+    "dropped": 1,
+    "authors": [
+      "human:omarchy@omarchy"
+    ]
+  },
+  "approvals": {
+    "requested": 0,
+    "approved": 0,
+    "denied": 0
+  },
+  "children": [],
+  "harness_session_ref": "c3238fad-2833-4b29-a9cc-094840d5c4f1",
+  "state_version": 31
+}

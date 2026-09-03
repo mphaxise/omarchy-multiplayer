@@ -532,6 +532,37 @@ class TestSendMarker(CoreTestCase):
         dropped = [e for e in self.store.read_events(target_id) if e["type"] == "instruction.dropped"]
         self.assertEqual(dropped[0]["data"]["reason"], "agent_not_ready")
 
+    def test_send_wait_translates_idle_to_herdrs_done_as_well(self):
+        self.start_fake_herdr()
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
+                   "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
+        target_id = make_bare_session(self.store, "wait-idle", runtime=runtime)
+        rc, out, err = self.run_cli(["send", target_id, "go", "--wait", "--until", "idle", "--timeout", "5000"])
+        self.assertEqual(rc, 0, err)
+        call = self.fake_herdr.calls("agent.prompt")[0]
+        self.assertEqual(sorted(call["wait"]["until"]), ["done", "idle"])
+
+    def test_send_wait_timeout_after_delivery_is_not_a_drop(self):
+        # Run 3 (2026-09-02): the commit landed while the wait was still
+        # running, and the record said `instruction.dropped`.
+        self.start_fake_herdr()
+        self.fake_herdr.set_error("agent.prompt", "timeout", "timed out waiting for agent status")
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1",
+                   "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
+        target_id = make_bare_session(self.store, "wait-late", runtime=runtime)
+        rc, out, err = self.run_cli(["send", target_id, "go", "--wait", "--timeout", "5000"])
+        self.assertEqual(rc, 0, err)
+        self.assertIn("wait ran out", err)
+        events = self.store.read_events(target_id)
+        types = [e["type"] for e in events]
+        self.assertNotIn("instruction.dropped", types)
+        delivered = [e for e in events if e["type"] == "instruction.delivered"][0]
+        self.assertTrue(delivered["data"].get("wait_timed_out"))
+        # Any other refusal is still a drop.
+        self.fake_herdr.set_error("agent.prompt", "blocked", "agent is blocked and requires interactive input")
+        rc, out, err = self.run_cli(["send", target_id, "go again"])
+        self.assertEqual(rc, 5)
+
     def test_send_to_unbound_session_stays_queued_no_herdr_call(self):
         # No fake Herdr server running at all.
         target_id = make_bare_session(self.store, "unbound-target", runtime=None, state="starting")
@@ -634,6 +665,61 @@ class TestReceiptComputation(CoreTestCase):
             self.assertEqual(receipt["end_reason"], "verdict:kept")
             self.assertEqual(len(receipt["artifacts"]), 1)
             self.assertEqual(receipt["artifacts"][0]["label"], "verdict")
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+
+class TestClosedLoop(TestReceiptComputation):
+    """09-closed-loop-surfaces.md: `done --verdict` closes the harness it
+    leaves behind, and `show --loop` tells the whole story in order."""
+
+    def test_done_closes_the_pane_and_unbinds(self):
+        self.start_fake_herdr()
+        runtime = {"backend": "herdr", "session": None, "workspace_id": "w1",
+                   "tab_id": "t1", "pane_id": "p1", "agent_id": "loop-agent"}
+        session_id = make_bare_session(self.store, "loop-done", runtime=runtime, state="idle")
+        rc, out, err = self.run_cli(["done", session_id, "--verdict", "kept", "--note", "good"])
+        self.assertEqual(rc, 0, err)
+        session = self.store.try_load(session_id)
+        self.assertEqual(session["status"]["state"], "done")
+        self.assertIsNone(session["runtime"])
+        self.assertEqual([c["pane_id"] for c in self.fake_herdr.calls("pane.close")], ["p1"])
+        types = [e["type"] for e in self.store.read_events(session_id)]
+        self.assertIn("runtime.unbound", types)
+        # A second verdict on an ended session is refused, exit 5.
+        rc, out, err = self.run_cli(["done", session_id, "--verdict", "kept", "--note", "again"])
+        self.assertEqual(rc, 5)
+
+    def test_loop_view_orders_intent_instructions_artifacts_changes_and_verdict(self):
+        repo = self.make_git_repo_with_two_commits()
+        try:
+            workspace = {"repo_root": str(repo), "worktree_path": str(repo),
+                         "branch": "session/test-branch", "base_branch": "main", "created_by_session": True}
+            session_id = make_bare_session(self.store, "loop-view", workspace=workspace, state="idle",
+                                           goal_text="Greet by name\nREADME stays\nA capture of the page")
+            note = self.plain_dir / "before.txt"
+            note.write_text("what I saw\n")
+            rc, out, err = self.run_cli(["artifact-add", session_id, "--kind", "file", "--source", str(note), "--label", "before"])
+            self.assertEqual(rc, 0, err)
+            artifact_path = out.strip()
+            rc, out, err = self.run_cli(["send", session_id, "make the greeting say hello", "--about", artifact_path])
+            self.assertEqual(rc, 0, err)  # unbound: queued, delivered on open
+            rc, out, err = self.run_cli(["done", session_id, "--verdict", "kept", "--note", "the page greets"])
+            self.assertEqual(rc, 0, err)
+            rc, out, err = self.run_cli(["show", session_id, "--loop"])
+            self.assertEqual(rc, 0, err)
+            lines = out.splitlines()
+            self.assertEqual(lines[0], "Intent")
+            self.assertEqual(lines[1:4], ["  Greet by name", "  README stays", "  A capture of the page"])
+            body = "\n".join(lines)
+            self.assertIn("instruction  ", body)
+            self.assertIn("[about: before]", body)
+            self.assertIn("artifact     before", body)
+            self.assertIn("artifact     verdict", body)
+            self.assertIn("change       ", body)  # the repo's second commit sits on the branch
+            self.assertIn("ended        done  verdict:kept", body)
+            # Chronological: the intent block first, the ending last.
+            self.assertTrue(lines[-1].endswith("verdict:kept") or "ended" in lines[-1] or "artifact" in lines[-1])
         finally:
             shutil.rmtree(repo, ignore_errors=True)
 

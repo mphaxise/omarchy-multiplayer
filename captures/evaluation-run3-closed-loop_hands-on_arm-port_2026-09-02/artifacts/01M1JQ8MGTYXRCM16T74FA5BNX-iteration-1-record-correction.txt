@@ -1,0 +1,1 @@
+Iteration 1: the instruction was delivered and acted on (commit b20c567, hello, greet by name) while the wait for idle timed out, because Herdr reports done after a turn and the wait asked for idle only; the record wrote instruction.dropped. Core fixed after this iteration: idle waits also accept done, and a wait timeout after delivery records delivery.

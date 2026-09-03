@@ -673,7 +673,14 @@ class HerdrClient:
     def agent_prompt(self, alias=None, text="", wait=False, until=None, timeout_ms=None, target=None, **_):
         params = {"target": target or alias, "text": text}
         if wait:
-            params["wait"] = {"until": list(until or ["idle", "done", "blocked"]), "timeout_ms": timeout_ms or 90000}
+            # Herdr says `done` when a turn finishes and `idle` between
+            # turns; this record folds both into `idle`, so a caller waiting
+            # for our `idle` gets both (run 3, 2026-09-02: `--until idle`
+            # timed out while Herdr sat on `done`).
+            wanted = list(until or ["idle", "done", "blocked"])
+            if "idle" in wanted and "done" not in wanted:
+                wanted.append("done")
+            params["wait"] = {"until": wanted, "timeout_ms": timeout_ms or 90000}
             return self.call("agent.prompt", params, timeout=(timeout_ms or 90000) / 1000 + 10)
         return self.call("agent.prompt", params)
 
@@ -1750,11 +1757,7 @@ def cmd_show(args, ctx):
                 ctx.store.save_session(session)
 
     if args.loop:
-        events = ctx.store.read_events(session["id"])
-        print(f"Goal: {(session.get('goal') or {}).get('text', '(none)')}")
-        for e in events:
-            if e["type"] in ("instruction.queued", "instruction.delivered", "artifact.added", "status.changed"):
-                print(f"[{e['ts']}] {e['type']} {json.dumps(e['data'])}")
+        print(render_loop_text(ctx.store, session))
         return EXIT_OK
 
     if args.json:
@@ -1770,6 +1773,92 @@ def cmd_show(args, ctx):
     else:
         print(json.dumps(session, indent=2))
     return EXIT_OK
+
+
+def render_loop_text(store, session):
+    """09-closed-loop-surfaces.md section 4: the intent, then every
+    instruction in order with the artifact it was about, every change
+    (the commits on the session's branch), every capture and note, the
+    state changes, and the verdict, all in the order they happened. Nothing
+    computed specially: events.jsonl and the git log, joined and sorted."""
+    lines = []
+    goal = (session.get("goal") or {}).get("text") or ""
+    lines.append("Intent")
+    if goal.strip():
+        for g in goal.strip().splitlines():
+            lines.append(f"  {g}")
+    else:
+        lines.append("  (no goal set)")
+    preview = session.get("preview")
+    if preview:
+        lines.append(f"Preview  {preview.get('kind')}: {preview.get('value')}")
+    lines.append("")
+
+    events = store.read_events(session["id"])
+    # Artifact labels by path, so an instruction's `about` reads as a label.
+    artifacts = read_artifacts_index(store.artifacts_dir(session["id"]))
+    label_by_path = {a.get("path"): a.get("label") for a in artifacts}
+    label_by_ulid = {}
+    for a in artifacts:
+        stem = pathlib.Path(a.get("path", "")).name
+        label_by_ulid[stem.split("-", 1)[0]] = a.get("label")
+
+    def about_label(ref):
+        if not ref:
+            return None
+        return label_by_path.get(ref) or label_by_ulid.get(ref) or ref
+
+    rows = []  # (ts, sort_key, text)
+    for e in events:
+        t, d = e["type"], e.get("data") or {}
+        ts = e["ts"]
+        if t == "instruction.queued":
+            about = about_label(d.get("about_artifact"))
+            who = (e.get("actor") or {}).get("label") or (e.get("actor") or {}).get("id") or "?"
+            text = (d.get("text") or "").strip().splitlines()[0] if d.get("text") else ""
+            rows.append((ts, 1, f"instruction  {who}: {text}" + (f"  [about: {about}]" if about else "")))
+        elif t == "instruction.dropped":
+            rows.append((ts, 2, f"dropped      {d.get('reason')}"))
+        elif t == "artifact.added":
+            rows.append((ts, 3, f"artifact     {d.get('label')}  {d.get('path')}"))
+        elif t == "status.changed":
+            detail = f"  ({d.get('detail')})" if d.get("detail") else ""
+            rows.append((ts, 4, f"state        {d.get('from')} -> {d.get('to')}{detail}"))
+        elif t == "session.ended":
+            rows.append((ts, 5, f"ended        {d.get('state')}  {d.get('reason')}"))
+    ws = session.get("workspace") or {}
+    git_cwd = ws.get("worktree_path") if ws.get("worktree_path") and pathlib.Path(ws["worktree_path"]).exists() else ws.get("repo_root")
+    if git_cwd and ws.get("base_branch") and ws.get("branch"):
+        r = run_git(["log", "--no-merges", "--reverse", "--format=%H\x1f%cI\x1f%s", f"{ws['base_branch']}..{ws['branch']}"],
+                    cwd=git_cwd, check=False)
+        if r.returncode == 0:
+            for line in r.stdout.splitlines():
+                parts = line.split("\x1f")
+                if len(parts) == 3:
+                    sha, when, subject = parts
+                    try:
+                        ts = dt.datetime.fromisoformat(when).astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    except ValueError:
+                        ts = when
+                    rows.append((ts, 0, f"change       {sha[:7]} {subject}"))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    for ts, _k, text in rows:
+        lines.append(f"{ts}  {text}")
+    return "\n".join(lines)
+
+
+def _release_runtime(session, herdr, reason):
+    """Close the session's Herdr pane, courtesy interrupt first, and drop the
+    binding. Shared by `stop` and `done`."""
+    runtime = session.get("runtime")
+    if runtime is None:
+        return False
+    if session["status"]["state"] != "orphaned":
+        alias = derive_herdr_alias(session["name"], session["id"])
+        with contextlib.suppress(HerdrError):
+            herdr.call("agent.send_keys", {"target": alias, "keys": ["ctrl+c"]})
+        herdr.pane_close(pane_id=runtime.get("pane_id"))  # let HerdrUnavailable propagate
+    return True
 
 
 def cmd_open(args, ctx):
@@ -1892,23 +1981,35 @@ def cmd_send(args, ctx):
         session["state_version"] = ev["seq"]
         ctx.store.save_session(session)
         raise ConflictError("instruction dropped: the harness never became ready for input")
+    wait_timed_out = False
     try:
         prompt_result = ctx.herdr.agent_prompt(alias=alias, text=delivered_text, wait=args.wait,
                                                until=args.until, timeout_ms=args.timeout) or {}
     except HerdrError as e:
-        ev = ctx.store.append_event(session["id"], "instruction.dropped", author,
-                                     {"instruction_id": instr["id"], "reason": "agent_blocked"})
-        session["queue"] = [q for q in session["queue"] if q["id"] != instr["id"]]
-        session["state_version"] = ev["seq"]
-        ctx.store.save_session(session)
-        raise ConflictError(f"instruction dropped: {e}") from e
+        if args.wait and "timed out" in str(e).lower():
+            # Herdr typed the text and then gave up waiting for the state we
+            # asked for; the instruction reached the harness (run 3,
+            # 2026-09-02: the commit landed while the wait was still
+            # running). Record delivery, say the wait ran out, exit 0.
+            wait_timed_out = True
+            prompt_result = {}
+            print(f"delivered; wait ran out: {e}", file=sys.stderr)
+        else:
+            ev = ctx.store.append_event(session["id"], "instruction.dropped", author,
+                                         {"instruction_id": instr["id"], "reason": "agent_blocked"})
+            session["queue"] = [q for q in session["queue"] if q["id"] != instr["id"]]
+            session["state_version"] = ev["seq"]
+            ctx.store.save_session(session)
+            raise ConflictError(f"instruction dropped: {e}") from e
 
     live_agent = (prompt_result.get("agent") or {}) if isinstance(prompt_result, dict) else {}
     if live_agent.get("agent_status"):
         session = apply_herdr_status(ctx.store, session, live_agent.get("agent_status"))
     record_harness_session_ref(ctx.store, session, ctx.herdr)
-    ev = ctx.store.append_event(session["id"], "instruction.delivered", author,
-                                 {"instruction_id": instr["id"], "delivery": "steer"})
+    delivered = {"instruction_id": instr["id"], "delivery": "steer"}
+    if wait_timed_out:
+        delivered["wait_timed_out"] = True
+    ev = ctx.store.append_event(session["id"], "instruction.delivered", author, delivered)
     session["queue"] = [q for q in session["queue"] if q["id"] != instr["id"]]
     session["state_version"] = ev["seq"]
     ctx.store.save_session(session)
@@ -1949,12 +2050,10 @@ def _stop_one(session_id, store, herdr, actor, reason):
     if state in TERMINAL_STATES:
         return
     runtime = session.get("runtime")
-    if state != "orphaned" and runtime is not None:
-        alias = derive_herdr_alias(session["name"], session["id"])
-        with contextlib.suppress(HerdrError):
-            herdr.call("agent.send_keys", {"target": alias, "keys": ["ctrl+c"]})  # courtesy interrupt before closing
-        herdr.pane_close(pane_id=runtime.get("pane_id"))  # let HerdrUnavailable propagate
-    cleanup_workspace_if_owned(session, herdr)
+    # Record first, close the pane second: the reconciler runs on every
+    # Herdr event, and a pane closed before the record says "stopped" reads
+    # as an orphan for one tick (run 3, 2026-09-02, `idle -> orphaned` a
+    # heartbeat before `idle -> done`).
     ev = store.append_event(session_id, "status.changed", actor, {"from": state, "to": "stopped", "source": actor["kind"], "detail": reason})
     session["status"] = {"state": "stopped", "since": ev["ts"], "source": actor["kind"], "detail": reason}
     session["state_version"] = ev["seq"]
@@ -1962,6 +2061,16 @@ def _stop_one(session_id, store, herdr, actor, reason):
         ev = store.append_event(session_id, "runtime.unbound", actor, {"reason": "stopped"})
         session["runtime"] = None
         session["state_version"] = ev["seq"]
+    store.save_session(session)
+    if runtime is not None:
+        session["runtime"] = runtime
+        session["status"]["state"] = state
+        try:
+            _release_runtime(session, herdr, reason)
+        finally:
+            session["runtime"] = None
+            session["status"]["state"] = "stopped"
+    cleanup_workspace_if_owned(session, herdr)
     ev = store.append_event(session_id, "session.ended", actor, {"state": "stopped", "reason": reason})
     session["state_version"] = ev["seq"]
     store.save_session(session)
@@ -2190,18 +2299,37 @@ def cmd_mode(args, ctx):
 def cmd_done(args, ctx):
     session = ctx.store.load(args.id_or_name)
     actor = current_human_actor()
+    if session["status"]["state"] in TERMINAL_STATES:
+        raise ConflictError(f"session '{session['name']}' already ended ({session['status']['state']})")
     entry, _dest = add_artifact(ctx.store, session["id"], "note", args.note, "verdict", actor)
     ev = ctx.store.append_event(session["id"], "artifact.added", actor,
                                  {"path": entry["path"], "label": "verdict", "added_by": actor})
     session["state_version"] = ev["seq"]
 
-    cleanup_workspace_if_owned(session, ctx.herdr)
-
+    # The verdict closes the loop, so the harness goes with it: `done` used
+    # to leave the pane running and bound, and a done session's harness
+    # then ran on until someone found it (run 3, 2026-09-02).
     old_state = session["status"]["state"]
+    runtime = session.get("runtime")
     ev = ctx.store.append_event(session["id"], "status.changed", actor,
                                  {"from": old_state, "to": "done", "source": "human", "detail": args.verdict})
     session["status"] = {"state": "done", "since": ev["ts"], "source": "human", "detail": args.verdict}
     session["state_version"] = ev["seq"]
+    if runtime is not None:
+        ev = ctx.store.append_event(session["id"], "runtime.unbound", actor, {"reason": "done"})
+        session["runtime"] = None
+        session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    if runtime is not None:
+        # Record first, pane second, as in `_stop_one`.
+        session["runtime"] = runtime
+        session["status"]["state"] = old_state
+        try:
+            _release_runtime(session, ctx.herdr, "done")
+        finally:
+            session["runtime"] = None
+            session["status"]["state"] = "done"
+    cleanup_workspace_if_owned(session, ctx.herdr)
 
     ev = ctx.store.append_event(session["id"], "session.ended", actor, {"state": "done", "reason": f"verdict:{args.verdict}"})
     session["state_version"] = ev["seq"]

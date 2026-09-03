@@ -1,0 +1,32 @@
+Intent
+  hello.html greets the person by name, one screen, readable at a glance
+  README.md and everything else in the repo stay untouched
+  A capture of the page after each change; the page itself is the evidence
+Preview  url: file:///home/omarchy/.herdr/worktrees/loop-hello/hello.html
+
+2026-09-03T04:00:00Z  instruction  omarchy: Create hello.html in this directory containing only the text: Hello. Commit it with the message: hello, first version. Do nothing else.
+2026-09-03T04:00:00Z  state        starting -> working
+2026-09-03T04:00:04Z  state        working -> idle
+2026-09-03T04:00:06Z  state        idle -> working
+2026-09-03T04:00:09Z  change       a6e4796 hello, first version
+2026-09-03T04:00:11Z  state        working -> idle
+2026-09-03T04:04:11Z  instruction  omarchy: Change the greeting in hello.html to: Hello, Praneet. Commit with the message: hello, greet by name. Do nothing else.  [about: iter1-before]
+2026-09-03T04:04:11Z  artifact     iter1-before  /home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ0HEPWJDSRK4KRJSC8THT-iter1-before.png
+2026-09-03T04:04:15Z  change       b20c567 hello, greet by name
+2026-09-03T04:06:42Z  dropped      agent_blocked
+2026-09-03T04:06:54Z  artifact     iter1-after  /home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ5GD1SG0EJNRXZ8R1X1TR-iter1-after.png
+2026-09-03T04:08:37Z  instruction  omarchy: Add a second line to hello.html that reads: Wednesday, 2 September 2026. Keep the greeting. Commit with the message: hello, add the date. Do nothing else.  [about: iter2-before]
+2026-09-03T04:08:37Z  artifact     iteration-1-record-correction  /home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ8MGTYXRCM16T74FA5BNX-iteration-1-record-correction.txt
+2026-09-03T04:08:37Z  artifact     iter2-before  /home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ8MVSSX7TZYRWSAAEVFYY-iter2-before.png
+2026-09-03T04:08:38Z  state        idle -> working
+2026-09-03T04:08:43Z  change       b95c2a7 hello, add the date
+2026-09-03T04:08:57Z  artifact     iter2-after  /home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ98F4VTK5KEKKP598DRZE-iter2-after.png
+2026-09-03T04:09:21Z  instruction  omarchy: Turn hello.html into a minimal HTML page: the greeting as a level-one heading and the date as a paragraph beneath it, nothing else on the page. Commit with the message: hello, heading and paragraph. Do nothing else.  [about: iter3-before]
+2026-09-03T04:09:21Z  artifact     iter3-before  /home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQ9ZJDC690WJST4Q9VSNRJ-iter3-before.png
+2026-09-03T04:09:26Z  change       2cbf90d hello, heading and paragraph
+2026-09-03T04:09:26Z  state        idle -> working
+2026-09-03T04:09:41Z  artifact     iter3-after  /home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQAK4XYW52R3925J7AGNCM-iter3-after.png
+2026-09-03T04:09:41Z  artifact     verdict  /home/omarchy/.local/state/omarchy/sessions/01M1JPRVWBJNJHH882KD280RKV/artifacts/01M1JQAKBP5MQ1C79425B6P5XQ-verdict.txt
+2026-09-03T04:09:42Z  state        idle -> orphaned  (pane not found in Herdr's list)
+2026-09-03T04:09:42Z  state        idle -> done  (kept)
+2026-09-03T04:09:42Z  ended        done  verdict:kept

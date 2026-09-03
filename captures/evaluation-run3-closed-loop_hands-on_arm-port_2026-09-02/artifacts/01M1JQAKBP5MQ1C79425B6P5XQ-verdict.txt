@@ -1,0 +1,1 @@
+Three iterations, three commits, each tied to the capture that prompted it; the page greets by name, dates itself, and reads as a page. README untouched. Kept.
