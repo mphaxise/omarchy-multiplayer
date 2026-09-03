@@ -1,6 +1,6 @@
 # Omarchy Multiplayer: the program plan
 
-Status: plan v3, 2026-09-02, late night, written after slice 1 shipped as Keepalive. Plan v2 (2026-09-01) and v1 are in git history; `decisions.md` carries the dated log. This version keeps v2's question and verified facts, records what slice 1 settled, and plans slices 2 through 4 in the detail the work now supports. Each slice is a bounded test with a question, success signals, a limit, and a review point; effort numbers are working estimates, and the order comes from learning value and reversibility, with gates applied first.
+Status: plan v3, 2026-09-02, late night, written after slice 1 shipped as Keepalive. Progress as of 2026-09-03, early morning: slice 2a, 2d, and the buildable half of 2b are built and unit-tested on `slice-2/lanes`, slice 3's mechanics in proxy form on `slice-3/two-people`, 162 tests; none of it has run on the rig yet (`findings/slice2-3-build-2026-09-03.md`), and `main` still carries only slice 1 and this plan. Plan v2 (2026-09-01) and v1 are in git history; `decisions.md` carries the dated log. This version keeps v2's question and verified facts, records what slice 1 settled, and plans slices 2 through 4 in the detail the work now supports. Each slice is a bounded test with a question, success signals, a limit, and a review point; effort numbers are working estimates, and the order comes from learning value and reversibility, with gates applied first.
 
 ## Bottom line
 
