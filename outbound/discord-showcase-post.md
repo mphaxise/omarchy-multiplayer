@@ -1,6 +1,6 @@
 # Discord showcase post draft: Omacom, #omarchy-plugins-showcase
 
-Target: a new post in the `omarchy-plugins-showcase` forum channel on the Omacom Discord (title, body, up to two images). Status: draft, 2026-09-03. Praneet approves the exact text and the images before it is posted; it goes out from his own account through his browser, one post, by hand.
+Target: a new post in the `omarchy-plugins-showcase` forum channel on the Omacom Discord (title, body, up to two images). Status: posted 2026-09-03 about 11:10 PDT by Praneet from his own account, with the lanes line and both images: https://discord.com/channels/1390012484194275541/1532218307065680004/threads/1545155631256703076. The text below is what went out.
 
 What the channel rewards, read from the posts on 2026-09-03: the posts with hundreds of replies (Strata 431, Shibumi Shell 412, Omate 86, the calendar sync 84, Omagotchi 56) share a title of the form "Name - what it is", a one-sentence pitch as the first line, a screenshot or a screen recording as the first attachment, a short feature list, the one-line install command, the repo link, and a direct ask (testers, feedback, a star). Every post with no image sits near zero. Long posts do worse than tight ones. The original poster answers every reply within minutes on the threads that grew.
 
@@ -30,6 +30,6 @@ I tested with Claude Code on Gabriel Galán's aarch64 UTM image. Nobody has run 
 
 ---
 
-**Line to add once 0.2.0 is pushed** (after "Herdr keeps the agent alive…"): 0.2.0 adds lanes: a second agent in the same session with its own task and its own worktree, merged back with `done --lane`.
+**Posted with this line** after "Herdr keeps the agent alive. Keepalive keeps the record.": 0.2.0 adds lanes: a second agent in the same session with its own task and its own worktree, merged back with `done --lane`.
 
-**Images:** `outbound/listing/preview.png` (the panel with one session that needs an answer) and `captures/evaluation-run9-lanes_hands-on_arm-port_2026-09-03/panel-lanes-row.jpg` if the lanes line is in; otherwise the preview alone.
+**Images posted:** `outbound/listing/preview.png` (the panel with one session that needs an answer) and `captures/evaluation-run9-lanes_hands-on_arm-port_2026-09-03/panel-lanes-row.jpg`.

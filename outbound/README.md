@@ -11,7 +11,8 @@ Written 2026-09-02, late evening, as drafts for Praneet. On his "go all four" at
 | `submission-issue.md` | The marketplace submission in their exact six-heading form, with the five checklist statements laid out for confirmation and the `gh issue create` command for when it is approved. |
 | `discussion-post.md` | A discussion post for `omacom/omarchy` proposing the session model and asking whether it belongs upstream or stays a plugin. |
 | `upstream-candidates.md` | Six issue texts, one per finding in `findings/upstream-contributions.md`, each with its target. |
-| `discussion-followup-lanes.md` | A follow-up comment for #9936 with the lanes result, the two Herdr lessons, and the two-people proxy; drafted 2026-09-03, unposted, and it links the 0.2.0 tag so it goes after the pushes. |
+| `discussion-followup-lanes.md` | A follow-up comment for #9936 with the lanes result, the two Herdr lessons, and the two-people proxy; drafted 2026-09-03, unposted; the 0.2.0 tag it links is pushed. |
+| `discord-showcase-post.md` | The Omacom Discord `#omarchy-plugins-showcase` post, with what the channel's top posts share; posted 2026-09-03 by Praneet with two images. |
 
 ## Decisions that are Praneet's
 
