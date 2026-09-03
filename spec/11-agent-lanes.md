@@ -37,7 +37,7 @@ Commits are attributed by the lane they were made in, from the branch, at merge 
 
 Every ending, by verdict, by `stop`, or by the reconciler, runs the completion path the session model promised: the parent records `child.completed` with the lane's name and end state, and when the parent's own harness is live it receives a marked instruction, "lane <name> finished: <state> (<reason>)", so its agent learns the outcome without polling. A lane stopped because its parent stopped does not notify the parent.
 
-`stop <session>` stops the session's own agent and every lane unless `--keep-lanes` (the existing `--keep-children`); `stop <session> --lane <name>` stops one lane.
+`stop <session>` stops the session's own agent and every lane unless `--keep-lanes` (the existing `--keep-children`); `stop <session> --lane <name>` stops one lane. `pause <session>` pauses the lanes first and then the session's own agent, each with its own events and checkpoint receipt; `pause <session> --lane <name>` pauses one lane and leaves the session running. Resuming the session brings back its own agent only; a paused lane's line reads "paused" and resumes on its own Enter, through `w` (2026-09-03).
 
 ## Instructions
 
@@ -57,6 +57,7 @@ A lane inherits the session's mode and may be stricter, never looser: a Personal
 | `omarchy-agent-session-send <session> "<text>" [--lane <name>]` | one lane, or every live lane and `main` |
 | `omarchy-agent-session-done <session> --lane <name> --verdict … --note …` | ends one lane; `kept` merges |
 | `omarchy-agent-session-stop <session> [--keep-lanes] [--lane <name>]` | as above |
+| `omarchy-agent-session-pause <session> [--lane <name>]` | lanes first, then the session; `--lane` for one lane |
 
 `list --json` carries `lane` on a lane's entry (`{name, parent_id, parent_name}`) and `lanes` on a session's entry (the added lanes with state, task, kind, branch). The panel groups lane entries under their session and never shows them as top-level rows.
 

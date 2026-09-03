@@ -33,6 +33,7 @@ The watcher opens Herdr's `events.subscribe` (filtered to `pane.agent_status_cha
 | `child.completed` (to the parent's owner) | yes | low |
 | `status.changed` to `working` | no | n/a |
 | `status.changed` to `idle` | no | n/a |
+| `status.changed` to `paused` | no | n/a: a person chose it (2026-09-03) |
 | `instruction.delivered` | no | n/a |
 
 `waiting` and `blocked` are the two states `01-session-model.md` says the panel counts and the notifier announces; they are routine multi-agent traffic, so they stay at `normal`. `failed` and `status.changed` to `orphaned` are anomalies and get `critical`, matching the existing crash path. One exception, from the live desktop (2026-09-02): when the reconciler orphans sessions because Herdr itself is unreachable (its `detail` is `Herdr server not running`, typically right after a reboot), every bound session is orphaned at once and the panel already carries a Herdr-down row for the outage, so those notices go out at `normal`; one critical toast per session would mean relaunching every agent just to clear the corner. Any other detail (`pane not found in Herdr's list`) is one agent dying behind the person's back and stays `critical`. `done` and a completed child are good news, not a request, so they stay `low`. Urgency maps directly to `omarchy-notification-send --urgency <level>`.
