@@ -48,7 +48,7 @@ Herdr agent aliases must match `[a-z][a-z0-9_-]{0,31}`; `new` derives one from t
 ] }
 ```
 
-`needs_attention` is true exactly when `status.state` is `waiting` or `blocked`, the two states `01-session-model.md` names as asking for a person. The panel row (`03-sessions-panel.md`) reads the rest: `goal` is the first non-empty line of the goal text, cut to 120 characters, or `null`; `mode` is the record's; `resumable` is true when `agent.harness_session_ref` is a non-empty string, so `open` can resume the transcript; `created_by` carries the creator's `kind` and `label`; `project` is the basename of `workspace.repo_root`, else of `started_with.cwd`, else `null`; `status.source` and `status.detail` are the record's. `show --json` wraps one such object as `"session"`, adding the full `goal`, `runtime`, `lineage`, `created_at`, the full `created_by`, `mode`, `started_with`, plus `"recent_events"`: the last 20 `events.jsonl` lines.
+`needs_attention` is true exactly when `status.state` is `waiting` or `blocked`, the two states `01-session-model.md` names as asking for a person. The panel row (`03-sessions-panel.md`) reads the rest: `goal` is the first non-empty line of the goal text, cut to 120 characters, or `null`; `mode` is the record's; `resumable` is true when `agent.harness_session_ref` is a non-empty string, so `open` can resume the transcript; `revivable` is true exactly when `open` would bring the session back rather than refuse it (orphaned; an inferred end with a transcript; a stop with a transcript), the one place that rule is computed; `created_by` carries the creator's `kind` and `label`; `project` is the basename of `workspace.repo_root`, else of `started_with.cwd`, else `null`; `status.source` and `status.detail` are the record's. `show --json` wraps one such object as `"session"`, adding the full `goal`, `runtime`, `lineage`, `created_at`, the full `created_by`, `mode`, `started_with`, plus `"recent_events"`: the last 20 `events.jsonl` lines.
 
 ## Commands
 
@@ -65,11 +65,12 @@ Exit: 0, 2, 4, 5.
 Example: `omarchy agent session new --agent claude --mode personal --name api-refactor`
 
 ### `list`
-`list [--state <state>] [--mine] [--json]`
+`list [--state <state>] [--mine] [--all] [--ended-within <duration>] [--json]`
 Writes nothing. Reads local `session.json` files only; status is the last `status.changed` event. No Herdr call, so the panel never polls Herdr to render.
+`--ended-within <duration>` is the window the panel reads through: every session that is live or orphaned, plus the ended ones (`done`, `failed`, `stopped`) whose `status.since` falls inside the duration. A duration is an integer and a unit, `m`, `h`, or `d` (`90m`, `24h`, `14d`); anything else is a usage error. With the flag, `--json` adds a top-level `window` object, `{"ended_within": "24h", "earlier_ended": 31}`, so a surface can say how much history lies outside what it shows. A lane that ended before the window still rides along inside its session's `lanes`, because lanes come from the whole store. Without the flag the list is everything on disk, which is what `list` meant before 2026-09-03; on that day the rig held 52 records and the panel's payload was 53 KB against its 64 KB cap (`03-sessions-panel.md`), so the panel asks for `24h`.
 Herdr: none.
-Exit: 0.
-Example: `omarchy agent session list --state waiting --json`
+Exit: 0, 2.
+Example: `omarchy agent session list --state waiting --json`; `omarchy agent session list --ended-within 24h --json`
 
 ### `show`
 `show <id-or-name> [--refresh] [--json]`
@@ -81,8 +82,9 @@ Example: `omarchy agent session show api-refactor --refresh`
 ### `open`
 `open <id-or-name>`
 Bound and live: launch or focus a terminal at app id `org.omarchy.session.<id>` via `omarchy-launch-or-focus-tui`, running `herdr agent attach <alias>` inside it. Orphaned with `harness_session_ref`: open the worktree, `agent.start` the harness with that kind's resume flag and id (for example `claude --resume <id>`, `codex resume <id>`, from Herdr's native-resume table), then attach; writes `runtime.bound`, `status.changed` to `working`. Orphaned with no ref: start fresh in the same worktree; writes `runtime.bound`, `status.detail = "no transcript to resume"`.
+Ended with a transcript, when the end was inferred by the reconciler (`done` or `failed` with detail "harness exited…") or was a `stop`: first `status.changed` to `orphaned` (detail "reopened after an inferred exit" or "resumed after a stop"), then the orphaned path above, so the harness resumes its conversation and the earlier receipt stays in the record (`01-session-model.md`). Ended any other way, or `stopped` with no transcript: exit 5. The `list --json` entry says which applies as `revivable`, so a surface never re-derives the rule.
 Herdr: `agent.get`/`pane.get` to check the binding, then `worktree.open`, `agent.start`, `agent.focus`; `agent attach` (CLI) for the terminal itself.
-Exit: 0, 3, 4.
+Exit: 0, 3, 4, 5.
 Example: `omarchy agent session open api-refactor`
 
 ### `send`
@@ -133,6 +135,14 @@ Prints `receipt.json`. `--write` recomputes it now (git log/diff-stat against `b
 Herdr: none; receipt fields come from git and the local record.
 Exit: 0, 3.
 Example: `omarchy agent session receipt api-refactor --write`
+
+### `history`
+`history [--days <n>] [--all] [--json] [--pager]`
+Writes nothing. The ended sessions (`done`, `failed`, `stopped`) whose `status.since` falls in the last `--days` (default 14), grouped by the local calendar day they ended, newest day first and newest session first within a day. Each line: the local end time, the name, the end state with its detail when the detail says more than the state, the duration from `created_at` to the end, the agent kind, and the project. Lane records are folded out; a lane's end is in its session's receipt. A header per day carries the count, and a footer names the two commands that act on a line, `receipt <name>` and, for a stopped session with a transcript, `open <name>`. Visibility follows `list`: a private session someone else owns shows only with `--all`. `--pager` pipes through `less -R` like `receipt`; `--json` returns `{"days": [{"date", "sessions": [list entries]}], "window": {"days", "ended", "earlier_ended"}}`.
+This is the surface the panel's `e` key opens (`03-sessions-panel.md`). It exists because the panel shows one day and the record keeps everything (`01-session-model.md`, Retention).
+Herdr: none.
+Exit: 0, 2.
+Example: `omarchy agent session history --days 30`
 
 ### `capture`
 `capture <id-or-name> (--screenshot | --file <path> | --url <url>) [--label <text>]`
