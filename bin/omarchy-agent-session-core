@@ -72,7 +72,7 @@ class ConflictError(SessionError):
 # --------------------------------------------------------------------------
 
 STATES = (
-    "starting", "working", "waiting", "blocked", "idle",
+    "starting", "working", "waiting", "blocked", "idle", "paused",
     "done", "failed", "stopped", "orphaned",
 )
 TERMINAL_STATES = {"done", "failed", "stopped"}
@@ -1666,6 +1666,13 @@ def build_parser():
     p.add_argument("--json", action="store_true")
     p.add_argument("--pager", action="store_true", help="pipe through `less -R` (prints plainly when less is missing)")
 
+    p = sub.add_parser("prune", help="delete ended session records: a dry run unless --yes; never a live, orphaned, or paused session")
+    g = p.add_mutually_exclusive_group(required=True)
+    g.add_argument("--older-than", metavar="DURATION", help="ended sessions that ended more than DURATION ago (30d; at least 1d)")
+    g.add_argument("--session", metavar="ID_OR_NAME", help="one ended session")
+    p.add_argument("--yes", action="store_true", help="delete; without it, print what would be deleted")
+    p.add_argument("--json", action="store_true")
+
     p = sub.add_parser("show")
     add_id_arg(p)
     p.add_argument("--refresh", action="store_true")
@@ -1738,6 +1745,11 @@ def build_parser():
     p.add_argument("--keep-children", action="store_true")
     p.add_argument("--keep-lanes", action="store_true", help="stop the session's own agent and leave its lanes running")
     p.add_argument("--lane", help="stop one lane only")
+    p.add_argument("--reason")
+
+    p = sub.add_parser("pause", help="I'll be back: exit the harness, keep the session, resume it later with open")
+    add_id_arg(p)
+    p.add_argument("--lane", help="pause one lane only")
     p.add_argument("--reason")
 
     p = sub.add_parser("rename")
@@ -2846,7 +2858,7 @@ def session_revivable(session):
     """True exactly when `open` would bring the session back rather than
     refuse it. Computed here and carried in `list --json` as `revivable`,
     so no surface re-derives the rule (02-command-surface.md)."""
-    return (session["status"]["state"] == "orphaned"
+    return (session["status"]["state"] in ("orphaned", "paused")
             or inferred_exit_revivable(session)
             or stop_revivable(session))
 
@@ -2913,7 +2925,9 @@ def cmd_open(args, ctx):
         ctx.store.save_session(session)
         state = "orphaned"
 
-    if state == "orphaned":
+    if state in ("orphaned", "paused"):
+        # `paused` takes the same path (01-session-model.md, 2026-09-03):
+        # no pane, a transcript to resume, the worktree still there.
         ref = session["agent"].get("harness_session_ref")
         worktree_path = (session.get("workspace") or {}).get("worktree_path")
         argv, env, _cell = assemble_launch(session["agent"]["kind"], session["mode"])
@@ -2934,7 +2948,7 @@ def cmd_open(args, ctx):
         session["runtime"] = new_runtime
         session["state_version"] = ev["seq"]
         ev = ctx.store.append_event(session["id"], "status.changed", actor,
-                                     {"from": "orphaned", "to": "working", "source": "omarchy", "detail": detail})
+                                     {"from": state, "to": "working", "source": "omarchy", "detail": detail})
         session["status"] = {"state": "working", "since": ev["ts"], "source": "omarchy", "detail": detail}
         session["state_version"] = ev["seq"]
         ctx.store.save_session(session)
@@ -2960,8 +2974,8 @@ def cmd_open(args, ctx):
         # browser costs nothing here.
         with contextlib.suppress(Exception):
             focus_preview(session)
-    elif state != "orphaned":
-        raise ConflictError(f"session {session['id']} has no runtime and is not orphaned; nothing to open")
+    elif state not in ("orphaned", "paused"):
+        raise ConflictError(f"session {session['id']} has no runtime and is not orphaned or paused; nothing to open")
     return EXIT_OK
 
 
@@ -3207,6 +3221,164 @@ def cmd_stop(args, ctx):
         for child_id in list(session["lineage"]["children"]):
             _stop_one(child_id, ctx.store, ctx.herdr, actor, "parent_stopped")
     _stop_one(session["id"], ctx.store, ctx.herdr, actor, reason)
+    return EXIT_OK
+
+
+def _pause_one(session_id, store, herdr, actor, reason):
+    """"I'll be back" (01-session-model.md, 2026-09-03): the harness exits,
+    the pane closes, the record and the worktree stay, a checkpoint receipt
+    says what the session has produced so far. Nothing ends, so no
+    session.ended, no cleanup table, no completion path to the parent.
+    An ended session is left alone (the caller decides whether that is a
+    conflict); a paused one is a no-op."""
+    session = store.try_load(session_id)
+    if session is None:
+        return None
+    state = session["status"]["state"]
+    if state in TERMINAL_STATES or state == "paused":
+        return state
+    runtime = session.get("runtime")
+    # Record first, close the pane second, for the same reason `stop`
+    # does: a pane closed before the record says so reads as an orphan for
+    # one reconciler tick.
+    ev = store.append_event(session_id, "status.changed", actor, {"from": state, "to": "paused", "source": actor["kind"], "detail": reason})
+    session["status"] = {"state": "paused", "since": ev["ts"], "source": actor["kind"], "detail": reason}
+    session["state_version"] = ev["seq"]
+    if runtime is not None:
+        ev = store.append_event(session_id, "runtime.unbound", actor, {"reason": "paused"})
+        session["runtime"] = None
+        session["state_version"] = ev["seq"]
+    store.save_session(session)
+    if runtime is not None:
+        session["runtime"] = runtime
+        session["status"]["state"] = state
+        try:
+            _release_runtime(session, herdr, reason)
+        finally:
+            session["runtime"] = None
+            session["status"]["state"] = "paused"
+    receipt = compute_receipt(store, session)  # a checkpoint: end_state null
+    write_receipt(store, receipt)
+    ev = store.append_event(session_id, "receipt.written", actor,
+                            {"receipt_summary": {"end_state": None, "state_version": receipt["state_version"]}})
+    session["state_version"] = ev["seq"]
+    store.save_session(session)
+    return "paused"
+
+
+def cmd_pause(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    actor = current_human_actor()
+    require_access(session, actor, "own")
+    reason = args.reason or "paused"
+    if getattr(args, "lane", None):
+        lane = resolve_lane(ctx.store, session, args.lane)
+        if lane["status"]["state"] in TERMINAL_STATES:
+            raise ConflictError(f"lane '{args.lane}' of '{session['name']}' has ended; nothing to pause")
+        _pause_one(lane["id"], ctx.store, ctx.herdr, actor, reason)
+        return EXIT_OK
+    if session["status"]["state"] in TERMINAL_STATES:
+        raise ConflictError(f"session '{session['name']}' has ended ({session['status']['state']}); nothing to pause")
+    # Lanes and other children first, depth-first, each with its own
+    # events and checkpoint receipt (11-agent-lanes.md).
+    def pause_children(s):
+        for child_id in list(s["lineage"]["children"]):
+            child = ctx.store.try_load(child_id)
+            if child is None:
+                continue
+            pause_children(child)
+            _pause_one(child_id, ctx.store, ctx.herdr, actor, reason)
+    pause_children(session)
+    _pause_one(session["id"], ctx.store, ctx.herdr, actor, reason)
+    return EXIT_OK
+
+
+PRUNE_MIN_S = 86400
+
+
+def directory_bytes(path):
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            with contextlib.suppress(OSError):
+                total += os.path.getsize(os.path.join(root, f))
+    return total
+
+
+def prune_candidates(store, sessions, viewer, cutoff=None, only_id=None):
+    """(candidates, skipped): ended sessions the viewer owns, older than
+    `cutoff` (or the one named), with every child ended too. `skipped`
+    names the ones a filter turned away and why, for the dry run."""
+    by_id = {s["id"]: s for s in sessions}
+    candidates, skipped = [], []
+    for s in sessions:
+        if only_id is not None and s["id"] != only_id:
+            continue
+        state = s["status"]["state"]
+        if state not in TERMINAL_STATES:
+            skipped.append((s, "paused" if state == "paused" else ("orphaned" if state == "orphaned" else "live")))
+            continue
+        if access_level_of(s, viewer) != "own":
+            skipped.append((s, "owned by someone else"))
+            continue
+        when = ended_at(s)
+        if cutoff is not None and (when is None or when >= cutoff):
+            continue
+        open_children = [c for c in s["lineage"]["children"] if c in by_id and by_id[c]["status"]["state"] not in TERMINAL_STATES]
+        if open_children:
+            skipped.append((s, f"{len(open_children)} lane{'s' if len(open_children) != 1 else ''} not ended"))
+            continue
+        candidates.append(s)
+    return candidates, skipped
+
+
+def cmd_prune(args, ctx):
+    """The one deletion in the model (01-session-model.md, Retention;
+    02-command-surface.md): a dry run unless --yes, ended sessions only."""
+    viewer = current_human_actor()
+    sessions = ctx.store.list_sessions()
+    if args.session:
+        target = ctx.store.load(args.session)
+        if target["status"]["state"] not in TERMINAL_STATES:
+            raise ConflictError(f"session '{target['name']}' is {target['status']['state']}; prune takes ended sessions only")
+        candidates, skipped = prune_candidates(ctx.store, sessions, viewer, only_id=target["id"])
+        if not candidates:
+            reason = skipped[0][1] if skipped else "no such session"
+            raise ConflictError(f"session '{target['name']}' was not pruned: {reason}")
+    else:
+        seconds = parse_duration(args.older_than)
+        if seconds < PRUNE_MIN_S:
+            raise UsageError("--older-than wants at least 1d; prune never takes today")
+        cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=seconds)
+        candidates, skipped = prune_candidates(ctx.store, sessions, viewer, cutoff=cutoff)
+        skipped = [(s, why) for s, why in skipped if why not in ("live", "orphaned", "paused")]
+    rows = []
+    for s in sorted(candidates, key=lambda s: s["status"]["since"]):
+        when = ended_at(s)
+        rows.append({"id": s["id"], "name": s["name"], "state": s["status"]["state"],
+                     "ended_at": s["status"]["since"],
+                     "ended_local": when.astimezone().strftime("%Y-%m-%d %H:%M") if when else "",
+                     "bytes": directory_bytes(ctx.store.session_dir(s["id"]))})
+    deleted = []
+    if args.yes:
+        for row in rows:
+            shutil.rmtree(ctx.store.session_dir(row["id"]), ignore_errors=False)
+            deleted.append(row["id"])
+    total = sum(r["bytes"] for r in rows)
+    verb = "deleted" if args.yes else "would delete"
+    if args.json:
+        print(json.dumps({"dry_run": not args.yes, "sessions": rows, "total_bytes": total,
+                          "skipped": [{"id": s["id"], "name": s["name"], "why": why} for s, why in skipped]}, indent=2))
+        return EXIT_OK
+    for r in rows:
+        print(f"{verb}  {r['ended_local']}  {r['name']:<28} {r['state']:<8} {r['bytes'] / 1024:6.0f} KB  {r['id']}")
+    for s, why in skipped:
+        print(f"kept          {s['name']:<28} {why}")
+    if not rows:
+        print("nothing to prune" + ("" if args.yes else " (dry run)"))
+    else:
+        print(f"{verb} {len(rows)} session{'s' if len(rows) != 1 else ''}, {total / 1024:.0f} KB"
+              + ("" if args.yes else "; add --yes to delete"))
     return EXIT_OK
 
 
@@ -3825,8 +3997,9 @@ def build_sessions_index(store, herdr_state, orphaned, adopted):
         "adopted": list(adopted),
         "counts": {
             "needs_attention": sum(1 for st in states if st in NEEDS_ATTENTION_STATES),
-            "live": sum(1 for st in states if st not in TERMINAL_STATES and st != "orphaned"),
+            "live": sum(1 for st in states if st not in TERMINAL_STATES and st not in ("orphaned", "paused")),
             "orphaned": sum(1 for st in states if st == "orphaned"),
+            "paused": sum(1 for st in states if st == "paused"),
         },
     }
 
@@ -3898,7 +4071,7 @@ def sweep_ended_workspaces(ctx, known, live_agents, live_panes):
     panes were closed."""
     agent_workspaces = {a.get("workspace_id") for a in live_agents if a.get("workspace_id")}
     ended_ids = {s["id"] for s in known
-                 if (s["status"]["state"] in TERMINAL_STATES or s["status"]["state"] == "orphaned")
+                 if (s["status"]["state"] in TERMINAL_STATES or s["status"]["state"] in ("orphaned", "paused"))
                  and s.get("runtime") is None}
     adopted = set()
     for s in known:
@@ -4077,6 +4250,7 @@ COMMAND_HANDLERS = {
     "new": cmd_new, "list": cmd_list, "show": cmd_show, "open": cmd_open,
     "send": cmd_send, "stop": cmd_stop, "rename": cmd_rename, "assign": cmd_assign,
     "goal": cmd_goal, "log": cmd_log, "receipt": cmd_receipt, "history": cmd_history, "capture": cmd_capture,
+    "pause": cmd_pause, "prune": cmd_prune,
     "artifact-add": cmd_artifact_add, "preview": cmd_preview, "mode": cmd_mode,
     "done": cmd_done, "reconcile": cmd_reconcile,
     "add": cmd_add, "lanes": cmd_lanes, "subscribe": cmd_subscribe, "artifact-mark": cmd_artifact_mark,

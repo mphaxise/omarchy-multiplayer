@@ -65,7 +65,9 @@ Ownership assigns responsibility and nothing else. Access in slice 1 is the OS u
 
 ## State machine
 
-States: `starting`, `working`, `waiting`, `blocked`, `idle`, `done`, `failed`, `stopped`, `orphaned`.
+States: `starting`, `working`, `waiting`, `blocked`, `idle`, `paused`, `done`, `failed`, `stopped`, `orphaned`.
+
+`paused` (2026-09-03) is a live session with no process: the person said "I'll be back", the harness exited, the pane closed, the record and the worktree stayed, and Enter brings it back on its transcript. It differs from `idle`, which holds a harness process in Herdr with its memory, and from `orphaned`, which nobody chose. It asks for nothing, so it never counts toward the badge, and it has nothing to lose in a reboot, so a reboot leaves it exactly where it was.
 
 | From | To | Trigger | Source |
 |---|---|---|---|
@@ -83,10 +85,13 @@ States: `starting`, `working`, `waiting`, `blocked`, `idle`, `done`, `failed`, `
 | `orphaned` | `working` | `session open` re-binds a pane and resumes the harness session | omarchy |
 | `done`, `failed` with detail "harness exited…" and a transcript | `orphaned`, then `working` | `session open` on an end the reconciler inferred, which nobody decided; the receipt from that end stays in the record (rig, 2026-09-02) | omarchy |
 | `stopped` with a transcript | `orphaned`, then `working` | `session open` on a session a person stopped, detail "resumed after a stop": stop reads as "stop for now" to the person who pressed it, and the transcript is on disk, so it resumes the way an orphan does; the receipt from the stop stays in the record (decision of 2026-09-03). A `stopped` session without a transcript, and a `done` closed with a verdict, stay closed: exit 5 | omarchy |
+| any live, `orphaned` | `paused` | `session pause`: lanes pause first, depth-first; the harness gets the courtesy interrupt and its pane closes (nothing to close from `orphaned`, where pause means "I know, and not now"); `runtime.unbound` (reason `paused`); a checkpoint receipt is written; the worktree is left alone; detail is the reason given, else `paused`. A `paused` session is a no-op; an ended one is exit 5 | human, system |
+| `paused` | `working` | `session open`: the orphaned path from `paused`, so the harness resumes its transcript in the same worktree (a fresh start with detail "no transcript to resume" when there is none); lanes stay paused and resume one at a time; queued instructions are delivered | omarchy |
+| `paused` | `stopped` | `session stop`: no Herdr call; the cleanup table and the receipt as usual | human, agent, system |
 
 Herdr reports `blocked`, `working`, `done`, `idle`, `unknown`. Omarchy maps Herdr `done` to `idle` when the pane is alive and to `done` when the harness process has exited, and maps `unknown` to the previous state with `status.detail = "unknown"` and a timestamp. Herdr's detection is authoritative for six harnesses with lifecycle hooks and heuristic for the rest; `status.source` records which, so the panel can show a confidence hint.
 
-`waiting` and `blocked` are the two states that ask for a person. They are the states the panel counts, the notifier announces, and the first success signal measures.
+`waiting` and `blocked` are the two states that ask for a person. They are the states the panel counts, the notifier announces, and the first success signal measures. `paused` asks for nothing and announces nothing: a person chose it.
 
 ## Events
 
@@ -159,7 +164,7 @@ The receipt answers success signal 3 in `PLAN.md`: a completed session shows wor
 
 Omarchy creates the pane and starts the harness through Herdr's socket API, then records the returned ids in `runtime`. Omarchy subscribes to Herdr's `pane.agent_status_changed` events and writes `status.changed` events from them. When Herdr's per-agent lifecycle hooks are available for the harness, the status source is `herdr-hook`; otherwise `herdr-manifest`. Herdr's own agent name is set to the session name so the Herdr sidebar and the Omarchy panel agree. Herdr's custom state and metadata channel carries the session id so a Herdr-side view can link back.
 
-The reconciler runs every 5 s from the watcher and on every Herdr nudge: it lists Herdr panes and agents, compares with bound sessions, marks missing panes `orphaned`, ends sessions whose agent left Herdr's list while the pane lives on (`done`, or `failed` when it vanished mid-turn, unbound, receipt written; rig, 2026-09-02) unless the Herdr server started after the session's binding, in which case the pane is the restored shell after a restart and the session is `orphaned` instead (a reboot at 22:30 on 2026-09-02 ended two working sessions before this rule existed; the server's start is read from its socket's mtime, with a two-second margin), adopts a Herdr agent pane with no session record as a session created by `system:omarchy` named after the Herdr agent, so agents started outside the launcher still appear, and rewrites `index.json` with the Herdr state (`03-sessions-panel.md`). When Herdr itself is unreachable it orphans every bound live session and exits 4. It also sweeps the workspaces its own `runtime.bound` events name for any ended or orphaned session, closing their empty shell panes, never an adopted agent's workspace and never one with a live agent in it; Herdr restores every workspace with a fresh shell after a server restart, and by run 2 nine dead panes sat in its list.
+The reconciler runs every 5 s from the watcher and on every Herdr nudge: it lists Herdr panes and agents, compares with bound sessions (a `paused` session is unbound by construction, so the reconciler never touches one), marks missing panes `orphaned`, ends sessions whose agent left Herdr's list while the pane lives on (`done`, or `failed` when it vanished mid-turn, unbound, receipt written; rig, 2026-09-02) unless the Herdr server started after the session's binding, in which case the pane is the restored shell after a restart and the session is `orphaned` instead (a reboot at 22:30 on 2026-09-02 ended two working sessions before this rule existed; the server's start is read from its socket's mtime, with a two-second margin), adopts a Herdr agent pane with no session record as a session created by `system:omarchy` named after the Herdr agent, so agents started outside the launcher still appear, and rewrites `index.json` with the Herdr state (`03-sessions-panel.md`). When Herdr itself is unreachable it orphans every bound live session and exits 4. It also sweeps the workspaces its own `runtime.bound` events name for any ended, orphaned, or paused session, closing their empty shell panes, never an adopted agent's workspace and never one with a live agent in it; Herdr restores every workspace with a fresh shell after a server restart, and by run 2 nine dead panes sat in its list.
 
 ## Invariants
 
@@ -169,13 +174,15 @@ The reconciler runs every 5 s from the watcher and on every Herdr nudge: it list
 4. `created_by` never changes. `owner` changes only through `owner.assigned`.
 5. A session in `shared` or `restricted` mode is never bound to a harness launched with a bypass-permissions flag.
 6. Two sessions never share a worktree unless both records name the same `worktree_path` and `workspace.created_by_session` is false for both.
-7. Deleting a session directory is the only way to lose history, and no command does it.
+7. Deleting a session directory is the only way to lose history, and only `prune` does it, on an explicit `--yes`, and only to an ended session.
 
 ## Retention
 
-Records are kept for as long as the directory exists. Nothing ages out on its own: an ended session stays on disk with its events, receipt, artifacts, and harness resume reference until a person deletes the directory. A `prune` command, explicit and never scheduled, is the only deletion this model will ever add, and it is not built.
+Records are kept for as long as the directory exists. Nothing ages out on its own: an ended session stays on disk with its events, receipt, artifacts, and harness resume reference until a person deletes the directory. `prune` (`02-command-surface.md`) is the only deletion this model has: explicit, one command at a time, never scheduled, a dry run unless `--yes` is given, and it takes only ended sessions older than the duration named, never a live, orphaned, or paused one, and never a session with a lane that has not ended.
 
-What changes with age is which surface shows a record, and that is a property of the surface, never of the record (`03-sessions-panel.md`): the bar panel shows what is live plus what ended in the last day, and `history` shows what ended in the last fourteen days by default, further back on request. On 2026-09-03 the rig held 52 records, every one of them ended, 42 of them stopped by a person, and the panel showed none of the previous evening's; that is the day this section was written.
+A paused session is the one a person has said they will come back to. It is kept, and shown, until that person resumes it or stops it; no window and no prune applies to it.
+
+What changes with age is which surface shows a record, and that is a property of the surface, never of the record (`03-sessions-panel.md`): the bar panel shows what is live, what is paused, plus what ended in the last day, and `history` shows what ended in the last fourteen days by default, further back on request. On 2026-09-03 the rig held 52 records, every one of them ended, 42 of them stopped by a person, and the panel showed none of the previous evening's; that is the day this section was written, and pause followed the same afternoon from the same question.
 
 ## Open questions for the rig
 

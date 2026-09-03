@@ -653,3 +653,12 @@ class TestDryRunPrintsArgv(WatchTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPauseIsQuiet(unittest.TestCase):
+    """06-notifications.md: a pause is a person's choice; nothing announces it."""
+
+    def test_status_changed_to_paused_is_not_notify_worthy(self):
+        event = {"type": "status.changed", "data": {"from": "idle", "to": "paused", "detail": "paused"}}
+        self.assertIsNone(watch.classify_event(event))
+        self.assertIsNone(watch.classify_event({"type": "runtime.unbound", "data": {"reason": "paused"}}))

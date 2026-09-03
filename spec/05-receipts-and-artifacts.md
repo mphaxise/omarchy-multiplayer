@@ -110,7 +110,9 @@ When the harness writes a conclusion, the diagnosis skill should close its run b
 
 ## Retention
 
-Receipts are never deleted by anything here. `session.json`, `events.jsonl`, `receipt.json`, and `artifacts/` persist under `~/.local/state/omarchy/sessions/<id>/` for as long as the directory exists, and invariant 7 in `01-session-model.md` guarantees no command removes it. A `sessions prune` command is reserved: the name is claimed so retention can be added without a naming collision, but it has no implementation and no schedule, and `01-session-model.md`'s Retention section (2026-09-03) says it will never be scheduled. What ages is only which surface shows a receipt: the panel shows a day of ended sessions and `history` shows fourteen, and both open the same `receipt`.
+Receipts are never deleted by anything here. `session.json`, `events.jsonl`, `receipt.json`, and `artifacts/` persist under `~/.local/state/omarchy/sessions/<id>/` for as long as the directory exists, and invariant 7 in `01-session-model.md` guarantees no command removes it. `prune` (`02-command-surface.md`, built 2026-09-03) is the one deletion: explicit, a dry run unless `--yes`, ended sessions older than a duration or one named session, never scheduled, never a paused session, and `01-session-model.md`'s Retention section says why. It deletes the whole session directory, this receipt and the artifacts with it. What ages otherwise is only which surface shows a receipt: the panel shows a day of ended sessions and `history` shows fourteen, and both open the same `receipt`.
+
+`pause` writes a checkpoint receipt, `end_state` null, so a paused row's `r` shows what the session has produced so far; `stop` or `done` later overwrites it with the final one.
 
 ## Portfolio evidence
 
