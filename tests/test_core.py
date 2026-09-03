@@ -248,7 +248,7 @@ class TestListJsonShape(CoreTestCase):
         self.assertEqual(
             set(entry.keys()),
             {"id", "name", "agent", "status", "owner", "workspace", "needs_attention", "children", "state_version",
-             "goal", "mode", "resumable", "created_by", "project", "preview", "loop", "lane", "lanes",
+             "goal", "mode", "resumable", "revivable", "created_by", "project", "preview", "loop", "lane", "lanes",
              "visibility", "owner_display", "owned_by_other", "suggestions", "presence"},
         )
         self.assertEqual(set(entry["agent"].keys()), {"kind"})
@@ -308,6 +308,147 @@ class TestListJsonShape(CoreTestCase):
         rc, out, err = self.run_cli(["list"])
         self.assertEqual(rc, 0, err)
         self.assertEqual(out, f"! {session_id}  {'text-row':<24} {'waiting':<10} claude\n")
+
+
+def age_session(store, session_id, seconds_ago):
+    """Moves a record's `status.since` into the past, so a window or a
+    history test can end a session yesterday without waiting."""
+    record = store.try_load(session_id)
+    when = core.dt.datetime.now(core.dt.timezone.utc) - core.dt.timedelta(seconds=seconds_ago)
+    record["status"]["since"] = when.strftime("%Y-%m-%dT%H:%M:%SZ")
+    store.save_session(record)
+    return record
+
+
+class TestWindowAndHistory(CoreTestCase):
+    """The panel's window and the history surface (02-command-surface.md,
+    2026-09-03): the store keeps every record; a surface asks for the
+    slice it shows and hears how much lies outside it."""
+
+    def test_list_ended_within_keeps_live_and_recent_ended_and_counts_earlier(self):
+        live = make_bare_session(self.store, "live-for-days", state="idle")
+        age_session(self.store, live, 3 * 86400)  # idle for three days: still in the window
+        orphan = make_bare_session(self.store, "orphan", state="orphaned")
+        age_session(self.store, orphan, 3 * 86400)
+        recent = make_bare_session(self.store, "ended-today", state="stopped")
+        age_session(self.store, recent, 3600)
+        old = make_bare_session(self.store, "ended-last-week", state="done")
+        age_session(self.store, old, 3 * 86400)
+        rc, out, err = self.run_cli(["list", "--ended-within", "24h", "--json"])
+        self.assertEqual(rc, 0, err)
+        data = json.loads(out)
+        self.assertEqual({s["name"] for s in data["sessions"]}, {"live-for-days", "orphan", "ended-today"})
+        self.assertEqual(data["window"], {"ended_within": "24h", "earlier_ended": 1})
+        # Without the flag the list is everything, and there is no window key.
+        data = json.loads(self.run_cli(["list", "--json"])[1])
+        self.assertEqual(len(data["sessions"]), 4)
+        self.assertNotIn("window", data)
+        # A wider window brings the old one back.
+        data = json.loads(self.run_cli(["list", "--ended-within", "14d", "--json"])[1])
+        self.assertEqual(len(data["sessions"]), 4)
+        self.assertEqual(data["window"]["earlier_ended"], 0)
+
+    def test_list_ended_within_does_not_count_a_lane_as_earlier(self):
+        parent = make_bare_session(self.store, "parent", state="stopped")
+        age_session(self.store, parent, 3 * 86400)
+        lane = make_bare_session(self.store, "parent.claude", state="stopped", parent_id=parent)
+        record = self.store.try_load(lane)
+        record["lane"] = {"name": "claude", "parent_id": parent, "parent_name": "parent"}
+        record["lineage"]["spawn_reason"] = "lane"
+        self.store.save_session(record)
+        age_session(self.store, lane, 3 * 86400)
+        data = json.loads(self.run_cli(["list", "--ended-within", "24h", "--json"])[1])
+        self.assertEqual(data["sessions"], [])
+        self.assertEqual(data["window"]["earlier_ended"], 1)
+
+    def test_list_ended_within_rejects_a_bad_duration(self):
+        make_bare_session(self.store, "any", state="idle")
+        for bad in ("24", "h", "1w", "24 h", "3.5h"):
+            rc, out, err = self.run_cli(["list", "--ended-within", bad, "--json"])
+            self.assertEqual(rc, 2, bad)
+            self.assertIn("24h", err)
+        self.assertEqual(self.run_cli(["list", "--ended-within", "-3h", "--json"])[0], 2)  # argparse's own refusal
+
+    def test_list_json_carries_revivable(self):
+        # revivable is the core's rule, in one place: orphaned; an inferred
+        # end with a transcript; a stop with a transcript. Nothing else.
+        cases = [
+            ("orphan", "orphaned", None, None, True),
+            ("orphan-no-ref", "orphaned", "", None, True),
+            ("inferred", "failed", "abc", "harness exited while working", True),
+            ("stopped-with-ref", "stopped", "abc", "stopped", True),
+            ("stopped-no-ref", "stopped", None, "stopped", False),
+            ("done-by-verdict", "done", "abc", "kept", False),
+            ("working", "working", "abc", None, False),
+        ]
+        for name, state, ref, detail, expected in cases:
+            sid = make_bare_session(self.store, name, state=state)
+            record = self.store.try_load(sid)
+            record["agent"]["harness_session_ref"] = ref
+            record["status"]["detail"] = detail
+            self.store.save_session(record)
+        entries = {e["name"]: e for e in json.loads(self.run_cli(["list", "--json"])[1])["sessions"]}
+        for name, _state, _ref, _detail, expected in cases:
+            self.assertIs(entries[name]["revivable"], expected, name)
+
+    def test_history_groups_ended_sessions_by_day_newest_first(self):
+        today = make_bare_session(self.store, "ended-today", state="stopped")
+        record = self.store.try_load(today)
+        record["agent"]["harness_session_ref"] = "abc"
+        self.store.save_session(record)
+        age_session(self.store, today, 600)
+        two_days = make_bare_session(self.store, "ended-two-days-ago", state="done")
+        record = self.store.try_load(two_days)
+        record["status"]["detail"] = "kept"
+        self.store.save_session(record)
+        age_session(self.store, two_days, 2 * 86400)
+        way_back = make_bare_session(self.store, "ended-last-month", state="failed")
+        age_session(self.store, way_back, 30 * 86400)
+        make_bare_session(self.store, "still-working", state="working")
+
+        rc, out, err = self.run_cli(["history", "--json"])
+        self.assertEqual(rc, 0, err)
+        data = json.loads(out)
+        self.assertEqual(data["window"], {"days": 14, "ended": 2, "earlier_ended": 1})
+        self.assertEqual([[s["name"] for s in d["sessions"]] for d in data["days"]],
+                         [["ended-today"], ["ended-two-days-ago"]])
+        self.assertGreater(data["days"][0]["date"], data["days"][1]["date"])
+        self.assertIs(data["days"][0]["sessions"][0]["revivable"], True)
+
+        rc, out, err = self.run_cli(["history"])
+        self.assertEqual(rc, 0, err)
+        self.assertTrue(out.startswith("History · last 14 days · 2 ended · 1 earlier\n"), out)
+        self.assertIn("ended-today", out)
+        self.assertIn("stopped · resumes", out)
+        self.assertIn("done · kept", out)
+        self.assertNotIn("ended-last-month", out)
+        self.assertNotIn("still-working", out)
+        self.assertIn("open <name> resumes", out)
+        lines = out.splitlines()
+        day_headers = [l for l in lines if l.endswith(" · 1 ended")]
+        self.assertEqual(len(day_headers), 2)
+        self.assertLess(lines.index(day_headers[0]), lines.index(day_headers[1]))
+
+        # --days reaches further back; a bad value is a usage error.
+        data = json.loads(self.run_cli(["history", "--days", "60", "--json"])[1])
+        self.assertEqual(data["window"], {"days": 60, "ended": 3, "earlier_ended": 0})
+        self.assertEqual(self.run_cli(["history", "--days", "0"])[0], 2)
+
+    def test_history_folds_lanes_out_and_says_when_nothing_ended(self):
+        parent = make_bare_session(self.store, "parent", state="stopped")
+        lane = make_bare_session(self.store, "parent.claude", state="stopped", parent_id=parent)
+        record = self.store.try_load(lane)
+        record["lane"] = {"name": "claude", "parent_id": parent, "parent_name": "parent"}
+        record["lineage"]["spawn_reason"] = "lane"
+        self.store.save_session(record)
+        data = json.loads(self.run_cli(["history", "--json"])[1])
+        self.assertEqual([s["name"] for s in data["days"][0]["sessions"]], ["parent"])
+
+        age_session(self.store, parent, 20 * 86400)
+        age_session(self.store, lane, 20 * 86400)
+        rc, out, err = self.run_cli(["history"])
+        self.assertEqual(rc, 0, err)
+        self.assertIn("Nothing ended in the last 14 days. 1 ended before that: --days 28 reaches further back.", out)
 
     def test_needs_attention_true_exactly_for_waiting_and_blocked(self):
         waiting_id = make_bare_session(self.store, "wait-me", state="waiting")
@@ -1006,6 +1147,57 @@ class TestWorktreeCleanup(CoreTestCase):
             shutil.rmtree(repo, ignore_errors=True)
             shutil.rmtree(wt.parent, ignore_errors=True)
 
+    def test_open_puts_a_removed_worktree_back_before_resuming_a_stopped_session(self):
+        # A harness resumes its transcript by working directory, so a
+        # resume after stop's cleanup re-creates the worktree at the same
+        # path from the branch invariant 7 kept (2026-09-03).
+        repo, wt = self.make_repo_with_real_worktree()
+        try:
+            self._git(repo, "merge", "--no-ff", "session/cleanup-test", "-m", "merge it")
+            workspace = {
+                "repo_root": str(repo), "worktree_path": str(wt),
+                "branch": "session/cleanup-test", "base_branch": "main", "created_by_session": True,
+            }
+            self.start_fake_herdr()
+            session_id = make_bare_session(self.store, "stop-then-resume", workspace=workspace, state="idle")
+            record = self.store.try_load(session_id)
+            record["agent"]["harness_session_ref"] = "abc123"
+            self.store.save_session(record)
+            self.assertEqual(self.run_cli(["stop", session_id])[0], 0)
+            self.assertFalse(wt.exists())
+
+            rc, out, err = self.run_cli(["open", session_id])
+            self.assertEqual(rc, 0, err)
+            self.assertTrue(wt.exists())
+            self.assertEqual(self._git(wt, "branch", "--show-current").stdout.strip(), "session/cleanup-test")
+            record = self.store.try_load(session_id)
+            self.assertEqual(record["status"]["state"], "working")
+            self.assertFalse(record["workspace"]["worktree_removed"])
+            self.assertEqual(self.fake_herdr.calls("workspace.create")[-1]["cwd"], str(wt))
+            resumed = [e["data"] for e in self.store.read_events(session_id)
+                       if e["type"] == "status.changed" and e["data"]["to"] == "orphaned"][-1]
+            self.assertEqual(resumed["detail"], "resumed after a stop; worktree re-created")
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+            shutil.rmtree(wt.parent, ignore_errors=True)
+
+    def test_open_refuses_a_stopped_session_whose_directory_is_gone_for_good(self):
+        # A plain directory (no worktree of its own) that no longer exists:
+        # there is nowhere to resume in, and the record says so (exit 5).
+        self.start_fake_herdr()
+        gone = pathlib.Path(tempfile.mkdtemp(prefix="omarchy-gone-"))
+        workspace = {"repo_root": None, "worktree_path": str(gone), "branch": None,
+                     "base_branch": None, "created_by_session": False}
+        session_id = make_bare_session(self.store, "stopped-dir-gone", workspace=workspace, state="stopped")
+        record = self.store.try_load(session_id)
+        record["agent"]["harness_session_ref"] = "abc123"
+        self.store.save_session(record)
+        shutil.rmtree(gone)
+        rc, out, err = self.run_cli(["open", session_id])
+        self.assertEqual(rc, 5, err)
+        self.assertIn("no longer exists", err)
+        self.assertEqual(self.store.try_load(session_id)["status"]["state"], "stopped")
+
     def test_never_touches_a_worktree_this_session_did_not_create(self):
         repo, wt = self.make_repo_with_real_worktree()
         try:
@@ -1207,14 +1399,40 @@ class TestReconcile(CoreTestCase):
         transitions = [(e["data"]["from"], e["data"]["to"]) for e in self.store.read_events(session_id) if e["type"] == "status.changed"]
         self.assertEqual(transitions[-2:], [("failed", "orphaned"), ("orphaned", "working")])
 
-    def test_open_refuses_a_session_ended_on_purpose(self):
+    def test_open_resumes_a_session_a_person_stopped(self):
+        # 2026-09-03: a stop is a pause. The transcript is on disk, so Enter
+        # resumes it through the orphan path, and the stop's receipt stays.
         self.start_fake_herdr()
         session_id = make_bare_session(self.store, "stopped-on-purpose", runtime=None, state="stopped")
         record = self.store.try_load(session_id)
         record["agent"]["harness_session_ref"] = "abc123"
+        record["status"]["detail"] = "stopped"
+        self.store.save_session(record)
+        receipt = core.compute_receipt(self.store, record, "stopped", "stopped", record["status"]["since"])
+        core.write_receipt(self.store, receipt)
+
+        rc, out, err = self.run_cli(["open", session_id])
+        self.assertEqual(rc, 0, err)
+        record = self.store.try_load(session_id)
+        self.assertEqual(record["status"]["state"], "working")
+        self.assertEqual(self.fake_herdr.calls("agent.start")[-1]["args"][:2], ["--resume", "abc123"])
+        changes = [e["data"] for e in self.store.read_events(session_id) if e["type"] == "status.changed"]
+        self.assertEqual([(c["from"], c["to"]) for c in changes[-2:]], [("stopped", "orphaned"), ("orphaned", "working")])
+        self.assertEqual(changes[-2]["detail"], "resumed after a stop")
+        self.assertTrue(self.store.receipt_path(session_id).exists())
+
+    def test_open_keeps_a_session_closed_with_a_verdict_closed(self):
+        # A verdict is a decision (09-closed-loop-surfaces.md's `done`);
+        # only a stop, or an end nobody decided, resumes.
+        self.start_fake_herdr()
+        session_id = make_bare_session(self.store, "closed-with-verdict", runtime=None, state="done")
+        record = self.store.try_load(session_id)
+        record["agent"]["harness_session_ref"] = "abc123"
+        record["status"]["detail"] = "kept"
         self.store.save_session(record)
         rc, out, err = self.run_cli(["open", session_id])
         self.assertEqual(rc, 5)
+        self.assertEqual(self.fake_herdr.calls("agent.start"), [])
 
     def test_reconcile_sweeps_the_workspace_of_an_ended_session(self):
         # Herdr restores workspaces with a fresh shell after a server
