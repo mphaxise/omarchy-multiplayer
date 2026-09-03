@@ -56,6 +56,7 @@ CursorSurface {
   signal addSubmitRequested(string id, string text)
   signal addCancelRequested(string id)
   signal laneSelectRequested(string id, string lane)
+  signal suggestionDecided(string id, bool dismiss)
 
   readonly property string sid: session ? String(session.id || "") : ""
   readonly property string sname: session && session.name ? String(session.name) : sid
@@ -81,6 +82,16 @@ CursorSurface {
   // and Array.isArray says false (rig, run 9, 2026-09-03: lane lines never
   // showed). Test length, never isArray, on anything read from `session`.
   readonly property var lanes: session && session.lanes && session.lanes.length !== undefined ? session.lanes : []
+  // 12-two-people.md: suggestions waiting on the owner, and who has the
+  // session open right now (presence, from the runtime dir, never the record).
+  readonly property var suggestions: session && session.suggestions && session.suggestions.length !== undefined ? session.suggestions : []
+  readonly property bool hasSuggestion: suggestions.length > 0
+  // author_display is the core's name for the suggester as this person
+  // should read it (user@host when the label would read as their own).
+  readonly property string suggester: hasSuggestion ? String(suggestions[0].author_display || (suggestions[0].author && suggestions[0].author.label) || "someone") : "someone"
+  readonly property var presence: session && session.presence && session.presence.length !== undefined ? session.presence : []
+  // The owner when it is someone else; the core sends null when it is you.
+  readonly property string ownedByOther: session && session.owned_by_other ? String(session.owned_by_other) : ""
   readonly property bool hasLanes: lanes.length > 0
   readonly property var attentionLane: session && session.attention_lane ? session.attention_lane : null
   readonly property bool laneNeedsYou: !needsAttention && attentionLane !== null
@@ -126,6 +137,7 @@ CursorSurface {
     var age = ageText()
     if (state === "blocked" || state === "waiting") return "needs you" + (age !== "" ? " · " + age : "")
     if (laneNeedsYou) return attentionLane.lane + " needs you"
+    if (hasSuggestion && !needsAttention) return suggester + " suggests"
     if (state === "orphaned") return "orphaned · " + (resumable ? "resumes conversation" : "fresh start")
     if (isEnded && revivable) return state + " · resumes conversation"
     if (state === "starting") return "starting" + (age !== "" ? " · " + age : "")
@@ -137,6 +149,7 @@ CursorSurface {
     if (actionResult) return actionResult.ok ? foreground : urgentColor
     if (stopping) return urgentColor
     if (state === "blocked" || state === "waiting" || laneNeedsYou) return urgentColor
+    if (hasSuggestion && !needsAttention) return accent
     if (state === "orphaned" || state === "failed") return foreground
     return dim
   }
@@ -153,8 +166,11 @@ CursorSurface {
     : ""
   // The loop count leads so a long goal cannot elide it away
   // (09-closed-loop-surfaces.md section 7).
-  readonly property string detailText: [loopText, goal !== "" ? goal
-    : [project, branch].filter(function(t) { return t !== "" }).join(" · ")]
+  readonly property string suggestionText: hasSuggestion ? ("\u201c" + String(suggestions[0].text || "").split("\n")[0] + "\u201d") : ""
+  readonly property string presenceText: presence.length > 1 ? (presence.length + " here") : ""
+  readonly property string ownerText: ownedByOther !== "" ? ("owned by " + ownedByOther) : ""
+  readonly property string detailText: [suggestionText, ownerText, loopText, goal !== "" ? goal
+    : [project, branch].filter(function(t) { return t !== "" }).join(" · "), presenceText]
     .filter(function(t) { return t !== "" }).join(" · ")
 
   readonly property string openLabel: revivable ? "⏎ Revive" : (isEnded ? "⏎ Receipt" : (needsAttention ? "⏎ Answer" : "⏎ Open"))
@@ -447,7 +463,25 @@ CursorSurface {
         onClicked: row.sendOpenRequested(row.sid)
       }
       Button {
-        visible: row.isLive
+        visible: row.hasSuggestion
+        text: "y Accept"
+        bordered: true
+        foreground: row.accent
+        fontFamily: row.fontFamily
+        fontSize: Style.font.caption
+        onClicked: row.suggestionDecided(row.sid, false)
+      }
+      Button {
+        visible: row.hasSuggestion
+        text: "d Dismiss"
+        bordered: true
+        foreground: row.foreground
+        fontFamily: row.fontFamily
+        fontSize: Style.font.caption
+        onClicked: row.suggestionDecided(row.sid, true)
+      }
+      Button {
+        visible: row.isLive && !row.hasSuggestion
         text: "a Add"
         bordered: true
         foreground: row.foreground

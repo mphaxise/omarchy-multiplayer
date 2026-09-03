@@ -298,8 +298,10 @@ Panel {
     return isFinite(ms) ? ms : 0
   }
 
+  // blocked and waiting are agents asking; "suggested" is a person
+  // waiting on the owner's decision (12-two-people.md) and ranks after them.
   function attentionRank(state) {
-    return state === "blocked" ? 0 : (state === "waiting" ? 1 : 2)
+    return state === "blocked" ? 0 : (state === "waiting" ? 1 : (state === "suggested" ? 2 : 3))
   }
 
   // 11-agent-lanes.md: a lane is a child session the list marks with
@@ -322,8 +324,9 @@ Panel {
       }
       s.attention_lane = att
       var own = s.needs_attention === true
-      s.att_state = own ? s.status.state : (att ? att.state : (s.status ? s.status.state : ""))
-      s.att_since = own ? s.status.since : (att ? att.since : (s.status ? s.status.since : ""))
+      var sugg = Array.isArray(s.suggestions) ? s.suggestions : []
+      s.att_state = own ? s.status.state : (att ? att.state : (sugg.length > 0 ? "suggested" : (s.status ? s.status.state : "")))
+      s.att_since = own ? s.status.since : (att ? att.since : (sugg.length > 0 && sugg[0].queued_at ? sugg[0].queued_at : (s.status ? s.status.since : "")))
       s.lane_attention_count = lanes.filter(function(x) { return x.needs_attention }).length
       out.push(s)
     }
@@ -333,7 +336,7 @@ Panel {
   // 1. Needs you: blocked, waiting; the longest-neglected session leads.
   function needsYouSessions() {
     var list = root.allSessions.filter(function(s) {
-      return s.status && (s.att_state === "blocked" || s.att_state === "waiting")
+      return s.status && (s.att_state === "blocked" || s.att_state === "waiting" || s.att_state === "suggested")
     })
     list.sort(function(a, b) {
       var r = root.attentionRank(a.att_state) - root.attentionRank(b.att_state)
@@ -353,7 +356,7 @@ Panel {
   // 3. Working: starting, working, idle. Most recently changed first.
   function workingSessions() {
     var states = { starting: true, working: true, idle: true }
-    var list = root.allSessions.filter(function(s) { return s.status && states[s.status.state] && !s.attention_lane })
+    var list = root.allSessions.filter(function(s) { return s.status && states[s.status.state] && !s.attention_lane && s.att_state !== "suggested" })
     list.sort(function(a, b) { return root.sinceMs(b) - root.sinceMs(a) })
     return list
   }
@@ -418,8 +421,14 @@ Panel {
       base = "list unavailable"
     } else if (root.needsYouRows.length > 0) {
       var first = root.needsYouRows[0]
-      var who = first.needs_attention !== true && first.attention_lane ? ("lane " + first.attention_lane.lane + " needs you · ") : "needs you · "
-      base = who + root.formatDuration(root.nowMs - Date.parse(first.att_since || "")) + " · Enter opens"
+      var suggested = first.att_state === "suggested"
+      var who = first.needs_attention !== true && first.attention_lane ? ("lane " + first.attention_lane.lane + " needs you · ")
+        : (suggested ? (String(first.suggestions[0].author_display || (first.suggestions[0].author && first.suggestions[0].author.label) || "someone") + " suggests · ") : "needs you · ")
+      var owner = first.owned_by_other ? (" · owned by " + first.owned_by_other) : ""
+      var age = root.formatDuration(root.nowMs - Date.parse(first.att_since || ""))
+      // The action hint outranks the age: a long name elides the tail
+      // (rig, run 10b: "y accep…"), so for a suggestion the age goes last.
+      base = suggested ? (who + "y accepts · " + age + owner) : (who + age + owner + " · Enter opens")
       if (root.needsYouRows.length > 1) base += " · " + (root.needsYouRows.length - 1) + " more need you"
     } else if (root.orphanedRows.length > 0) {
       base = root.herdrDown ? "Herdr is not running · Enter revives" : "Enter revives"
@@ -515,6 +524,9 @@ Panel {
     } else if (kind === "preview") {
       if (code === 0) { root.close(); return }
       root.setResult(sid, "no preview to show · " + root.reason(code), false)
+    } else if (kind === "accept" || kind === "dismiss") {
+      if (code === 0) root.setResult(sid, kind === "accept" ? "accepted, sent" : "dismissed", true)
+      else root.setResult(sid, "couldn't " + kind + " · " + root.reason(code), false)
     } else if (kind === "add") {
       if (code === 0) { root.addOpenId = ""; root.setResult(sid, "agent added", true) }
       else root.setResult(sid, "couldn't add · " + root.reason(code), false)
@@ -578,6 +590,14 @@ Panel {
       if (lanes[i].lane === root.selectedLane) { root.selectedLane = i + 1 < lanes.length ? lanes[i + 1].lane : ""; return }
     }
     root.selectedLane = ""
+  }
+
+  // 12-two-people.md: the owner accepts or dismisses the oldest suggestion.
+  function decideSuggestion(id, dismiss) {
+    if (!id) return
+    var argv = ["omarchy-agent-session-accept", String(id)]
+    if (dismiss) argv.push("--dismiss")
+    root.runAction(id, dismiss ? "dismiss" : "accept", argv, dismiss ? "dismissing…" : "accepting…")
   }
 
   // Add an agent to a live session (11-agent-lanes.md): the field's text
@@ -768,8 +788,9 @@ Panel {
     // Priority order, six entries at most: that is what fits 400 px at the
     // default font (run 4, 2026-09-03). "→ more" also sits on the Done
     // today header, and esc closes every panel, so they give way first.
-    var parts = ["↑↓ move", "⏎ open", "s send", "x stop", "n new"]
     var cur = root.selectedSession
+    var hasSugg = cur && Array.isArray(cur.suggestions) && cur.suggestions.length > 0
+    var parts = hasSugg ? ["↑↓ move", "y accept", "d dismiss", "s send", "x stop"] : ["↑↓ move", "⏎ open", "s send", "x stop", "n new"]
     var curLive = cur && cur.status && !root.sessionEnded(cur) && cur.status.state !== "orphaned"
     if (cur && Array.isArray(cur.lanes) && cur.lanes.length > 0) parts.push("w lane")
     else if (curLive) parts.push("a add")
@@ -877,6 +898,10 @@ Panel {
           // 11-agent-lanes.md. `w`, because PanelKeyCatcher takes h, j, k,
           // and l as arrows before onTextKey sees them (run 9, 2026-09-03).
           root.walkLane(s)
+        } else if (t === "y" || t === "Y") {
+          if (s.suggestions && s.suggestions.length > 0) root.decideSuggestion(s.id, false)
+        } else if (t === "d" || t === "D") {
+          if (s.suggestions && s.suggestions.length > 0) root.decideSuggestion(s.id, true)
         } else if (t === "a" || t === "A") {
           if (ended || s.status.state === "orphaned") return
           root.armedStopId = ""
@@ -1179,6 +1204,7 @@ Panel {
                     onAddSubmitRequested: function(id, text) { root.addAgent(id, text) }
                     onAddCancelRequested: function(id) { root.addOpenId = "" }
                     onLaneSelectRequested: function(id, lane) { root.setCursor(id, false); root.selectedLane = lane }
+                    onSuggestionDecided: function(id, dismiss) { root.setCursor(id, false); root.decideSuggestion(id, dismiss) }
                     onSendCancelRequested: function(id) { root.sendOpenId = "" }
                     onStopArmRequested: function(id) { root.setCursor(id, false); root.sendOpenId = ""; root.armedStopId = id }
                     onStopConfirmRequested: function(id) { root.stopSession(id, root.selectedId === id ? root.selectedLane : ""); root.armedStopId = "" }

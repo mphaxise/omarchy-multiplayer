@@ -14,6 +14,8 @@ Slice 1 covers one user, many agents, one machine. Sessions are created, listed,
 
 Slice 1 is live on the ARM rig as of 2026-09-02: sessions survive window close and reboot, receipts are written, blocked and orphaned states arrive as notifications, and the bar widget and panel run as a user plugin. `findings/evaluation-slice1-2026-09-02.md` holds the `/ux-review` and `/design-qa` passes against that build, the fixes they forced, and the acceptance audit. Omarchy already ships Herdr as a durable agent runtime, so the session model sits on top of it; `findings/research-brief-2026-09-01.md` records what that changed. `findings/closed-loop.md` holds the closed-loop pass: a goal, a registered preview, feedback sent with the capture it was about, from the terminal (run 3) and from the panel (run 4), commits, a verdict, and a loop view that shows every step. The plugin ships as Keepalive: public at [mphaxise/omarchy-keepalive](https://github.com/mphaxise/omarchy-keepalive), submitted to the plugin marketplace (issue #4566), and proposed to Omarchy in discussion #9936; `outbound/` holds how those were built and six upstream issue texts still unfiled. Next: Praneet's own sitting at the panel as the designer, and whatever the marketplace's validation says.
 
+Slices 2 and 3 as of 2026-09-03: agent lanes (`spec/11-agent-lanes.md`) held all five slice-2a signals on the rig, two Claude Code lanes on one goal with a merge and a forced conflict (`findings/evaluation-run9-lanes-2026-09-03.md`), and ship as Keepalive 0.2.0 once pushed; watchers and artifact links landed with them. Two people on one session (`spec/12-two-people.md`) held in proxy form, the Mac over ssh as the second person (`findings/evaluation-run10-two-people-2026-09-03.md`): visibility, access, a suggestion the owner accepts or dismisses from the panel, assignment, presence outside the record. What those runs cannot say is whether a person stays oriented on any of it; the sittings are ahead.
+
 ## Known issues
 
 Slice 1 ships with these, each with its repro in `findings/evaluation-slice1-2026-09-02.md`:
@@ -26,7 +28,7 @@ Slice 1 ships with these, each with its repro in `findings/evaluation-slice1-202
 
 ## Where to start reading
 
-`PLAN.md` for the question, the five success signals, and the phases. Keepalive, the installable plugin, is built from this repository by `outbound/build-listing.sh` and released by `outbound/release-keepalive.sh`; `main` ships, slice work branches. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log. `bin/`, `systemd/`, `plugin/`, and `tests/` hold the build; `python3 -m unittest discover -s tests` runs the 125 local tests, and `bin/README-core.md` lists the assumptions and what the rig confirmed.
+`PLAN.md` for the question, the five success signals, and the phases. Keepalive, the installable plugin, is built from this repository by `outbound/build-listing.sh` and released by `outbound/release-keepalive.sh`; `main` ships, slice work branches. `spec/00-overview.md` for the architecture and the map of spec files. `findings/research-brief-2026-09-01.md` for the evidence and the decisions it forced. `decisions.md` for the dated log. `bin/`, `systemd/`, `plugin/`, and `tests/` hold the build; `python3 -m unittest discover -s tests` runs the 167 local tests, and `bin/README-core.md` lists the assumptions and what the rig confirmed.
 
 ## Relationship to Omarchy-UX
 

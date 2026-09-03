@@ -1,0 +1,27 @@
+Session    shared-page  01M1M006C6K7ZVV2F6ZA3NB1V7
+Agent      claude   harness ref fcad5fe6-043b-4243-abe9-0b36ddc561db
+Owner      human:omarchy@_gateway   created by human:omarchy@omarchy
+Status     done   2026-09-03T16:00:32Z -> 2026-09-03T16:05:43Z, 311s
+Started    omarchy-agent-session-core new --agent claude --mode personal --name shared-page --base session/loop-hello --goal 'hello.html: the owner decides, a second person suggests' --cwd /home/omarchy/Work/spike-repo   cwd /home/omarchy/Work/spike-repo
+Goal       hello.html: the owner decides, a second person suggests
+
+Workspace  repo /home/omarchy/Work/spike-repo   worktree /home/omarchy/.herdr/worktrees/shared-page   branch session/shared-page   base session/loop-hello
+Commits    1
+  c132da4  italic footer, suggested
+Diff       1 files changed, 1 insertions(+), 1 deletions(-)
+Dirty      False
+Unpushed   True
+
+Artifacts  1
+  01M1M09P1KQDWYZE03G4QBX2S6-verdict.txt   verdict   proposed   2026-09-03T16:05:43Z   human:omarchy@_gateway
+
+Instructions  1 delivered, 1 dropped, 1 author(s) (human:omarchy@_gateway)
+Approvals     0 requested, 0 approved, 0 denied
+Children      none
+
+People     visibility shared
+  human:omarchy@_gateway   suggest
+  assigned human:omarchy@omarchy -> human:omarchy@_gateway   2026-09-03T16:02:02Z
+  suggestions 1 made, 1 accepted, 0 dismissed, 0 waiting (human:omarchy@_gateway)
+
+Receipt    state_version 22
