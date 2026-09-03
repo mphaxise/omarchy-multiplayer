@@ -1785,3 +1785,130 @@ class TestLanes(TestReceiptComputation):
             self.assertEqual(self.store.try_load(lane_id)["status"]["state"], "stopped")
         finally:
             shutil.rmtree(repo, ignore_errors=True)
+
+
+# --------------------------------------------------------------------------
+# Pattern 06, event-driven state: watchers, coalesced notices, delivery
+# --------------------------------------------------------------------------
+
+class TestWatchers(TestLanes):
+    def test_a_parent_watches_its_lane_and_gets_one_coalesced_notice(self):
+        self.start_lane_herdr()
+        repo, sid = self.make_repo_session()
+        try:
+            rc, out, err = self.run_cli(["add", sid, "--agent", "claude", "--lane", "tests", "--task", "Write the tests"])
+            self.assertEqual(rc, 0, err)
+            lane_id = out.strip()
+            lane = self.store.try_load(lane_id)
+            self.assertEqual([w["session_id"] for w in lane["watchers"]], [sid])
+            # Two events on the lane before anything is delivered: one pending notice on the parent, updated.
+            note = self.plain_dir / "n.txt"; note.write_text("x\n")
+            rc, out, err = self.run_cli(["artifact-add", lane_id, "--kind", "file", "--source", str(note), "--label", "first"])
+            self.assertEqual(rc, 0, err)
+            rc, out, err = self.run_cli(["artifact-add", lane_id, "--kind", "file", "--source", str(note), "--label", "second"])
+            self.assertEqual(rc, 0, err)
+            parent = self.store.try_load(sid)
+            watch = [q for q in parent["queue"] if q.get("delivery") == "watch"]
+            self.assertEqual(len(watch), 1)
+            self.assertEqual(watch[0]["origin_session"], lane_id)
+            # runtime.bound, starting -> working, then the two artifacts: four events, one notice.
+            self.assertEqual(watch[0]["count"], 4)
+            self.assertIn("artifact second", watch[0]["text"])
+            # Delivery on reconcile, when the parent is idle: one prompt, cursor advanced, queue clear.
+            lane = self.store.try_load(lane_id)
+            self.fake_herdr.set_result("agent.list", {"agents": [
+                {"name": "any", "agent_status": "idle", "interactive_ready": True, "agent_id": parent["runtime"]["agent_id"]},
+                {"name": "lane", "agent_status": "working", "interactive_ready": True, "agent_id": lane["runtime"]["agent_id"]}]})
+            self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": parent["runtime"]["pane_id"]}, {"pane_id": lane["runtime"]["pane_id"]}]})
+            before = len(self.fake_herdr.calls("agent.prompt"))
+            rc, out, err = self.run_cli(["reconcile", "--json"])
+            self.assertEqual(rc, 0, err)
+            prompts = self.fake_herdr.calls("agent.prompt")[before:]
+            watch_prompts = [p for p in prompts if "tests" in p.get("text", "") and "artifact second" in p.get("text", "")]
+            self.assertEqual(len(watch_prompts), 1)
+            parent = self.store.try_load(sid)
+            self.assertEqual([q for q in parent["queue"] if q.get("delivery") == "watch"], [])
+            lane = self.store.try_load(lane_id)
+            self.assertEqual(lane["watchers"][0]["cursor"], watch[0]["seq_to"])
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+    def test_instruction_traffic_never_wakes_a_watcher(self):
+        self.start_lane_herdr()
+        repo, sid = self.make_repo_session()
+        try:
+            rc, out, err = self.run_cli(["add", sid, "--agent", "claude", "--lane", "tests", "--task", "Write the tests"])
+            self.assertEqual(rc, 0, err)
+            lane_id = out.strip()
+            parent_before = [q for q in self.store.try_load(sid)["queue"] if q.get("delivery") == "watch"]
+            rc, out, err = self.run_cli(["send", sid, "Keep going", "--lane", "tests"])
+            self.assertEqual(rc, 0, err)
+            parent_after = [q for q in self.store.try_load(sid)["queue"] if q.get("delivery") == "watch"]
+            self.assertEqual(len(parent_after), len(parent_before))
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+    def test_subscribe_adds_and_removes_a_watcher_and_log_since_reads_forward(self):
+        self.start_fake_herdr()
+        a = make_bare_session(self.store, "watched", runtime=None, state="idle")
+        b = make_bare_session(self.store, "watcher", runtime=None, state="idle")
+        rc, out, err = self.run_cli(["subscribe", a, "--watcher", b])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual([w["session_id"] for w in self.store.try_load(a)["watchers"]], [b])
+        rc, out, err = self.run_cli(["goal", a, "--set", "a new goal"]) if False else (0, "", "")
+        note = self.plain_dir / "m.txt"; note.write_text("y\n")
+        rc, out, err = self.run_cli(["artifact-add", a, "--kind", "file", "--source", str(note), "--label", "one"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(len([q for q in self.store.try_load(b)["queue"] if q.get("delivery") == "watch"]), 1)
+        last = self.store._last_seq(a)
+        rc, out, err = self.run_cli(["log", a, "--since", str(last - 1), "--json"])
+        self.assertEqual(rc, 0, err)
+        rows = [json.loads(l) for l in out.splitlines() if l.strip()]
+        self.assertEqual([r["seq"] for r in rows], [last])
+        rc, out, err = self.run_cli(["subscribe", a, "--watcher", b, "--remove"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.store.try_load(a)["watchers"], [])
+
+    def test_open_delivers_what_was_queued_while_orphaned(self):
+        self.start_fake_herdr()
+        self.fake_herdr.set_result("agent.list", {"agents": [{"name": "any", "agent_status": "idle", "interactive_ready": True}]})
+        self.fake_herdr.set_result("agent.prompt", {"agent": {"agent_status": "working"}})
+        sid = make_bare_session(self.store, "orphan-queue", runtime=None, state="orphaned")
+        rc, out, err = self.run_cli(["send", sid, "Finish the footer"])
+        self.assertEqual(rc, 0, err)   # queued, no runtime
+        self.assertEqual(len(self.store.try_load(sid)["queue"]), 1)
+        before = len(self.fake_herdr.calls("agent.prompt"))
+        rc, out, err = self.run_cli(["open", sid])
+        self.assertEqual(rc, 0, err)
+        prompts = self.fake_herdr.calls("agent.prompt")[before:]
+        self.assertTrue(any("Finish the footer" in p.get("text", "") for p in prompts))
+        self.assertEqual(self.store.try_load(sid)["queue"], [])
+        types = [e["type"] for e in self.store.read_events(sid)]
+        self.assertIn("instruction.delivered", types)
+
+
+class TestArtifactLinksAndStates(CoreTestCase):
+    def test_url_artifact_shows_as_a_link_and_can_be_marked_live(self):
+        # 09-closed-loop-surfaces.md sections 4 and 6.
+        self.start_fake_herdr()
+        sid = make_bare_session(self.store, "linky", runtime=None, state="idle", goal_text="a page")
+        rc, out, err = self.run_cli(["artifact-add", sid, "--kind", "url", "--source", "https://www.figma.com/file/abc/frame", "--label", "frame"])
+        self.assertEqual(rc, 0, err)
+        rc, out, err = self.run_cli(["show", sid, "--loop"])
+        self.assertEqual(rc, 0, err)
+        self.assertIn("artifact     frame  https://www.figma.com/file/abc/frame", out)
+        rc, out, err = self.run_cli(["artifact-mark", sid, "frame", "--state", "live"])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(out.strip(), "frame: live")
+        index = core.read_artifacts_index(self.store.artifacts_dir(sid))
+        self.assertEqual(index[0]["state"], "live")
+        self.assertEqual(index[0]["kind"], "url")
+        rc, out, err = self.run_cli(["show", sid, "--loop"])
+        self.assertIn("artifact     frame  marked live", out)
+        rc, out, err = self.run_cli(["done", sid, "--verdict", "kept", "--note", "shipped"])
+        self.assertEqual(rc, 0, err)
+        rc, out, err = self.run_cli(["receipt", sid])
+        self.assertEqual(rc, 0, err)
+        self.assertIn("https://www.figma.com/file/abc/frame   frame   live", out)
+        rc, out, err = self.run_cli(["artifact-mark", sid, "nothing-here", "--state", "live"])
+        self.assertEqual(rc, 3)

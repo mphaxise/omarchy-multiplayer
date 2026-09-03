@@ -85,7 +85,7 @@ EVENT_TYPES = (
     "instruction.dropped", "child.spawned", "child.completed",
     "approval.requested", "approval.resolved", "artifact.added",
     "receipt.written", "session.ended",
-    "lane.added", "lane.merged",
+    "lane.added", "lane.merged", "artifact.updated",
 )
 
 # 11-agent-lanes.md: a lane is one agent with one task inside a session,
@@ -94,6 +94,13 @@ EVENT_TYPES = (
 # stricter than the session's and never looser.
 LANE_MAIN = "main"
 MODE_RANK = {"personal": 0, "shared": 1, "restricted": 2}
+
+# 06-event-driven-state (pattern 06): a session may watch another. Every
+# append to the watched session's log leaves at most one pending, marked
+# instruction on each watcher, coalesced until it is delivered; instruction
+# traffic itself never wakes a watcher, which keeps watching from echoing.
+WATCH_SILENT_TYPES = {"instruction.queued", "instruction.delivered", "instruction.dropped", "receipt.written"}
+EVENTS_WARN_AT = 50000
 
 # The state machine table from 01-session-model.md. ANY is the "any live
 # state" wildcard used by three rows (-> done, -> failed, -> stopped).
@@ -1028,6 +1035,13 @@ class SessionStore:
             f.write(json.dumps(event, sort_keys=False) + "\n")
             f.flush()
             os.fsync(f.fileno())
+        if seq == EVENTS_WARN_AT:
+            # 06-event-driven-state: no rotation in slice 2. A session log is
+            # days long at most; one this size is a runaway, and the record
+            # says so once instead of quietly growing.
+            eprint(f"session {session_id}: events.jsonl reached {seq} rows; this session should end")
+        if event_type not in WATCH_SILENT_TYPES:
+            notify_watchers(self, session_id, event)
         return event
 
     def read_events(self, session_id, since=None, type_filter=None):
@@ -1176,8 +1190,30 @@ def read_artifacts_index(artifacts_dir):
             "path": str(candidates[0]) if candidates else None,
             "label": data.get("label"), "added_by": data.get("added_by"),
             "added_at": data.get("added_at"),
+            "kind": data.get("kind"), "source": data.get("source"), "state": data.get("state"),
         })
     return entries
+
+
+def mark_artifact(store, session_id, label_or_path, state):
+    """Relabel an artifact `proposed` or `live` in its sidecar
+    (05-receipts-and-artifacts.md); the loop view and the receipt read the
+    sidecar. Returns the sidecar data."""
+    artifacts_dir = store.artifacts_dir(session_id)
+    for sidecar in sorted(artifacts_dir.glob("*.json")):
+        try:
+            data = json.loads(sidecar.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        stem = sidecar.stem
+        paths = [str(p) for p in artifacts_dir.glob(stem + ".*") if p.suffix != ".json"]
+        if data.get("label") == label_or_path or label_or_path in paths or stem.startswith(str(label_or_path)):
+            data["state"] = state
+            data["state_changed_at"] = now_rfc3339()
+            atomic_write_json(sidecar, data)
+            data["path"] = paths[0] if paths else None
+            return data
+    raise NotFoundError(f"no artifact '{label_or_path}' on session {session_id}")
 
 
 class CaptureError(SessionError):
@@ -1329,7 +1365,9 @@ def render_receipt_text(receipt):
     artifacts = receipt.get("artifacts") or []
     lines.append(f"Artifacts  {len(artifacts)}")
     for a in artifacts:
-        lines.append(f"  {pathlib.Path(a['path']).name if a['path'] else '(missing)'}   {a['label']}   {a['added_at']}   {actor_to_string(a['added_by']) if isinstance(a['added_by'], dict) else a['added_by']}")
+        name = a.get("source") if a.get("kind") == "url" else (pathlib.Path(a["path"]).name if a.get("path") else "(missing)")
+        state = f"   {a['state']}" if a.get("state") else ""
+        lines.append(f"  {name}   {a['label']}{state}   {a['added_at']}   {actor_to_string(a['added_by']) if isinstance(a['added_by'], dict) else a['added_by']}")
     lines.append("")
     instr = receipt["instructions"]
     lines.append(f"Instructions  {instr['delivered']} delivered, {instr['dropped']} dropped, {len(instr['authors'])} author(s) ({', '.join(instr['authors'])})")
@@ -1533,6 +1571,16 @@ def build_parser():
     p.add_argument("--share-worktree", action="store_true", help="work in the session's own worktree instead of a lane worktree")
     p.add_argument("--direction", default="right", choices=["right", "down"], help="where the lane's pane splits from the session's")
     p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("artifact-mark", help="relabel an artifact proposed or live (05-receipts-and-artifacts.md)")
+    add_id_arg(p)
+    p.add_argument("artifact", help="label, path, or id prefix")
+    p.add_argument("--state", required=True, choices=["proposed", "live"])
+
+    p = sub.add_parser("subscribe", help="one session watches another: every event leaves one marked notice on the watcher (pattern 06)")
+    add_id_arg(p)
+    p.add_argument("--watcher", required=True, help="the session that will be told")
+    p.add_argument("--remove", action="store_true")
 
     p = sub.add_parser("lanes", help="the session's lanes: main first, then each added agent")
     add_id_arg(p)
@@ -1775,6 +1823,7 @@ def cmd_new(args, ctx):
                                       {"child_id": session_id, "agent": {"kind": kind}, "spawn_reason": "agent_spawn"})
         parent["state_version"] = pev["seq"]
         ctx.store.save_session(parent)
+        add_watcher(ctx.store, record, parent["id"])  # pattern 06: a parent watches what it spawned
 
     # Start the harness through Herdr. A session record now exists whether
     # or not this succeeds (invariant 1); on HerdrUnavailable the session is
@@ -1830,6 +1879,135 @@ def cmd_new(args, ctx):
         print(json.dumps(record, indent=2))
     else:
         print(session_id)
+    return EXIT_OK
+
+
+# --------------------------------------------------------------------------
+# Watchers (06-event-driven-state, pattern 06)
+# --------------------------------------------------------------------------
+
+def add_watcher(store, watched, watcher_id):
+    """`watcher_id` follows `watched` from its current last event on."""
+    watchers = watched.get("watchers") or []
+    if any(w.get("session_id") == watcher_id for w in watchers):
+        return watched
+    watchers.append({"session_id": watcher_id, "cursor": store._last_seq(watched["id"])})
+    watched["watchers"] = watchers
+    store.save_session(watched)
+    return watched
+
+
+def remove_watcher(store, watched, watcher_id):
+    watched["watchers"] = [w for w in (watched.get("watchers") or []) if w.get("session_id") != watcher_id]
+    store.save_session(watched)
+    return watched
+
+
+def _watch_summary(event):
+    t, d = event["type"], event.get("data") or {}
+    if t == "status.changed":
+        return f"{d.get('from')} -> {d.get('to')}" + (f" ({d.get('detail')})" if d.get("detail") else "")
+    if t == "artifact.added":
+        return f"artifact {d.get('label')}"
+    if t == "session.ended":
+        return f"ended {d.get('state')} ({d.get('reason')})"
+    if t == "lane.merged":
+        return f"lane {d.get('lane')} merged {len(d.get('commits') or [])} commit(s)"
+    if t == "child.completed":
+        return f"{d.get('lane') or d.get('child_id')} finished {d.get('state')}"
+    return t
+
+
+def notify_watchers(store, watched_id, event):
+    """Called from append_event. One pending watch instruction per watcher,
+    coalesced: a second event before delivery updates the pending text and
+    its `seq_to`; delivery (reconcile, or the watcher's own open) advances
+    the cursor. Never raises: a watcher that cannot be updated is skipped."""
+    try:
+        watched = store.try_load(watched_id)
+    except Exception:
+        return
+    if not watched:
+        return
+    watchers = watched.get("watchers") or []
+    if not watchers:
+        return
+    for w in watchers:
+        wid = w.get("session_id")
+        watcher = store.try_load(wid) if wid else None
+        if watcher is None or watcher["status"]["state"] in TERMINAL_STATES:
+            continue
+        pending = next((q for q in watcher.get("queue") or [] if q.get("delivery") == "watch" and q.get("origin_session") == watched_id), None)
+        summary = _watch_summary(event)
+        if pending is not None:
+            pending["seq_to"] = event["seq"]
+            pending["count"] = int(pending.get("count") or 1) + 1
+            pending["text"] = f"{watched['name']}: {summary} ({pending['count']} events since seq {pending['seq_from']})"
+            store.save_session(watcher)
+            continue
+        instr = new_instruction(f"{watched['name']}: {summary}", agent_actor(watched_id, label=watched["name"]),
+                                delivery="watch", origin_session=watched_id)
+        instr["seq_from"] = int(w.get("cursor") or 0)
+        instr["seq_to"] = event["seq"]
+        instr["count"] = 1
+        ev = store.append_event(wid, "instruction.queued", instr["author"], instr)
+        watcher["queue"].append(instr)
+        watcher["state_version"] = ev["seq"]
+        store.save_session(watcher)
+
+
+def deliver_pending(session, ctx, only_delivery=None):
+    """Deliver the session's queued instructions in order through Herdr,
+    advancing watch cursors as watch instructions land. Returns the number
+    delivered. Used by `open` after a bind and by the reconciler for live
+    sessions; a delivery that fails leaves the instruction queued."""
+    runtime = session.get("runtime")
+    if runtime is None or ctx.herdr is None:
+        return 0
+    pending = [q for q in list(session.get("queue") or []) if only_delivery is None or q.get("delivery") == only_delivery]
+    if not pending:
+        return 0
+    alias = derive_herdr_alias(session["name"], session["id"])
+    if not wait_interactive_ready(ctx.herdr, alias, timeout_s=10.0):
+        return 0
+    delivered = 0
+    for instr in pending:
+        origin = instr.get("origin_session")
+        text = instr["text"]
+        if origin:
+            origin_rec = ctx.store.try_load(origin)
+            text = format_marked_instruction(origin, origin_rec["name"] if origin_rec else origin, instr["text"])
+        try:
+            ctx.herdr.agent_prompt(alias=alias, text=text, wait=False)
+        except (HerdrError, HerdrUnavailable):
+            break
+        ev = ctx.store.append_event(session["id"], "instruction.delivered", instr["author"],
+                                     {"instruction_id": instr["id"], "delivery": instr.get("delivery") or "steer"})
+        session["queue"] = [q for q in session["queue"] if q["id"] != instr["id"]]
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+        delivered += 1
+        if instr.get("delivery") == "watch" and origin:
+            watched = ctx.store.try_load(origin)
+            if watched is not None:
+                for w in watched.get("watchers") or []:
+                    if w.get("session_id") == session["id"]:
+                        w["cursor"] = int(instr.get("seq_to") or w.get("cursor") or 0)
+                ctx.store.save_session(watched)
+    return delivered
+
+
+def cmd_subscribe(args, ctx):
+    watched = ctx.store.load(args.id_or_name)
+    watcher = ctx.store.load(args.watcher)
+    if watcher["id"] == watched["id"]:
+        raise UsageError("a session cannot watch itself")
+    if args.remove:
+        remove_watcher(ctx.store, watched, watcher["id"])
+        print(f"{watcher['name']} no longer watches {watched['name']}")
+    else:
+        add_watcher(ctx.store, watched, watcher["id"])
+        print(f"{watcher['name']} watches {watched['name']} from seq {ctx.store._last_seq(watched['id'])}")
     return EXIT_OK
 
 
@@ -1965,6 +2143,7 @@ def cmd_add(args, ctx):
     parent["lineage"]["children"].append(child_id)
     pev = ctx.store.append_event(parent["id"], "child.spawned", actor,
                                   {"child_id": child_id, "agent": {"kind": kind}, "spawn_reason": "lane"})
+    add_watcher(ctx.store, record, parent["id"])  # pattern 06: a parent watches what it spawned
     pev = ctx.store.append_event(parent["id"], "lane.added", actor,
                                   {"lane": lane_name, "child_id": child_id, "agent": {"kind": kind}, "task": args.task, "mode": mode})
     parent["state_version"] = pev["seq"]
@@ -2197,7 +2376,13 @@ def render_loop_text(store, session):
         elif t == "instruction.dropped":
             rows.append((ts, int(e.get("seq") or 0), f"dropped      {d.get('reason')}"))
         elif t == "artifact.added":
-            rows.append((ts, int(e.get("seq") or 0), f"artifact     {d.get('label')}  {d.get('path')}"))
+            what = d.get("path")
+            if d.get("url"):
+                what = d["url"]
+            state = f"  [{d.get('state')}]" if d.get("state") and d.get("state") != "proposed" else ""
+            rows.append((ts, int(e.get("seq") or 0), f"artifact     {d.get('label')}  {what}{state}"))
+        elif t == "artifact.updated":
+            rows.append((ts, int(e.get("seq") or 0), f"artifact     {d.get('label')}  marked {d.get('state')}"))
         elif t == "status.changed":
             detail = f"  ({d.get('detail')})" if d.get("detail") else ""
             rows.append((ts, int(e.get("seq") or 0), f"state        {d.get('from')} -> {d.get('to')}{detail}"))
@@ -2314,6 +2499,10 @@ def cmd_open(args, ctx):
                               "herdr", "agent", "attach", alias],
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              start_new_session=True)
+        # Instructions queued while the session had no runtime ("delivered
+        # on revive") and pending watch notices go out now.
+        with contextlib.suppress(Exception):
+            deliver_pending(ctx.store.load(session["id"]), ctx)
         # 09-closed-loop-surfaces.md section 2: the running product sits
         # beside the conversation. Best effort; a missing compositor or
         # browser costs nothing here.
@@ -2698,11 +2887,25 @@ def cmd_artifact_add(args, ctx):
     session = ctx.store.load(args.id_or_name)
     actor = current_human_actor()
     entry, _dest = add_artifact(ctx.store, session["id"], args.kind, args.source, args.label, actor)
-    ev = ctx.store.append_event(session["id"], "artifact.added", actor,
-                                 {"path": entry["path"], "label": entry["label"], "added_by": actor})
+    data = {"path": entry["path"], "label": entry["label"], "added_by": actor, "kind": args.kind}
+    if args.kind == "url":
+        data["url"] = args.source   # 09-closed-loop-surfaces.md section 6: a design frame as a link
+    ev = ctx.store.append_event(session["id"], "artifact.added", actor, data)
     session["state_version"] = ev["seq"]
     ctx.store.save_session(session)
     print(entry["path"])
+    return EXIT_OK
+
+
+def cmd_artifact_mark(args, ctx):
+    session = ctx.store.load(args.id_or_name)
+    actor = current_human_actor()
+    data = mark_artifact(ctx.store, session["id"], args.artifact, args.state)
+    ev = ctx.store.append_event(session["id"], "artifact.updated", actor,
+                                 {"label": data.get("label"), "path": data.get("path"), "state": args.state})
+    session["state_version"] = ev["seq"]
+    ctx.store.save_session(session)
+    print(f"{data.get('label')}: {args.state}")
     return EXIT_OK
 
 
@@ -3203,6 +3406,11 @@ def cmd_reconcile(args, ctx):
             if live is not None:
                 apply_herdr_status(ctx.store, s, live.get("agent_status"))
                 record_harness_session_ref(ctx.store, s, ctx.herdr)
+                # pattern 06: pending watch notices reach a live watcher on
+                # the next tick, between its turns.
+                if any(q.get("delivery") == "watch" for q in s.get("queue") or []) and (live.get("agent_status") in ("idle", "done")):
+                    with contextlib.suppress(Exception):
+                        deliver_pending(ctx.store.load(s["id"]), ctx, only_delivery="watch")
         elif pane_alive and s["status"]["state"] != "starting" and herdr_restarted_since_binding(ctx.store, s):
             # The pane is the fresh shell Herdr opens for every restored
             # workspace when its server restarts; the harness did not exit,
@@ -3307,7 +3515,7 @@ COMMAND_HANDLERS = {
     "goal": cmd_goal, "log": cmd_log, "receipt": cmd_receipt, "capture": cmd_capture,
     "artifact-add": cmd_artifact_add, "preview": cmd_preview, "mode": cmd_mode,
     "done": cmd_done, "reconcile": cmd_reconcile,
-    "add": cmd_add, "lanes": cmd_lanes,
+    "add": cmd_add, "lanes": cmd_lanes, "subscribe": cmd_subscribe, "artifact-mark": cmd_artifact_mark,
 }
 
 
