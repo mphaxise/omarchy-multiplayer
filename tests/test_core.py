@@ -249,7 +249,7 @@ class TestListJsonShape(CoreTestCase):
             set(entry.keys()),
             {"id", "name", "agent", "status", "owner", "workspace", "needs_attention", "children", "state_version",
              "goal", "mode", "resumable", "created_by", "project", "preview", "loop", "lane", "lanes",
-             "visibility", "suggestions", "presence"},
+             "visibility", "owner_display", "owned_by_other", "suggestions", "presence"},
         )
         self.assertEqual(set(entry["agent"].keys()), {"kind"})
         self.assertEqual(set(entry["status"].keys()), {"state", "since", "source", "detail"})
@@ -905,7 +905,9 @@ class TestOpen(CoreTestCase):
         self.assertEqual(record["status"]["detail"], "no transcript to resume")
 
     def test_open_with_nothing_to_open_is_a_conflict(self):
-        session_id = make_bare_session(self.store, "nothing-to-open", runtime=None, state="starting")
+        # A session that ended has nothing to open. (A session created but
+        # never bound starts fresh on open since run 10; see TestRefusedStart.)
+        session_id = make_bare_session(self.store, "nothing-to-open", runtime=None, state="stopped")
         rc, out, err = self.run_cli(["open", session_id])
         self.assertEqual(rc, 5, err)
 
@@ -1219,11 +1221,16 @@ class TestReconcile(CoreTestCase):
         # restart; a stopped or orphaned session must not leave one behind.
         self.start_fake_herdr()
         self.fake_herdr.set_result("agent.list", {"agents": []})
-        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "wZ:p1", "workspace_id": "wZ"},
-                                                          {"pane_id": "w1:p1", "workspace_id": "w1"}]})
         runtime = {"backend": "herdr", "session": None, "workspace_id": "wZ",
                    "tab_id": "wZ:t1", "pane_id": "wZ:p1", "agent_id": "gone"}
         session_id = make_bare_session(self.store, "ended-earlier", runtime=runtime, state="working")
+        # The pane is the session's by its metadata, never by workspace id
+        # (run 10: Herdr reuses ids after a restart). A same-id pane that
+        # belongs to nobody, and one that belongs to a live session, stay.
+        self.fake_herdr.set_result("pane.list", {"panes": [
+            {"pane_id": "wZ:p1", "workspace_id": "wZ", "tokens": {"session_id": session_id}},
+            {"pane_id": "wZ:p2", "workspace_id": "wZ"},
+            {"pane_id": "w1:p1", "workspace_id": "w1", "tokens": {"session_id": "someone-else"}}]})
         rec = self.store.try_load(session_id)
         # Ended and unbound already, the way `stop` on an orphan leaves it.
         ev = self.store.append_event(session_id, "runtime.unbound", core.system_actor(), {"reason": "pane_gone"})
@@ -1241,8 +1248,9 @@ class TestReconcile(CoreTestCase):
     def test_reconcile_never_sweeps_an_adopted_sessions_workspace(self):
         self.start_fake_herdr()
         self.fake_herdr.set_result("agent.list", {"agents": []})
-        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "w1:p1", "workspace_id": "w1"}]})
         session_id = core.new_ulid()
+        # The pane even carries the adopted session's id; adopted stays untouched.
+        self.fake_herdr.set_result("pane.list", {"panes": [{"pane_id": "w1:p1", "workspace_id": "w1", "tokens": {"session_id": session_id}}]})
         actor = core.system_actor()
         workspace = {"repo_root": None, "worktree_path": None, "branch": None, "base_branch": None, "created_by_session": False}
         record = core.new_session_record(session_id, "herdr-spike", actor, actor, "shared", "claude", workspace, cwd=None, command=None)
@@ -2043,6 +2051,99 @@ class TestTwoPeople(CoreTestCase):
         rc, out, err = self.run_cli(["visibility", sid, "draft"])   # the creator keeps own
         self.assertEqual(rc, 0, err)
 
+    def test_names_survive_a_label_collision_and_the_owner_is_named_when_it_is_someone_else(self):
+        # Run 10's proxy: both people are the OS user "omarchy" on different
+        # hosts, so a label alone reads as the viewer's own name.
+        self.as_actor("human:omarchy@rig")
+        me = core.current_human_actor()
+        other = {"kind": "human", "id": "omarchy@mac", "label": "omarchy"}
+        sam = {"kind": "human", "id": "sam@mac", "label": "sam"}
+        self.assertEqual(core.display_name(me, me), "omarchy")
+        self.assertEqual(core.display_name(other, me), "omarchy@mac")
+        self.assertEqual(core.display_name(sam, me), "sam")
+        self.assertEqual(core.display_name({"kind": "agent", "id": "x", "label": "herdr"}, me), "herdr")
+        self.start_fake_herdr()
+        sid = make_bare_session(self.store, "shared-page", runtime=None, state="idle")
+        self.run_cli(["grant", sid, "--to", "omarchy@mac", "--level", "suggest"])
+        self.as_actor("human:omarchy@mac")
+        rc, out, err = self.run_cli(["send", sid, "Make the footer italic", "--suggest"])
+        self.assertEqual(rc, 0, err)
+        self.as_actor("human:omarchy@rig")
+        rc, out, err = self.run_cli(["list", "--json"])
+        entry = [e for e in json.loads(out)["sessions"] if e["id"] == sid][0]
+        self.assertEqual(entry["suggestions"][0]["author_display"], "omarchy@mac")
+        self.assertIsNone(entry["owned_by_other"])                     # the viewer owns it
+        rc, out, err = self.run_cli(["assign", sid, "human:omarchy@mac"])
+        self.assertEqual(rc, 0, err)
+        rc, out, err = self.run_cli(["list", "--json"])
+        entry = [e for e in json.loads(out)["sessions"] if e["id"] == sid][0]
+        self.assertEqual(entry["owned_by_other"], "omarchy@mac")
+        self.assertEqual(entry["owner_display"], "omarchy@mac")
+        self.as_actor("human:omarchy@mac")
+        rc, out, err = self.run_cli(["list", "--json"])
+        entry = [e for e in json.loads(out)["sessions"] if e["id"] == sid][0]
+        self.assertIsNone(entry["owned_by_other"])                     # now it is theirs
+        self.assertEqual(entry["suggestions"][0]["author_display"], "omarchy")
+
+    def test_the_loop_view_and_the_receipt_show_the_second_person(self):
+        self.start_fake_herdr()
+        self.fake_herdr.set_result("agent.list", {"agents": [{"name": "any", "agent_status": "idle", "interactive_ready": True}]})
+        self.fake_herdr.set_result("agent.prompt", {"agent": {"agent_status": "working"}})
+        runtime = {"backend": "herdr", "session": "s1", "workspace_id": "w1", "tab_id": "t1", "pane_id": "p1", "agent_id": "a1"}
+        sid = make_bare_session(self.store, "shared-page", runtime=runtime, state="idle")
+        self.run_cli(["visibility", sid, "draft"])
+        self.run_cli(["grant", sid, "--to", "sam@mac", "--level", "suggest"])
+        self.as_actor("human:sam@mac")
+        self.run_cli(["send", sid, "Make the footer italic", "--suggest"])
+        self.run_cli(["send", sid, "Drop the date", "--suggest"])
+        self.as_me()
+        rc, out, err = self.run_cli(["accept", sid])
+        self.assertEqual(rc, 0, err)
+        rc, out, err = self.run_cli(["accept", sid, "--dismiss"])
+        self.assertEqual(rc, 0, err)
+        rc, out, err = self.run_cli(["assign", sid, "human:sam@mac"])
+        self.assertEqual(rc, 0, err)
+        rc, out, err = self.run_cli(["show", sid, "--loop"])
+        self.assertEqual(rc, 0, err)
+        me = core.current_human_actor()["label"]
+        self.assertIn("visibility   shared -> draft", out)
+        self.assertIn("access       sam may suggest", out)
+        self.assertIn("suggested    sam: Make the footer italic", out)
+        self.assertIn(f"instruction  sam: Make the footer italic  [accepted by {me}]", out)
+        self.assertIn(f"dismissed    {me} dismissed sam: Drop the date", out)
+        self.assertIn(f"owner        {me} -> sam", out)
+        self.as_actor("human:sam@mac")
+        rc, out, err = self.run_cli(["done", sid, "--verdict", "kept", "--note", "landed"])
+        self.assertEqual(rc, 0, err)
+        receipt = json.loads(self.store.receipt_path(sid).read_text())
+        self.assertEqual(receipt["people"]["visibility"], "draft")
+        self.assertEqual(receipt["people"]["access"], [{"actor": {"kind": "human", "id": "sam@mac", "label": "sam"}, "level": "suggest"}])
+        self.assertEqual(receipt["people"]["suggestions"], {"made": 2, "accepted": 1, "dismissed": 1, "waiting": 0, "authors": ["human:sam@mac"]})
+        self.assertEqual(receipt["people"]["assigned"][0]["to"]["id"], "sam@mac")
+        rc, out, err = self.run_cli(["receipt", sid])
+        self.assertEqual(rc, 0, err)
+        self.assertIn("People     visibility draft", out)
+        self.assertIn("human:sam@mac   suggest", out)
+        self.assertIn("suggestions 2 made, 1 accepted, 1 dismissed, 0 waiting (human:sam@mac)", out)
+
+    def test_presence_ends_with_the_session(self):
+        self.start_fake_herdr()
+        runtime_dir = pathlib.Path(tempfile.mkdtemp(prefix="omarchy-xdg-"))
+        os.environ["XDG_RUNTIME_DIR"] = str(runtime_dir)
+        try:
+            sid = make_bare_session(self.store, "watched-page", runtime=None, state="idle")
+            self.run_cli(["presence", sid, "--here"])
+            self.assertTrue(core.presence_dir(sid).exists())
+            rc, out, err = self.run_cli(["stop", sid])
+            self.assertEqual(rc, 0, err)
+            self.assertFalse(core.presence_dir(sid).exists())
+            rc, out, err = self.run_cli(["list", "--json", "--all"])
+            entry = [e for e in json.loads(out)["sessions"] if e["id"] == sid][0]
+            self.assertEqual(entry["presence"], [])
+        finally:
+            os.environ.pop("XDG_RUNTIME_DIR", None)
+            shutil.rmtree(runtime_dir, ignore_errors=True)
+
     def test_presence_lives_in_the_runtime_dir_and_never_in_the_record(self):
         self.start_fake_herdr()
         runtime_dir = pathlib.Path(tempfile.mkdtemp(prefix="omarchy-xdg-"))
@@ -2065,3 +2166,16 @@ class TestTwoPeople(CoreTestCase):
         finally:
             os.environ.pop("XDG_RUNTIME_DIR", None)
             shutil.rmtree(runtime_dir, ignore_errors=True)
+
+
+class TestRefusedStart(CoreTestCase):
+    def test_open_starts_a_session_that_was_created_but_never_bound(self):
+        self.start_fake_herdr()
+        sid = make_bare_session(self.store, "never-bound", runtime=None, state="starting")
+        rc, out, err = self.run_cli(["open", sid])
+        self.assertEqual(rc, 0, err)
+        record = self.store.try_load(sid)
+        self.assertEqual(record["status"]["state"], "working")
+        self.assertIsNotNone(record["runtime"])
+        transitions = [(e["data"]["from"], e["data"]["to"]) for e in self.store.read_events(sid) if e["type"] == "status.changed"]
+        self.assertEqual(transitions[-2:], [("starting", "orphaned"), ("orphaned", "working")])

@@ -225,6 +225,19 @@ class TestCopyAndClickTargets(WatchTestCase):
         sent = self.notifier.sent[-1]
         self.assertIn("owned by sam", sent["description"])
 
+    def test_an_owner_with_the_viewers_own_label_is_named_by_user_and_host(self):
+        # The run-10 proxy: both people are "omarchy", on different hosts.
+        watcher = self.make_watcher()
+        local = watch.local_human_id()
+        me = local.split("@", 1)[0]
+        write_session(self.tmpdir, "o2", "handover", agent={"kind": "claude"},
+                      owner={"actor": {"kind": "human", "id": f"{me}@elsewhere", "label": me}},
+                      goal={"text": "Refactor the API layer"})
+        append_event(self.tmpdir, "o2", 1, "status.changed", {"from": "working", "to": "blocked"})
+        watcher.scan_once(now=self.clock())
+        sent = self.notifier.sent[-1]
+        self.assertIn(f"owned by {me}@elsewhere", sent["description"])
+
     def test_blocked_reads_the_same_as_waiting(self):
         # Herdr reports a question and a permission prompt both as `blocked`,
         # so the title must not guess which; the two stay distinct kinds

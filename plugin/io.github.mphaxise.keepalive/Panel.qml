@@ -421,9 +421,14 @@ Panel {
       base = "list unavailable"
     } else if (root.needsYouRows.length > 0) {
       var first = root.needsYouRows[0]
+      var suggested = first.att_state === "suggested"
       var who = first.needs_attention !== true && first.attention_lane ? ("lane " + first.attention_lane.lane + " needs you · ")
-        : (first.att_state === "suggested" ? ((first.suggestions[0].author && first.suggestions[0].author.label ? first.suggestions[0].author.label : "someone") + " suggests · ") : "needs you · ")
-      base = who + root.formatDuration(root.nowMs - Date.parse(first.att_since || "")) + " · Enter opens"
+        : (suggested ? (String(first.suggestions[0].author_display || (first.suggestions[0].author && first.suggestions[0].author.label) || "someone") + " suggests · ") : "needs you · ")
+      var owner = first.owned_by_other ? (" · owned by " + first.owned_by_other) : ""
+      var age = root.formatDuration(root.nowMs - Date.parse(first.att_since || ""))
+      // The action hint outranks the age: a long name elides the tail
+      // (rig, run 10b: "y accep…"), so for a suggestion the age goes last.
+      base = suggested ? (who + "y accepts · " + age + owner) : (who + age + owner + " · Enter opens")
       if (root.needsYouRows.length > 1) base += " · " + (root.needsYouRows.length - 1) + " more need you"
     } else if (root.orphanedRows.length > 0) {
       base = root.herdrDown ? "Herdr is not running · Enter revives" : "Enter revives"

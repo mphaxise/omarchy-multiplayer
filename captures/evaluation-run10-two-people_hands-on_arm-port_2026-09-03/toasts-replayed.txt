@@ -1,0 +1,3 @@
+omarchy-notification-send --urgency normal --glyph '󰚩' --print-id 'shared-page needs you' 'claude · hello.html: the owner decides, a second person suggests · owned by omarchy@_gateway · Click to open and answer' 
+omarchy-notification-send --urgency low --glyph '󰚩' --replace-id 1000 --print-id 'shared-page finished' 'claude · hello.html: the owner decides, a second person suggests · owned by omarchy@_gateway · Click to open the receipt' 
+omarchy-notification-send --urgency low --glyph '󰚩' --print-id 'shared-page-b finished' 'claude · hello.html: the owner decides, a second person suggests · owned by omarchy@_gateway · Click to open the receipt' 

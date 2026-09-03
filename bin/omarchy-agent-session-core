@@ -278,13 +278,29 @@ def atomic_write_json(path, obj):
 ACTOR_KINDS = ("human", "agent", "system")
 
 
+_HUMAN_ACTOR_CACHE = {}
+
+
 def current_human_actor():
     """human:<user>@<host>, unverified and machine-local (08-identity-and-
     attribution.md). Slice 3's second identity space, in proxy form:
     OMARCHY_ACTOR names the actor outright, and a command that arrives over
     ssh reports the client host instead of this one, so the same OS user
     driving the rig from another machine is a distinguishable actor. The
-    trust boundary is unchanged: anyone on this machine can set either."""
+    trust boundary is unchanged: anyone on this machine can set either.
+    Cached per process: the reverse lookup behind SSH_CONNECTION would
+    otherwise run once per session on every `list`."""
+    key = (os.environ.get("OMARCHY_ACTOR"), os.environ.get("SSH_CONNECTION"), os.environ.get("SSH_CLIENT"),
+           os.environ.get("USER"), os.environ.get("LOGNAME"))
+    cached = _HUMAN_ACTOR_CACHE.get(key)
+    if cached is not None:
+        return dict(cached)
+    actor = _compute_human_actor()
+    _HUMAN_ACTOR_CACHE[key] = dict(actor)
+    return actor
+
+
+def _compute_human_actor():
     override = os.environ.get("OMARCHY_ACTOR")
     if override:
         with contextlib.suppress(UsageError):
@@ -308,6 +324,25 @@ def current_human_actor():
 
 def same_actor(a, b):
     return bool(a) and bool(b) and a.get("kind") == b.get("kind") and a.get("id") == b.get("id")
+
+
+def display_name(actor, viewer=None):
+    """A person's name for a surface: the label, or user@host when the
+    label would read as the viewer's own name for someone else. The run-10
+    proxy's two identities are both the OS user "omarchy" (2026-09-03), and
+    two accounts that share a first name collide the same way."""
+    if not actor:
+        return "?"
+    label = actor.get("label") or actor.get("id") or "?"
+    if actor.get("kind") != "human":
+        return label
+    if viewer is None:
+        viewer = current_human_actor()
+    if same_actor(actor, viewer):
+        return label
+    if (viewer.get("label") or "") == label:
+        return actor.get("id") or label
+    return label
 
 
 def system_actor():
@@ -710,7 +745,10 @@ class HerdrClient:
                                                     "args": list(flags or []), "timeout_ms": timeout_ms}) or {}
                 break
             except HerdrError as e:
-                if "not an available shell" in str(e) and attempt < 19:
+                # "pane … not found" for a pane Herdr just reported (run 10,
+                # 2026-09-03, right after a shell restart) is the same
+                # not-yet-ready condition as the shell one.
+                if ("not an available shell" in str(e) or "not found" in str(e)) and attempt < 19:
                     time.sleep(0.5)
                     continue
                 raise
@@ -1079,6 +1117,8 @@ class SessionStore:
             eprint(f"session {session_id}: events.jsonl reached {seq} rows; this session should end")
         if watch_material(event):
             notify_watchers(self, session_id, event)
+        if event_type == "session.ended":
+            clear_presence(session_id)   # nobody is "here" on an ended session
         return event
 
     def read_events(self, session_id, since=None, type_filter=None):
@@ -1344,9 +1384,25 @@ def compute_receipt(store, session, end_state=None, end_reason=None, ended_at=No
                       "task": d.get("task"), "end_state": cst.get("state"), "detail": cst.get("detail"),
                       "merged_commits": (merged or {}).get("commits") or [], "range": (merged or {}).get("range")})
 
+    # 12-two-people.md: who could act on the session and what the second
+    # person put forward, so the receipt reads the same to both of them.
+    suggested = [e for e in events if e["type"] == "instruction.queued" and (e.get("data") or {}).get("delivery") == "suggested"]
+    accepted = [e for e in events if e["type"] == "suggestion.accepted"]
+    dismissed = [e for e in events if e["type"] == "suggestion.dismissed"]
+    people = {
+        "access": [{"actor": g.get("actor"), "level": g.get("level")} for g in (session.get("access") or [])],
+        "assigned": [{"from": e["data"].get("from"), "to": e["data"].get("to"), "by": e.get("actor"), "at": e["ts"]}
+                     for e in events if e["type"] == "owner.assigned"],
+        "suggestions": {"made": len(suggested), "accepted": len(accepted), "dismissed": len(dismissed),
+                        "waiting": len(pending_suggestions(session)),
+                        "authors": sorted({actor_to_string(e["actor"]) for e in suggested if e.get("actor")})},
+        "visibility": session_visibility(session),
+    }
+
     return {
         "session_id": session["id"], "name": session["name"], "agent": session["agent"],
         "owner": session["owner"]["actor"], "created_by": session["created_by"],
+        "people": people,
         "started_at": started_at, "ended_at": ended_at, "duration_s": duration_s,
         "end_state": end_state, "end_reason": end_reason,
         "started_with": session["started_with"], "goal": session.get("goal"),
@@ -1422,6 +1478,17 @@ def render_receipt_text(receipt):
         for l in lanes:
             merged = f"{len(l['merged_commits'])} commit(s) merged ({l['range']})" if l.get("merged_commits") else "nothing merged"
             lines.append(f"  {l['lane']:<12} {l.get('kind') or '?':<9} {l.get('end_state') or '?':<9} {merged}   {l.get('task') or ''}")
+    people = receipt.get("people")
+    if people:
+        lines.append("")
+        lines.append(f"People     visibility {people.get('visibility')}")
+        for g in people.get("access") or []:
+            lines.append(f"  {actor_to_string(g['actor']) if isinstance(g.get('actor'), dict) else g.get('actor')}   {g.get('level')}")
+        for a in people.get("assigned") or []:
+            lines.append(f"  assigned {actor_to_string(a['from']) if isinstance(a.get('from'), dict) else a.get('from')} -> {actor_to_string(a['to']) if isinstance(a.get('to'), dict) else a.get('to')}   {a.get('at')}")
+        sg = people.get("suggestions") or {}
+        if sg.get("made"):
+            lines.append(f"  suggestions {sg.get('made')} made, {sg.get('accepted')} accepted, {sg.get('dismissed')} dismissed, {sg.get('waiting')} waiting ({', '.join(sg.get('authors') or [])})")
     lines.append("")
     lines.append(f"Receipt    state_version {receipt['state_version']}")
     return "\n".join(lines)
@@ -1765,6 +1832,7 @@ def session_project(s):
 
 def session_list_entry(s):
     status = s["status"]
+    viewer = current_human_actor()
     created_by = s.get("created_by") or {}
     ref = s["agent"].get("harness_session_ref")
     return {
@@ -1792,10 +1860,14 @@ def session_list_entry(s):
         "lane": ({"name": s["lane"]["name"], "parent_id": s["lane"]["parent_id"], "parent_name": s["lane"].get("parent_name")}
                  if is_lane(s) else None),
         "lanes": [],
-        # 12-two-people.md
+        # 12-two-people.md: names as the caller should read them, and who
+        # owns the session when that is someone else (null when it is you).
         "visibility": session_visibility(s),
-        "suggestions": [{"id": q["id"], "author": q.get("author"), "text": q.get("text"), "queued_at": q.get("queued_at")} for q in pending_suggestions(s)],
-        "presence": read_presence(s["id"]),
+        "owner_display": display_name(s["owner"]["actor"], viewer),
+        "owned_by_other": (None if same_actor(s["owner"]["actor"], viewer) else display_name(s["owner"]["actor"], viewer)),
+        "suggestions": [{"id": q["id"], "author": q.get("author"), "author_display": display_name(q.get("author"), viewer),
+                         "text": q.get("text"), "queued_at": q.get("queued_at")} for q in pending_suggestions(s)],
+        "presence": read_presence(s["id"]) if status["state"] not in TERMINAL_STATES else [],
     }
 
 
@@ -2073,6 +2145,11 @@ def touch_presence(session_id, actor):
 def leave_presence(session_id, actor):
     with contextlib.suppress(OSError):
         (presence_dir(session_id) / actor_to_string(actor).replace("/", "_")).unlink()
+
+
+def clear_presence(session_id):
+    with contextlib.suppress(OSError):
+        shutil.rmtree(presence_dir(session_id), ignore_errors=True)
 
 
 def read_presence(session_id):
@@ -2580,6 +2657,7 @@ def render_loop_text(store, session):
     lines.append("")
 
     events = store.read_events(session["id"])
+    viewer = current_human_actor()
     # Artifact labels by path, so an instruction's `about` reads as a label.
     artifacts = read_artifacts_index(store.artifacts_dir(session["id"]))
     label_by_path = {a.get("path"): a.get("label") for a in artifacts}
@@ -2602,9 +2680,28 @@ def render_loop_text(store, session):
         ts = e["ts"]
         if t == "instruction.queued":
             about = about_label(d.get("about_artifact"))
-            who = (e.get("actor") or {}).get("label") or (e.get("actor") or {}).get("id") or "?"
+            who = display_name(e.get("actor"), viewer)
             text = (d.get("text") or "").strip().splitlines()[0] if d.get("text") else ""
-            rows.append((ts, int(e.get("seq") or 0), f"instruction  {who}: {text}" + (f"  [about: {about}]" if about else "")))
+            tail = f"  [about: {about}]" if about else ""
+            if d.get("delivery") == "suggested":
+                # 12-two-people.md: a suggestion waits; the acceptance below
+                # is what runs it, under the suggester's name.
+                rows.append((ts, int(e.get("seq") or 0), f"suggested    {who}: {text}{tail}"))
+            elif d.get("accepted_by"):
+                rows.append((ts, int(e.get("seq") or 0), f"instruction  {who}: {text}{tail}  [accepted by {display_name(d.get('accepted_by'), viewer)}]"))
+            else:
+                rows.append((ts, int(e.get("seq") or 0), f"instruction  {who}: {text}{tail}"))
+        elif t == "suggestion.dismissed":
+            text = (d.get("text") or "").strip().splitlines()[0] if d.get("text") else ""
+            rows.append((ts, int(e.get("seq") or 0), f"dismissed    {display_name(e.get('actor'), viewer)} dismissed {display_name(d.get('author'), viewer)}: {text}"))
+        elif t == "access.granted":
+            rows.append((ts, int(e.get("seq") or 0), f"access       {display_name(d.get('actor'), viewer)} may {d.get('level')} (by {display_name(e.get('actor'), viewer)})"))
+        elif t == "access.revoked":
+            rows.append((ts, int(e.get("seq") or 0), f"access       {display_name(d.get('actor'), viewer)} revoked (by {display_name(e.get('actor'), viewer)})"))
+        elif t == "owner.assigned":
+            rows.append((ts, int(e.get("seq") or 0), f"owner        {display_name(d.get('from'), viewer)} -> {display_name(d.get('to'), viewer)} (by {display_name(e.get('actor'), viewer)})"))
+        elif t == "session.visibility_changed":
+            rows.append((ts, int(e.get("seq") or 0), f"visibility   {d.get('from')} -> {d.get('to')} (by {display_name(e.get('actor'), viewer)})"))
         elif t == "instruction.dropped":
             rows.append((ts, int(e.get("seq") or 0), f"dropped      {d.get('reason')}"))
         elif t == "artifact.added":
@@ -2686,6 +2783,16 @@ def cmd_open(args, ctx):
     state = session["status"]["state"]
     runtime = session.get("runtime")
 
+    if state == "starting" and runtime is None:
+        # Created, never bound: Herdr refused the start (run 10, 2026-09-03).
+        # Enter starts it fresh, the way an orphan without a transcript does.
+        detail = "started again after a refused start"
+        ev = ctx.store.append_event(session["id"], "status.changed", actor,
+                                     {"from": state, "to": "orphaned", "source": "omarchy", "detail": detail})
+        session["status"] = {"state": "orphaned", "since": ev["ts"], "source": "omarchy", "detail": detail}
+        session["state_version"] = ev["seq"]
+        ctx.store.save_session(session)
+        state = "orphaned"
     if inferred_exit_revivable(session):
         detail = "reopened after an inferred exit"
         ev = ctx.store.append_event(session["id"], "status.changed", actor,
@@ -3574,43 +3681,37 @@ def sweep_ended_workspaces(ctx, known, live_agents, live_panes):
     ended or been orphaned. Herdr restores every workspace, with a fresh
     shell, when its server restarts, and `stop` on an orphaned session has
     no pane to close, so by the end of run 2 (2026-09-02) eight dead
-    workspaces sat in Herdr's list. Precise on purpose: only a workspace
-    this launcher bound to the session (the last `runtime.bound` event
-    names it), never one that came from an adopted agent, and only while
-    no live agent runs in it. Returns the session ids whose panes were
-    closed."""
+    workspaces sat in Herdr's list. Precise on purpose: a pane is this
+    session's only when its metadata says so (`tokens.session_id`, which
+    this launcher writes at agent.start), never by workspace id, because
+    Herdr reuses workspace ids after a restart and the id of a session that
+    ended yesterday named a brand-new workspace today, which the sweep
+    closed five seconds after it was created (run 10, 2026-09-03). Never a
+    pane in a workspace with a live agent. Returns the session ids whose
+    panes were closed."""
     agent_workspaces = {a.get("workspace_id") for a in live_agents if a.get("workspace_id")}
-    panes_by_workspace = {}
-    for p in live_panes:
-        wid = p.get("workspace_id")
-        if wid and p.get("pane_id"):
-            panes_by_workspace.setdefault(wid, []).append(p["pane_id"])
-    swept = []
+    ended_ids = {s["id"] for s in known
+                 if (s["status"]["state"] in TERMINAL_STATES or s["status"]["state"] == "orphaned")
+                 and s.get("runtime") is None}
+    adopted = set()
     for s in known:
-        state = s["status"]["state"]
-        if state not in TERMINAL_STATES and state != "orphaned":
+        if s["id"] in ended_ids:
+            events = ctx.store.read_events(s["id"])
+            if any(e["type"] == "session.created" and (e.get("data") or {}).get("adopted") for e in events):
+                adopted.add(s["id"])
+    swept = []
+    for p in live_panes:
+        sid = ((p.get("tokens") or {}).get("session_id"))
+        if not sid or sid not in ended_ids or sid in adopted:
             continue
-        if s.get("runtime") is not None:
+        if p.get("workspace_id") in agent_workspaces or not p.get("pane_id"):
             continue
-        events = ctx.store.read_events(s["id"])
-        if any(e["type"] == "session.created" and (e.get("data") or {}).get("adopted") for e in events):
-            continue
-        # Every workspace this launcher ever bound to the session: a
-        # revived session binds a new one, and Herdr restores the old one
-        # too after a server restart.
-        wids = {(e.get("data") or {}).get("workspace_id") for e in events if e["type"] == "runtime.bound"}
-        closed = False
-        for wid in wids:
-            if not wid or wid in agent_workspaces or wid not in panes_by_workspace:
-                continue
-            for pane_id in panes_by_workspace[wid]:
-                try:
-                    ctx.herdr.pane_close(pane_id=pane_id)
-                    closed = True
-                except (HerdrError, HerdrUnavailable):
-                    pass
-        if closed:
-            swept.append(s["id"])
+        try:
+            ctx.herdr.pane_close(pane_id=p["pane_id"])
+            if sid not in swept:
+                swept.append(sid)
+        except (HerdrError, HerdrUnavailable):
+            pass
     return swept
 
 

@@ -86,8 +86,12 @@ CursorSurface {
   // session open right now (presence, from the runtime dir, never the record).
   readonly property var suggestions: session && session.suggestions && session.suggestions.length !== undefined ? session.suggestions : []
   readonly property bool hasSuggestion: suggestions.length > 0
-  readonly property string suggester: hasSuggestion && suggestions[0].author && suggestions[0].author.label ? String(suggestions[0].author.label) : "someone"
+  // author_display is the core's name for the suggester as this person
+  // should read it (user@host when the label would read as their own).
+  readonly property string suggester: hasSuggestion ? String(suggestions[0].author_display || (suggestions[0].author && suggestions[0].author.label) || "someone") : "someone"
   readonly property var presence: session && session.presence && session.presence.length !== undefined ? session.presence : []
+  // The owner when it is someone else; the core sends null when it is you.
+  readonly property string ownedByOther: session && session.owned_by_other ? String(session.owned_by_other) : ""
   readonly property bool hasLanes: lanes.length > 0
   readonly property var attentionLane: session && session.attention_lane ? session.attention_lane : null
   readonly property bool laneNeedsYou: !needsAttention && attentionLane !== null
@@ -164,7 +168,8 @@ CursorSurface {
   // (09-closed-loop-surfaces.md section 7).
   readonly property string suggestionText: hasSuggestion ? ("\u201c" + String(suggestions[0].text || "").split("\n")[0] + "\u201d") : ""
   readonly property string presenceText: presence.length > 1 ? (presence.length + " here") : ""
-  readonly property string detailText: [suggestionText, loopText, goal !== "" ? goal
+  readonly property string ownerText: ownedByOther !== "" ? ("owned by " + ownedByOther) : ""
+  readonly property string detailText: [suggestionText, ownerText, loopText, goal !== "" ? goal
     : [project, branch].filter(function(t) { return t !== "" }).join(" · "), presenceText]
     .filter(function(t) { return t !== "" }).join(" · ")
 

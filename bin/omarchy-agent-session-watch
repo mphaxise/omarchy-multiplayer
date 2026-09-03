@@ -198,7 +198,12 @@ def render_body(kind: str, record: dict, event: Optional[dict] = None) -> str:
     owner = ((record.get("owner") or {}).get("actor") or {})
     local = local_human_id()
     if owner.get("id") and local and owner.get("id") != local:
-        head = f"{head} · owned by {owner.get('label') or owner.get('id')}"
+        # The label alone when it is distinct; user@host when it would read
+        # as this person's own name (the run-10 proxy, 2026-09-03).
+        name = owner.get("label") or owner.get("id")
+        if name == local.split("@", 1)[0]:
+            name = owner.get("id")
+        head = f"{head} · owned by {name}"
     return f"{head} · {action}"
 
 
