@@ -371,7 +371,15 @@ Panel {
     return list
   }
 
-  // 4. Done today: done, failed, stopped in the last 24 h, newest first.
+  // 4. Paused: a live session with no process, newest pause first, and no
+  // window: it stays until it is resumed or stopped (01-session-model.md).
+  function pausedSessions() {
+    var list = root.allSessions.filter(function(s) { return s.status && s.status.state === "paused" })
+    list.sort(function(a, b) { return root.sinceMs(b) - root.sinceMs(a) })
+    return list
+  }
+
+  // 5. Done today: done, failed, stopped in the last 24 h, newest first.
   function doneTodaySessions() {
     var states = { done: true, failed: true, stopped: true }
     var cutoff = root.nowMs - 24 * 3600 * 1000
@@ -385,13 +393,14 @@ Panel {
   readonly property var needsYouRows: needsYouSessions()
   readonly property var orphanedRows: orphanedSessions()
   readonly property var workingRows: workingSessions()
+  readonly property var pausedRows: pausedSessions()
   readonly property var doneRows: doneTodaySessions()
   readonly property var doneShownRows: doneExpanded ? doneRows : doneRows.slice(0, doneRowsCollapsed)
   readonly property int doneHiddenCount: doneRows.length - doneShownRows.length
 
   // maxRows caps the flattened total; Done today is concatenated last, so
   // it is what gets trimmed.
-  readonly property var visibleRows: needsYouRows.concat(orphanedRows).concat(workingRows).concat(doneShownRows).slice(0, root.maxRows)
+  readonly property var visibleRows: needsYouRows.concat(orphanedRows).concat(workingRows).concat(pausedRows).concat(doneShownRows).slice(0, root.maxRows)
 
   // The badge counts every agent that is asking: sessions and their lanes.
   readonly property int needsAttentionCount: allSessions.reduce(function(n, s) {
@@ -399,6 +408,7 @@ Panel {
   }, 0)
   readonly property int workingCount: allSessions.filter(function(s) { return s.status && (s.status.state === "working" || s.status.state === "starting") }).length
   readonly property int idleCount: allSessions.filter(function(s) { return s.status && s.status.state === "idle" }).length
+  readonly property int pausedCount: pausedRows.length
 
   // Bar glyph: urgent when someone needs you; foreground when a session
   // is orphaned (that needs a person too, without the badge); the rest
@@ -455,6 +465,7 @@ Panel {
       var parts = []
       if (root.workingCount > 0) parts.push(root.workingCount + " working")
       if (root.idleCount > 0) parts.push(root.idleCount + " idle")
+      if (root.pausedCount > 0) parts.push(root.pausedCount + " paused")
       if (root.doneRows.length > 0) parts.push(root.doneRows.length + " done today")
       base = parts.length > 0 ? parts.join(" · ") : "all quiet"
     }
@@ -556,6 +567,9 @@ Panel {
       if (code === 0) return                     // the spinner runs until the record reports stopped
       var next = Object.assign({}, root.stoppingIds); delete next[sid]; root.stoppingIds = next
       root.setResult(sid, "stop failed · " + root.reason(code), false)
+    } else if (kind === "pause") {
+      if (code === 0) root.setResult(sid, "paused", true)
+      else root.setResult(sid, "couldn't pause · " + root.reason(code), false)
     }
     root.refresh()
   }
@@ -586,7 +600,7 @@ Panel {
     var argv = ["omarchy-agent-session-open", String(id)]
     if (lane) argv.push("--lane", String(lane))
     var busy = "opening…"
-    if (root.sessionRevivable(s)) busy = (s.status.state === "stopped") ? "resuming…" : "reviving…"
+    if (root.sessionRevivable(s)) busy = (s.status.state === "stopped" || s.status.state === "paused") ? "resuming…" : "reviving…"
     root.runAction(id, "open", argv, busy)
   }
 
@@ -691,6 +705,17 @@ Panel {
     if (lane) argv.push("--lane", String(lane))
     else { var next = Object.assign({}, root.stoppingIds); next[String(id)] = Date.now(); root.stoppingIds = next }
     root.runAction(id, "stop", argv, lane ? "stopping lane…" : "")
+  }
+
+  // Pause: one press, no confirmation, because it is reversible
+  // (03-sessions-panel.md, 2026-09-03). A lane under the cursor pauses
+  // the lane alone.
+  function pauseSession(id, lane) {
+    if (!id) return
+    var argv = ["omarchy-agent-session-pause", String(id)]
+    if (lane) argv.push("--lane", String(lane))
+    root.armedStopId = ""
+    root.runAction(id, "pause", argv, lane ? "pausing lane…" : "pausing…")
   }
 
   function clearStoppedFromStopping(sessions) {
@@ -936,10 +961,20 @@ Panel {
         } else if (t === "d" || t === "D") {
           if (s.suggestions && s.suggestions.length > 0) root.decideSuggestion(s.id, true)
         } else if (t === "a" || t === "A") {
-          if (ended || s.status.state === "orphaned") return
+          if (ended || s.status.state === "orphaned" || s.status.state === "paused") return
           root.armedStopId = ""
           root.sendOpenId = ""
           root.addOpenId = s.id
+        } else if (t === "z" || t === "Z") {
+          // Pause, one press (03-sessions-panel.md). Live or orphaned rows;
+          // a lane under the cursor pauses that lane.
+          if (ended || s.status.state === "paused") return
+          var lane = root.selectedLane
+          if (lane) {
+            var le = root.laneEntry(s, lane)
+            if (le && (le.state === "done" || le.state === "failed" || le.state === "stopped" || le.state === "paused")) return
+          }
+          root.pauseSession(s.id, lane)
         }
       }
 
@@ -1159,7 +1194,8 @@ Panel {
                 { title: "NEEDS YOU", rows: root.needsYouRows, offset: 0, hidden: 0 },
                 { title: "ORPHANED", rows: root.orphanedRows, offset: root.needsYouRows.length, hidden: 0 },
                 { title: "WORKING", rows: root.workingRows, offset: root.needsYouRows.length + root.orphanedRows.length, hidden: 0 },
-                { title: "DONE TODAY", rows: root.doneShownRows, offset: root.needsYouRows.length + root.orphanedRows.length + root.workingRows.length, hidden: root.doneHiddenCount }
+                { title: "PAUSED", rows: root.pausedRows, offset: root.needsYouRows.length + root.orphanedRows.length + root.workingRows.length, hidden: 0 },
+                { title: "DONE TODAY", rows: root.doneShownRows, offset: root.needsYouRows.length + root.orphanedRows.length + root.workingRows.length + root.pausedRows.length, hidden: root.doneHiddenCount }
               ]
 
               delegate: Column {
@@ -1244,6 +1280,7 @@ Panel {
                     onSendCancelRequested: function(id) { root.sendOpenId = "" }
                     onStopArmRequested: function(id) { root.setCursor(id, false); root.sendOpenId = ""; root.armedStopId = id }
                     onStopConfirmRequested: function(id) { root.stopSession(id, root.selectedId === id ? root.selectedLane : ""); root.armedStopId = "" }
+                    onPauseRequested: function(id) { root.setCursor(id, false); root.pauseSession(id, root.selectedId === id ? root.selectedLane : "") }
                   }
                 }
               }
