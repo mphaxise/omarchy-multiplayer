@@ -1,6 +1,6 @@
 # Omarchy Multiplayer: experiment plan
 
-Status: plan v2, 2026-09-01 (evening). Revised after the research phase; v1 from the same morning is in git history. `decisions.md` carries the dated log.
+Status: plan v2, 2026-09-01 (evening), revised after the research phase; v1 from the same morning is in git history. `decisions.md` carries the dated log. Progress as of 2026-09-02 evening: Phases 0 to 4 done, slice 1 live on the rig; Phase 5 half done (the review passes and an ssh-driven scenario run are in `findings/`; the stopwatch trials, the keyboard pass, and the closed-loop pass wait for a person at the rig); Phase 6 not started.
 
 ## Bottom line
 
@@ -116,7 +116,11 @@ Automation on the rig is keyboard-only over synthetic input; ssh from the Mac si
 
 ## Next actions
 
-1. Confirm or edit the open decisions above.
-2. Snapshot the ARM VM as `dev-2026-09-01`, enable sshd in the guest, and record the guest IP in `setup/rig-questions.md`.
-3. Run `setup/rig-questions.md` items 2 through 10 (the Herdr spike) and record the decision.
-4. Capture the Phase 1 baseline from a pristine boot before any build lands.
+Items 1 to 4 of the original list are done (2026-09-01 and 2026-09-02). As of 2026-09-02 evening:
+
+1. Twenty minutes at the rig: the keyboard pass on the restarted shell (arrows, Enter, `s`, `x`, Esc, the inline results, the stop spinner), the three stopwatch trials for signal 1, and one session created through `omarchy-agent --pick` with the picker on screen, which closes signal 5's flag.
+2. Snapshot the VM as `dev-2026-09-02` before anything else lands; today's build and the rig wiring are only on the dev disk.
+3. Read `findings/evaluation-slice1-2026-09-02.md` and `findings/evaluation-run1-2026-09-02.md`, then push; five commits are local.
+4. Run 2 of the scenario with a session that finishes on its own (`done`) and one whose harness dies while working, to exercise the two notification rows run 1 never reached; a Codex login in the guest makes worktree B a second harness.
+5. The closed-loop pass (`spec/09-closed-loop-surfaces.md`), one designer, three iterations, on a live preview.
+6. Phase 6: the marketplace listing or the discussion post, text approved before it goes anywhere.
