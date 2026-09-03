@@ -1,0 +1,13 @@
+Intent
+  hello.html: survive a Herdr restart
+
+2026-09-03T16:22:16Z  state        starting -> working
+2026-09-03T16:22:22Z  state        working -> idle
+2026-09-03T16:22:28Z  instruction  omarchy: Say hello in one line and nothing else.
+2026-09-03T16:22:29Z  state        idle -> working
+2026-09-03T16:22:34Z  state        working -> idle
+2026-09-03T16:22:50Z  state        idle -> orphaned  (Herdr restarted; Enter revives)
+2026-09-03T16:23:18Z  state        orphaned -> working
+2026-09-03T16:23:25Z  state        working -> idle
+2026-09-03T16:23:33Z  state        idle -> stopped  (stopped)
+2026-09-03T16:23:33Z  ended        stopped  stopped

@@ -1,0 +1,18 @@
+16:22:16Z no live sessions and no Herdr agents before the run (list --all, herdr agent list)
+16:22:16Z session: 01M1M17ZXJHZMGBQ30XTTA722J
+  01M1M17ZXJHZMGBQ30XTTA722J  restart-page             idle       claude
+  01M1M17ZXJHZMGBQ30XTTA722J  restart-page             idle       claude
+16:22:48Z harness ref before restart: 86cfa28c-3745-424d-9d41-90c701338538
+16:22:48Z systemctl --user restart omarchy-agent-session-herdr
+active
+  01M1M17ZXJHZMGBQ30XTTA722J  restart-page             orphaned   claude
+  status {'state': 'orphaned', 'since': '2026-09-03T16:22:50Z', 'source': 'reconciler', 'detail': 'Herdr restarted; Enter revives'}
+  runtime None
+16:23:05Z captured panel-orphaned
+16:23:17Z open (Enter on the panel runs the same command)
+  01M1M17ZXJHZMGBQ30XTTA722J  restart-page             idle       claude
+  status {'state': 'idle', 'since': '2026-09-03T16:23:25Z', 'source': 'herdr-manifest', 'detail': None}
+  runtime {'backend': 'herdr', 'session': None, 'workspace_id': 'wE', 'tab_id': 'wE:t1', 'pane_id': 'wE:p1', 'agent_id': 'restart-page'}
+  harness ref 86cfa28c-3745-424d-9d41-90c701338538
+16:23:33Z the pane shows the earlier turn (resumed conversation) if the hello line is above the prompt
+16:23:34Z stopped

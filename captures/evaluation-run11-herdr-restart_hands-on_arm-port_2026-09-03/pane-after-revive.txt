@@ -1,0 +1,8 @@
+  ▝▝ ▝▝    ~/.herdr/worktrees/restart-page
+❯ Say hello in one line and nothing else.
+● Hello!
+✻ Crunched for 2s · done 9:22 AM
+────────────────────────────────────────
+❯
+────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents                                                            
