@@ -104,7 +104,10 @@ part1b)
   ;;
 pair)
   need_names
-  step "your key onto the rig (type the rig password once)"; ssh-copy-id "omarchy@$RIG"
+  step "your key onto the rig (type the rig password once)"
+  # accept-new records the rig's host key on first contact; without it a
+  # client that cannot prompt reports "Host key verification failed".
+  ssh-copy-id -o StrictHostKeyChecking=accept-new "omarchy@$RIG"
   step "check"; ssh -o BatchMode=yes -o ConnectTimeout=5 "omarchy@$RIG" hostname && ok "key login works" || bad "key login failed"
   ;;
 look) need_names; rig guest-look ;;
