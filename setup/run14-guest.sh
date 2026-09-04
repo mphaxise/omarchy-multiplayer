@@ -66,7 +66,13 @@ install)
     (git init -q "$HOME/scratch" && cd "$HOME/scratch" && echo hi > hello.md && git add . && git commit -q -m start && echo "  made ~/scratch")
   fi
   step "Keepalive from $LISTING"
-  omarchy plugin add "$LISTING" --enable 2>&1 | tee -a "$E/install.log"
+  # --yes: omarchy-plugin-add asks "Clone and add this plugin?" through gum and
+  # refuses without a terminal; the log pipe below hides the terminal from it.
+  if [[ -d $HOME/.config/omarchy/plugins/$ID ]]; then echo "  already added"
+  else omarchy plugin add "$LISTING" --enable --yes 2>&1 | tee -a "$E/install.log"; fi
+  if [[ ! -x $HOME/.config/omarchy/plugins/$ID/install.sh ]]; then
+    bad "plugin not added; see $E/install.log. By hand: omarchy plugin add $LISTING --enable"; exit 1
+  fi
   "$HOME/.config/omarchy/plugins/$ID/install.sh" 2>&1 | tee -a "$E/install.log"
   step "verify"
   n=$(ls "$HOME"/.local/bin/omarchy-agent-session-* 2>/dev/null | wc -l)
